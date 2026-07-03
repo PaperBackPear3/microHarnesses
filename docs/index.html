@@ -104,21 +104,21 @@
           <li>
             <strong>Getting started</strong>
             <div class="docs-links">
-              <a href="./how-to-get-started.md">Open</a>
+              <a href="./how-to-get-started.md" data-doc="how-to-get-started.md">Open</a>
               <a href="./how-to-get-started.md" download>Download .md</a>
             </div>
           </li>
           <li>
             <strong>Running the CLI</strong>
             <div class="docs-links">
-              <a href="./how-to-run-cli.md">Open</a>
+              <a href="./how-to-run-cli.md" data-doc="how-to-run-cli.md">Open</a>
               <a href="./how-to-run-cli.md" download>Download .md</a>
             </div>
           </li>
           <li>
             <strong>Composing plugins</strong>
             <div class="docs-links">
-              <a href="./how-to-compose-plugins.md">Open</a>
+              <a href="./how-to-compose-plugins.md" data-doc="how-to-compose-plugins.md">Open</a>
               <a href="./how-to-compose-plugins.md" download>Download .md</a>
             </div>
           </li>
@@ -131,12 +131,10 @@
           Build agent loops with ease, extend later.
         </p>
 
-        <p>
-          microHarnesses is for teams building LLM agents who want to start fast
-          without locking into a rigid framework. Use the core runtime to run
-          agent loops, then add capabilities through plugins: providers, tools,
-          policy, planning, and subagents.
-        </p>
+        <div id="doc-container">
+          <p id="doc-intro">See the CLI (reference app) in apps/cli for an example composition — you don’t need it to use the runtime. Read its README in the repository.
+
+Create your agent loop: a minimal runtime core plus optional plugins for providers, tools, policy, planning, and subagents. No big promises — it’s a composable toolkit to help you start small and extend later.</p>
 
         <h2>How the library is structured</h2>
         <div class="grid">
@@ -165,11 +163,46 @@
         </p>
 
         <p>
-          <a href="https://github.com/PaperBackPear3/microHarnesses"
-            >GitHub repository</a
-          >
+          <a href="https://github.com/PaperBackPear3/microHarnesses">GitHub repository</a>
         </p>
       </main>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+      // Simple client-side markdown loader using marked.js
+      const links = document.querySelectorAll('a[data-doc]');
+      const container = document.getElementById('doc-container');
+      const intro = document.getElementById('doc-intro');
+
+      async function loadDoc(path) {
+        try {
+          const res = await fetch(path);
+          if (!res.ok) throw new Error('Failed to fetch ' + path);
+          const md = await res.text();
+          const html = marked.parse(md);
+          container.innerHTML = html;
+          // update history without full reload
+          window.history.replaceState(null, '', path);
+        } catch (err) {
+          container.innerHTML = '<p>Unable to load doc.</p>';
+          console.error(err);
+        }
+      }
+
+      links.forEach(a => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const path = a.getAttribute('data-doc');
+          loadDoc(path);
+        });
+      });
+
+      // If URL points to a doc, load it on open
+      const p = location.pathname.split('/').pop();
+      if (p && p.endsWith('.md')) {
+        loadDoc(p);
+      }
+    </script>
   </body>
 </html>
