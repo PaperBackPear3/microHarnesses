@@ -1,5 +1,6 @@
 import type { Turn } from "../context/types";
 import type { PromptBundle } from "../prompts/types";
+import type { ToolDescriptor } from "../tools/types";
 import type { ToolCall } from "../tools/types";
 
 export interface ModelProfile {
@@ -42,6 +43,7 @@ export interface StepInput {
   workingTurns: Turn[];
   iteration: number;
   selectedModel?: string;
+  availableTools?: ToolDescriptor[];
 }
 
 export interface ModelAdapter {

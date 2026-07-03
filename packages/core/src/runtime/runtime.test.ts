@@ -101,6 +101,39 @@ test("runtime does not crash on unknown tool", async () => {
   assert.match(state.turns[0]?.toolResults[0]?.error ?? "", /Unknown tool/i);
 });
 
+test("runtime normalizes simple function-style tool names", async () => {
+  const events = new FakeEventSink();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "time",
+    description: "time",
+    risk: "low",
+    async execute() {
+      return { now: "2026-01-01T00:00:00.000Z" };
+    },
+  });
+
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "call time",
+      toolCalls: [{ name: "time()", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+  });
+
+  const state = await runtime.run("default", "hello", options);
+  assert.equal(state.turns.length, 1);
+  assert.equal(state.turns[0]?.toolCalls[0]?.name, "time()");
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
+  assert.deepEqual(state.turns[0]?.toolResults[0]?.output, { now: "2026-01-01T00:00:00.000Z" });
+});
+
 test("runtime emits limit event and exits gracefully when tool call limit is exceeded", async () => {
   const events = new FakeEventSink();
   const tools = new ToolRegistry();

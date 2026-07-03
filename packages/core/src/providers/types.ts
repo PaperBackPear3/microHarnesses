@@ -1,3 +1,5 @@
+import type { ToolDescriptor } from "../tools/types";
+
 export interface ProviderAuth {
   apiKey: string;
   baseUrl?: string;
@@ -41,11 +43,15 @@ export interface CompletionRequest {
   messages: ProviderMessage[];
   maxTokens?: number;
   temperature?: number;
+  tools?: ToolDescriptor[];
 }
 
 export interface ProviderAdapter {
   providerId: ProviderId;
   /** Model used when the composition root does not specify one. */
   defaultModel?: string;
+  features?: {
+    structuredTools?: boolean;
+  };
   complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse>;
 }

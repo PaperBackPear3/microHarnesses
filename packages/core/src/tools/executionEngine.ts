@@ -45,7 +45,8 @@ export class ToolExecutionEngine {
 
   async executeCalls(calls: ToolCall[], ctx: ToolExecutionRunContext): Promise<ToolResult[]> {
     const results: ToolResult[] = [];
-    for (const call of calls) {
+    for (const originalCall of calls) {
+      const call = normalizeToolCallName(originalCall);
       if (ctx.isCancelled()) {
         await ctx.emitter.emit("tool.killed", {
           tool: call.name,
@@ -239,4 +240,14 @@ async function withTimeout<T>(
         reject(error);
       });
   });
+}
+
+function normalizeToolCallName(call: ToolCall): ToolCall {
+  const trimmed = call.name.trim();
+  const match = /^([A-Za-z0-9_-]+)\(\)$/.exec(trimmed);
+  const normalizedName = match ? match[1] : trimmed;
+  if (normalizedName === call.name) {
+    return call;
+  }
+  return { ...call, name: normalizedName };
 }

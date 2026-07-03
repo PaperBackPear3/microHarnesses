@@ -63,3 +63,37 @@ test("OpenAIAdapter exposes defaultModel", () => {
   const adapter = new OpenAIAdapter({ defaultModel: "custom" });
   assert.equal(adapter.defaultModel, "custom");
 });
+
+test("OpenAIAdapter includes tools payload when provided", async () => {
+  let seenBody: unknown;
+  const fetchImpl = (async (_url: string, init: RequestInit) => {
+    seenBody = JSON.parse(init.body as string);
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+
+  const adapter = new OpenAIAdapter({ fetchImpl });
+  await adapter.complete(
+    {
+      model: "gpt-x",
+      messages: [{ role: "user", content: "hello" }],
+      tools: [{ name: "time", description: "Returns time", inputSchema: { type: "object" } }],
+    },
+    { apiKey: "sk-test" },
+  );
+
+  assert.deepEqual((seenBody as { tools?: unknown[] }).tools, [
+    {
+      type: "function",
+      function: {
+        name: "time",
+        description: "Returns time",
+        parameters: { type: "object" },
+      },
+    },
+  ]);
+});

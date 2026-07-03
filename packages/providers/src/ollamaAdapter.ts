@@ -17,6 +17,7 @@ const DEFAULT_MODEL = "llama3.2:3b";
 export class OllamaAdapter implements ProviderAdapter {
   readonly providerId = "ollama" as const;
   readonly defaultModel: string;
+  readonly features = { structuredTools: true } as const;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OllamaAdapterOptions = {}) {
@@ -36,6 +37,18 @@ export class OllamaAdapter implements ProviderAdapter {
           role: m.role === "developer" ? "system" : m.role,
           content: m.content,
         })),
+        ...(request.tools && request.tools.length > 0
+          ? {
+              tools: request.tools.map((tool) => ({
+                type: "function",
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: tool.inputSchema,
+                },
+              })),
+            }
+          : {}),
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens ?? 800,
         stream: false,

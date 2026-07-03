@@ -25,6 +25,7 @@ const DEFAULT_MODEL = "claude-3-5-sonnet-latest";
 export class AnthropicAdapter implements ProviderAdapter {
   readonly providerId = "anthropic" as const;
   readonly defaultModel: string;
+  readonly features = { structuredTools: true } as const;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: AnthropicAdapterOptions = {}) {
@@ -58,6 +59,15 @@ export class AnthropicAdapter implements ProviderAdapter {
         temperature: request.temperature ?? 0.2,
         system: systemMessage,
         messages,
+        ...(request.tools && request.tools.length > 0
+          ? {
+              tools: request.tools.map((tool) => ({
+                name: tool.name,
+                description: tool.description,
+                input_schema: tool.inputSchema,
+              })),
+            }
+          : {}),
       }),
     });
 

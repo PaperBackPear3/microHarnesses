@@ -2,6 +2,7 @@ import type { CredentialsRegistry } from "../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../providers/registry";
 import type { CompletionRequest, ProviderId, ProviderMessage } from "../providers/types";
 import { ConfigError } from "../shared/errors";
+import type { ToolDescriptor } from "../tools/types";
 import type { ModelAdapter, StepInput, StepPlan } from "./types";
 
 export interface ProviderModelAdapterOptions {
@@ -29,6 +30,7 @@ export class ProviderModelAdapter implements ModelAdapter {
 
   async nextStep(input: StepInput): Promise<StepPlan> {
     const adapter = this.providerRegistry.get(this.providerId);
+    const supportsStructuredTools = adapter.features?.structuredTools === true;
     const resolvedModel = input.selectedModel ?? this.model ?? adapter.defaultModel;
     if (!resolvedModel) {
       throw new ConfigError(
@@ -38,8 +40,9 @@ export class ProviderModelAdapter implements ModelAdapter {
     const auth = await this.credentialsRegistry.get(this.providerId).resolve();
     const request: CompletionRequest = {
       model: resolvedModel,
-      messages: buildMessages(input),
+      messages: buildMessages(input, !supportsStructuredTools),
       maxTokens: this.maxTokens,
+      tools: input.availableTools,
     };
 
     const response = await adapter.complete(request, auth);
@@ -56,12 +59,15 @@ export class ProviderModelAdapter implements ModelAdapter {
   }
 }
 
-function buildMessages(input: StepInput): ProviderMessage[] {
+function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): ProviderMessage[] {
   const systemParts = [input.bundle.system];
   for (const instruction of input.bundle.instructions) {
     if (instruction.role === "tools" || instruction.role === "custom") {
       systemParts.push(`# ${instruction.name}\n${instruction.content}`);
     }
+  }
+  if (includeToolCatalogFallback && (input.availableTools?.length ?? 0) > 0) {
+    systemParts.push(renderToolCatalogInstruction(input.availableTools ?? []));
   }
 
   const messages: ProviderMessage[] = [{ role: "system", content: systemParts.join("\n\n") }];
@@ -77,4 +83,21 @@ function buildMessages(input: StepInput): ProviderMessage[] {
 
   messages.push({ role: "user", content: input.bundle.task });
   return messages;
+}
+
+function renderToolCatalogInstruction(tools: ToolDescriptor[]): string {
+  const entries = tools
+    .map((tool) => {
+      const schema = JSON.stringify(tool.inputSchema);
+      return `- ${tool.name}: ${tool.description}\n  input schema: ${schema}`;
+    })
+    .join("\n");
+
+  return [
+    "## Runtime tool catalog (authoritative)",
+    "If you need a tool, call it by exact name from the list below.",
+    "Do not append parentheses to tool names (use `time`, not `time()`).",
+    "Available tools:",
+    entries,
+  ].join("\n");
 }

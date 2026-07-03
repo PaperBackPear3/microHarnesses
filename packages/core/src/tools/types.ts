@@ -16,6 +16,11 @@ export interface ToolDefinition {
   description: string;
   risk: "low" | "high";
   /**
+   * Optional structured schema used for provider-native tool/function calling.
+   * When omitted, core derives a permissive object schema.
+   */
+  inputSchema?: Record<string, unknown>;
+  /**
    * Optional annotations that mark specific input fields as dangerous kinds
    * (shell commands, file paths, URLs). Consumed by `CommandSafetyRule` and
    * other input-inspecting policy rules. When omitted, safety rules fall
@@ -42,4 +47,10 @@ export interface ToolInputAnnotation {
  */
 export interface ToolExecutionContext {
   signal: AbortSignal;
+}
+
+export interface ToolDescriptor {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
 }

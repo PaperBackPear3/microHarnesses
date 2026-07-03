@@ -8,6 +8,7 @@ export * from "./shared/text";
 export * from "./tools/types";
 export * from "./tools/registry";
 export * from "./tools/executionEngine";
+export * from "./tools/descriptors";
 
 // Policy
 export * from "./policy/types";

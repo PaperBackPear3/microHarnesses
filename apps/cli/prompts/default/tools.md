@@ -1,3 +1,3 @@
 Available tools:
-- echo(text)
-- time()
+- echo
+- time

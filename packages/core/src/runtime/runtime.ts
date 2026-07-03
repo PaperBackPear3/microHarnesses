@@ -7,6 +7,7 @@ import type { ToolPolicyEngine } from "../policy/types";
 import type { PromptSource } from "../prompts/types";
 import type { SessionStore } from "../session/sessionStore";
 import { ValidationError } from "../shared/errors";
+import { deriveToolDescriptors } from "../tools/descriptors";
 import { ToolExecutionEngine } from "../tools/executionEngine";
 import type { ToolRegistry } from "../tools/registry";
 import { RunEmitter } from "./runEmitter";
@@ -189,6 +190,7 @@ export class HarnessRuntime {
         workingTurns,
         iteration,
         selectedModel: modelSelection.model,
+        availableTools: deriveToolDescriptors(this.tools.list()),
       });
       if (step.usage) {
         await emitter.emit("model.completed", {

@@ -17,6 +17,7 @@ const DEFAULT_MODEL = "gpt-4.1-mini";
 export class OpenAIAdapter implements ProviderAdapter {
   readonly providerId = "openai" as const;
   readonly defaultModel: string;
+  readonly features = { structuredTools: true } as const;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OpenAIAdapterOptions = {}) {
@@ -35,6 +36,18 @@ export class OpenAIAdapter implements ProviderAdapter {
       body: JSON.stringify({
         model: request.model,
         messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
+        ...(request.tools && request.tools.length > 0
+          ? {
+              tools: request.tools.map((tool) => ({
+                type: "function",
+                function: {
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: tool.inputSchema,
+                },
+              })),
+            }
+          : {}),
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens ?? 800,
       }),
