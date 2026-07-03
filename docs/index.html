@@ -178,18 +178,28 @@ Create your agent loop: a minimal runtime core plus optional plugins for provide
       // Simple client-side markdown loader using marked.js
       const links = document.querySelectorAll('a[data-doc]');
       const container = document.getElementById('doc-container');
-      const intro = document.getElementById('doc-intro');
+      const pageHeader = document.getElementById('page-header');
+      const initialHomeHtml = container.innerHTML;
 
-      async function loadDoc(path) {
+      function showHome({ pushHistory = true } = {}) {
+        container.innerHTML = initialHomeHtml;
+        pageHeader.style.display = 'block';
+        if (pushHistory) {
+          window.history.pushState({ view: 'home' }, '', './');
+        }
+      }
+
+      async function loadDoc(path, { pushHistory = true } = {}) {
         try {
           const res = await fetch(path);
           if (!res.ok) throw new Error('Failed to fetch ' + path);
           const md = await res.text();
           const html = marked.parse(md);
           container.innerHTML = html;
-          // hide header when doc is loaded
-          document.getElementById('page-header').style.display = 'none';
-          window.history.replaceState(null, '', path);
+          pageHeader.style.display = 'none';
+          if (pushHistory) {
+            window.history.pushState({ view: 'doc', path }, '', path);
+          }
         } catch (err) {
           container.innerHTML = '<p>Unable to load doc.</p>';
           console.error(err);
@@ -209,23 +219,31 @@ Create your agent loop: a minimal runtime core plus optional plugins for provide
       if (homeLink) {
         homeLink.addEventListener('click', (e) => {
           e.preventDefault();
-          container.innerHTML = document.getElementById('doc-intro').innerHTML;
-          document.getElementById('page-header').style.display = 'block';
-          window.history.replaceState(null, '', './');
+          showHome();
         });
       }
 
       // If URL points to a doc, load it on open
       const p = location.pathname.split('/').pop();
       if (p && p.endsWith('.md')) {
-        loadDoc(p);
+        window.history.replaceState({ view: 'doc', path: p }, '', p);
+        loadDoc(p, { pushHistory: false });
+      } else {
+        window.history.replaceState({ view: 'home' }, '', './');
       }
 
+      window.addEventListener('popstate', (event) => {
+        const state = event.state;
+        if (state?.view === 'doc' && state.path) {
+          loadDoc(state.path, { pushHistory: false });
+          return;
+        }
+        showHome({ pushHistory: false });
+      });
+
       // clicking the header title goes back to home
-      document.getElementById('page-header').addEventListener('click', () => {
-        container.innerHTML = document.getElementById('doc-intro').innerHTML;
-        document.getElementById('page-header').style.display = 'block';
-        window.history.replaceState(null, '', './');
+      pageHeader.addEventListener('click', () => {
+        showHome();
       });
     </script>
   </body>
