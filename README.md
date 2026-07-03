@@ -32,6 +32,10 @@ subagents — and swap any implementation with your own.
   emits `tool.approval_requested` and awaits a caller-supplied
   `ApprovalHandler`. No handler → the tool is blocked.
 
+## Specs
+
+- [Tool capability exposure for model-driven tool use](docs/specs/tool-capability-exposure.md)
+
 ## Install and build
 
 ```bash
