@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Clarify objective and success criteria",
+    "detail": "Restate goal and define a measurable outcome."
+  },
+  {
+    "title": "Inventory current state",
+    "detail": "Explore code paths and data structures relevant to the goal."
+  },
+  {
+    "title": "Design minimal implementation path",
+    "detail": "Define interfaces and the smallest vertical implementation that satisfies the goal."
+  },
+  {
+    "title": "Implement and integrate in slices",
+    "detail": "Apply changes in small slices that preserve existing behaviour."
+  },
+  {
+    "title": "Validate and operationalise",
+    "detail": "Run targeted validation and document usage and operational behaviour."
+  },
+  {
+    "title": "Break into execution tickets",
+    "detail": "Translate the plan into independently executable tasks with explicit dependencies."
+  },
+  {
+    "title": "Define rollback and safety boundaries",
+    "detail": "Specify failure handling and rollback checkpoints before risky steps."
+  },
+  {
+    "title": "Sequence implementation by risk",
+    "detail": "Do low-risk scaffolding first; high-risk changes last with guardrails in place."
+  },
+  {
+    "title": "Confirm observability requirements",
+    "detail": "Define what logs, metrics, and events prove correctness in operation."
+  },
+  {
+    "title": "Prepare verification matrix",
+    "detail": "Map each requirement to a concrete validation method."
+  },
+  {
+    "title": "Document operator workflow",
+    "detail": "Capture runbook details for setup, resume, and recovery paths."
+  },
+  {
+    "title": "Finalise delivery checklist",
+    "detail": "Consolidate completion criteria and handoff artefacts."
+  }
+]

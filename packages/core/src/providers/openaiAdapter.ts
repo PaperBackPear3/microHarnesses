@@ -1,19 +1,6 @@
 import { ProviderError } from "../errors";
 import { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "../types";
-
-interface OpenAIResponse {
-  choices?: Array<{
-    message?: {
-      content?: string | Array<{ type: string; text?: string }>;
-      tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
-    };
-    finish_reason?: string;
-  }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-  };
-}
+import { OpenAICompatResponse, parseOpenAICompatResponse } from "./openaiCompat";
 
 export class OpenAIAdapter implements ProviderAdapter {
   readonly providerId = "openai" as const;
@@ -39,46 +26,11 @@ export class OpenAIAdapter implements ProviderAdapter {
       throw new ProviderError(`OpenAI error (${response.status}): ${errorBody}`);
     }
 
-    const payload = (await response.json()) as OpenAIResponse;
-    const first = payload.choices?.[0];
-    if (!first?.message) {
+    const payload = (await response.json()) as OpenAICompatResponse;
+    const parsed = parseOpenAICompatResponse(payload);
+    if (!parsed) {
       throw new ProviderError("OpenAI returned no message");
     }
-
-    return {
-      assistantMessage: contentToText(first.message.content),
-      toolCalls: (first.message.tool_calls ?? [])
-        .map((call) => {
-          const rawArgs = call.function?.arguments ?? "{}";
-          let parsed: Record<string, unknown>;
-          try {
-            parsed = JSON.parse(rawArgs) as Record<string, unknown>;
-          } catch {
-            parsed = { raw: rawArgs };
-          }
-          return {
-            name: call.function?.name ?? "unknown",
-            input: parsed
-          };
-        }),
-      stop: first.finish_reason === "stop",
-      usage: {
-        inputTokens: payload.usage?.prompt_tokens,
-        outputTokens: payload.usage?.completion_tokens
-      }
-    };
+    return parsed;
   }
-}
-
-function contentToText(content: string | Array<{ type: string; text?: string }> | undefined): string {
-  if (!content) {
-    return "";
-  }
-  if (typeof content === "string") {
-    return content;
-  }
-  return content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text ?? "")
-    .join("");
 }

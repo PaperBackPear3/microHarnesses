@@ -18,10 +18,10 @@ import {
   ProviderRegistry,
   ProviderId,
   SessionStore,
-  ToolRegistry,
-  echoTool,
-  timeTool
+  ToolRegistry
 } from "@micro-harness/core";
+import { echoTool } from "./tools/echo";
+import { timeTool } from "./tools/time";
 
 type Command = "run" | "checkpoints" | "sessions";
 
@@ -113,7 +113,6 @@ async function runWithOptions(args: string[], prompt: string): Promise<void> {
       defaultModel: model,
       fastModel: model
     },
-    modelProvider: provider,
     modelOverride: model,
     sessionId,
     resume,

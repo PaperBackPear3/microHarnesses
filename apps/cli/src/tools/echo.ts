@@ -1,4 +1,4 @@
-import { ToolDefinition } from "../../types";
+import { ToolDefinition } from "@micro-harness/core";
 
 export const echoTool: ToolDefinition = {
   name: "echo",

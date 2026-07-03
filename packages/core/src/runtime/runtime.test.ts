@@ -89,8 +89,7 @@ class FakeSpawner {
 const options: RunOptions = {
   maxIterations: 1,
   checkpointEvery: 1,
-  profile: { defaultModel: "test-model" } as ModelProfile,
-  modelProvider: "openai"
+  profile: { defaultModel: "test-model" } as ModelProfile
 };
 
 test("runtime does not crash on unknown tool", async () => {

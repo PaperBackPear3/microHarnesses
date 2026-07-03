@@ -208,7 +208,6 @@ export interface RunOptions {
   maxIterations: number;
   checkpointEvery: number;
   profile: ModelProfile;
-  modelProvider: ProviderId;
   modelOverride?: string;
   sessionId?: string;
   resume?: boolean;

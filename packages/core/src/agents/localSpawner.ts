@@ -4,11 +4,18 @@ import os from "node:os";
 import path from "node:path";
 import { AgentSpawner, SpawnRequest } from "../types";
 
+export interface LocalProcessSpawnerOptions {
+  /** Additional environment variables to pass to the worker process. */
+  extraEnv?: Record<string, string>;
+}
+
 export class LocalProcessSpawner implements AgentSpawner {
   private readonly workerScriptPath: string;
+  private readonly extraEnv: Record<string, string>;
 
-  constructor(workerScriptPath: string) {
+  constructor(workerScriptPath: string, options: LocalProcessSpawnerOptions = {}) {
     this.workerScriptPath = workerScriptPath;
+    this.extraEnv = options.extraEnv ?? {};
   }
 
   async spawn(request: SpawnRequest): Promise<string> {
@@ -18,7 +25,7 @@ export class LocalProcessSpawner implements AgentSpawner {
     await writeFile(inputPath, JSON.stringify({ prompt: request.prompt }, null, 2), "utf8");
 
     try {
-      await runWorker(this.workerScriptPath, inputPath, outputPath);
+      await runWorker(this.workerScriptPath, inputPath, outputPath, this.extraEnv);
       const raw = await readFile(outputPath, "utf8");
       const result = JSON.parse(raw) as { summary?: string; error?: string };
       if (result.error) {
@@ -31,28 +38,26 @@ export class LocalProcessSpawner implements AgentSpawner {
   }
 }
 
-function runWorker(workerScriptPath: string, inputPath: string, outputPath: string): Promise<void> {
+function runWorker(
+  workerScriptPath: string,
+  inputPath: string,
+  outputPath: string,
+  extraEnv: Record<string, string>
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [workerScriptPath, inputPath, outputPath], {
       stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        PATH: process.env.PATH ?? ""
-      }
+      env: { PATH: process.env.PATH ?? "", ...extraEnv }
     });
-    child.stdout?.on("data", (chunk: Buffer) => {
-      process.stdout.write(chunk);
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      process.stderr.write(chunk);
-    });
-
+    child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(chunk));
+    child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(chunk));
     child.on("error", reject);
     child.on("exit", (code) => {
       if (code === 0) {
         resolve();
-        return;
+      } else {
+        reject(new Error(`Worker exited with code ${String(code)}`));
       }
-      reject(new Error(`Worker exited with code ${String(code)}`));
     });
   });
 }

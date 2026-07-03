@@ -14,6 +14,7 @@ export interface ProviderModelAdapterOptions {
   credentialsResolver: ProviderCredentialsResolver;
   providerId: ProviderId;
   model: string;
+  maxTokens?: number;
 }
 
 export class ProviderModelAdapter implements ModelAdapter {
@@ -21,12 +22,14 @@ export class ProviderModelAdapter implements ModelAdapter {
   private readonly credentialsResolver: ProviderCredentialsResolver;
   private readonly providerId: ProviderId;
   private readonly model: string;
+  private readonly maxTokens: number;
 
   constructor(options: ProviderModelAdapterOptions) {
     this.providerRegistry = options.providerRegistry;
     this.credentialsResolver = options.credentialsResolver;
     this.providerId = options.providerId;
     this.model = options.model;
+    this.maxTokens = options.maxTokens ?? 1000;
   }
 
   async nextStep(input: StepInput): Promise<StepPlan> {
@@ -36,7 +39,7 @@ export class ProviderModelAdapter implements ModelAdapter {
     const request: CompletionRequest = {
       model: resolvedModel,
       messages: buildMessages(input),
-      maxTokens: 1000
+      maxTokens: this.maxTokens
     };
 
     const response = await adapter.complete(request, auth);

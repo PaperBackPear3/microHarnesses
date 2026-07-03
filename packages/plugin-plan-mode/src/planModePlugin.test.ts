@@ -3,67 +3,115 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { ToolDefinition } from "@micro-harness/core";
+import { PluginApi, ToolDefinition } from "@micro-harness/core";
 import { PlanModePlugin } from "./planModePlugin";
+import { PlannerPlugin } from "./agents/plannerPlugin";
+import { ExplorerPlugin } from "./agents/explorerPlugin";
 
-test("PlanModePlugin registers read-only plan and explore tools", async () => {
+function makeApi(tools: Map<string, ToolDefinition>): PluginApi {
+  return {
+    registerTool(tool) { tools.set(tool.name, tool); },
+    onBeforeLoop() {},
+    onAfterLoop() {},
+    setCompressor() {}
+  };
+}
+
+// ── Composite plugin ────────────────────────────────────────────────────────
+
+test("PlanModePlugin registers all three tools", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mh-plan-plugin-"));
-  const srcDir = path.join(root, "src");
-  await mkdir(srcDir, { recursive: true });
-  await writeFile(path.join(srcDir, "index.ts"), "export const value = 1;\n// planner query match\n", "utf8");
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "index.ts"), "export const value = 1;\n// planner query match\n", "utf8");
 
   try {
-    const plugin = new PlanModePlugin({ rootDir: root });
     const tools = new Map<string, ToolDefinition>();
-    plugin.register({
-      registerTool(tool) {
-        tools.set(tool.name, tool);
-      },
-      onBeforeLoop() {},
-      onAfterLoop() {},
-      setCompressor() {}
-    });
+    new PlanModePlugin({ rootDir: root }).register(makeApi(tools));
 
-    const planTool = tools.get("plan_agent");
-    const exploreTool = tools.get("explore_agent");
-    const infoTool = tools.get("plan_mode_info");
-    assert.ok(planTool);
-    assert.ok(exploreTool);
-    assert.ok(infoTool);
-
-    const plan = await planTool!.execute({ goal: "Ship planning plugin", max_steps: 10 });
-    const planData = plan as { read_only: boolean; actual_steps: number; requested_max_steps: number };
-    assert.equal(planData.read_only, true);
-    assert.equal(planData.requested_max_steps, 10);
-    assert.equal(planData.actual_steps, 10);
-
-    const explore = await exploreTool!.execute({ query: "planner", max_files: 5 });
-    const exploreData = explore as { read_only: boolean; total_results: number; root_path: string };
-    assert.equal(exploreData.read_only, true);
-    assert.equal(exploreData.total_results > 0, true);
-    assert.equal(exploreData.root_path, ".");
-
-    const info = await infoTool!.execute({});
-    const infoData = info as { tools: string[] };
-    assert.equal(infoData.tools.includes("plan_mode_info"), true);
+    assert.ok(tools.has("plan_agent"), "plan_agent must be registered");
+    assert.ok(tools.has("explore_agent"), "explore_agent must be registered");
+    assert.ok(tools.has("plan_mode_info"), "plan_mode_info must be registered");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("explore agent blocks path traversal", async () => {
-  const plugin = new PlanModePlugin({ rootDir: process.cwd() });
-  let exploreTool: ToolDefinition | undefined;
-  plugin.register({
-    registerTool(tool) {
-      if (tool.name === "explore_agent") {
-        exploreTool = tool;
-      }
-    },
-    onBeforeLoop() {},
-    onAfterLoop() {},
-    setCompressor() {}
-  });
-  assert.ok(exploreTool);
-  await assert.rejects(() => exploreTool!.execute({ query: "x", root_path: "../../" }));
+// ── PlannerPlugin ────────────────────────────────────────────────────────────
+
+test("PlannerPlugin produces correct step count and read_only flag", async () => {
+  const tools = new Map<string, ToolDefinition>();
+  new PlannerPlugin().register(makeApi(tools));
+  const planTool = tools.get("plan_agent")!;
+
+  const result = await planTool.execute({ goal: "Ship planning plugin", max_steps: 10 }) as {
+    read_only: boolean;
+    actual_steps: number;
+    requested_max_steps: number;
+    steps: unknown[];
+  };
+  assert.equal(result.read_only, true);
+  assert.equal(result.requested_max_steps, 10);
+  assert.equal(result.actual_steps, 10);
+  assert.equal(result.steps.length, 10);
+});
+
+test("PlannerPlugin clamps max_steps to template count (12)", async () => {
+  const tools = new Map<string, ToolDefinition>();
+  new PlannerPlugin().register(makeApi(tools));
+
+  const result = await tools.get("plan_agent")!.execute({ goal: "test", max_steps: 99 }) as {
+    actual_steps: number;
+    requested_max_steps: number;
+  };
+  assert.equal(result.requested_max_steps, 12, "max_steps clamped to 12");
+  assert.equal(result.actual_steps, 12);
+});
+
+test("PlannerPlugin rejects empty goal", async () => {
+  const tools = new Map<string, ToolDefinition>();
+  new PlannerPlugin().register(makeApi(tools));
+  await assert.rejects(() => tools.get("plan_agent")!.execute({ goal: "" }));
+});
+
+// ── ExplorerPlugin ────────────────────────────────────────────────────────────
+
+test("ExplorerPlugin finds matching files and returns relative root_path", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "index.ts"), "// explore-test-marker\n", "utf8");
+
+  try {
+    const tools = new Map<string, ToolDefinition>();
+    new ExplorerPlugin({ rootDir: root }).register(makeApi(tools));
+
+    const result = await tools.get("explore_agent")!.execute({ query: "explore-test-marker", max_files: 5 }) as {
+      read_only: boolean;
+      total_results: number;
+      root_path: string;
+    };
+    assert.equal(result.read_only, true);
+    assert.equal(result.total_results > 0, true);
+    assert.equal(result.root_path, ".");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ExplorerPlugin blocks path traversal", async () => {
+  const tools = new Map<string, ToolDefinition>();
+  new ExplorerPlugin({ rootDir: process.cwd() }).register(makeApi(tools));
+  await assert.rejects(() =>
+    tools.get("explore_agent")!.execute({ query: "x", root_path: "../../" })
+  );
+});
+
+// ── plan_mode_info ────────────────────────────────────────────────────────────
+
+test("plan_mode_info lists itself and the other two tools", async () => {
+  const tools = new Map<string, ToolDefinition>();
+  new PlanModePlugin().register(makeApi(tools));
+  const infoResult = await tools.get("plan_mode_info")!.execute({}) as { tools: string[] };
+  assert.ok(infoResult.tools.includes("plan_mode_info"), "plan_mode_info must list itself");
+  assert.ok(infoResult.tools.includes("plan_agent"));
+  assert.ok(infoResult.tools.includes("explore_agent"));
 });
