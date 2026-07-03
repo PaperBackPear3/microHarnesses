@@ -1,4 +1,4 @@
-import { ToolDefinition } from "../core/types";
+import { ToolDefinition } from "../types";
 
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolDefinition>();
@@ -16,9 +16,5 @@ export class ToolRegistry {
       throw new Error(`Unknown tool: "${name}"`);
     }
     return tool;
-  }
-
-  list(): ToolDefinition[] {
-    return Array.from(this.tools.values());
   }
 }

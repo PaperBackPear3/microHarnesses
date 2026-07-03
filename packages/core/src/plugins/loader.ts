@@ -1,6 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { HarnessPlugin } from "../core/types";
+import { HarnessPlugin } from "../types";
 
 interface PluginFileShape {
   default?: unknown;

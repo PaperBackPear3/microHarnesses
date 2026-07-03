@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { AgentSpawner, SpawnRequest } from "../core/types";
+import { AgentSpawner, SpawnRequest } from "../types";
 
 export class LocalProcessSpawner implements AgentSpawner {
   private readonly workerScriptPath: string;

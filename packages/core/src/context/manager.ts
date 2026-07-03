@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CompressorFn, HarnessState, Turn } from "../core/types";
+import { CompressorFn, HarnessState, Turn } from "../types";
 
 export interface ContextManagerOptions {
   stateDir: string;
@@ -14,10 +14,15 @@ interface CheckpointFile {
   state: HarnessState;
 }
 
+interface SummaryState {
+  compressedTurnCount: number;
+}
+
 export class ContextManager {
   private readonly stateDir: string;
   private readonly checkpointDir: string;
   private readonly summaryDir: string;
+  private readonly summaryStatePath: string;
   private readonly maxWorkingTurns: number;
   private compressor: CompressorFn;
 
@@ -25,6 +30,7 @@ export class ContextManager {
     this.stateDir = options.stateDir;
     this.checkpointDir = path.join(this.stateDir, "checkpoints");
     this.summaryDir = path.join(this.stateDir, "summaries");
+    this.summaryStatePath = path.join(this.summaryDir, "state.json");
     this.maxWorkingTurns = options.maxWorkingTurns;
     this.compressor = options.compressor ?? defaultCompressor;
   }
@@ -43,13 +49,22 @@ export class ContextManager {
       return turns;
     }
 
-    const overflow = turns.slice(0, turns.length - this.maxWorkingTurns);
-    const kept = turns.slice(-this.maxWorkingTurns);
-    const summary = await this.compressor(overflow);
+    const overflowCount = turns.length - this.maxWorkingTurns;
+    const summaryState = await this.readSummaryState();
+    const newOverflowCount = overflowCount - summaryState.compressedTurnCount;
+    if (newOverflowCount > 0) {
+      const delta = turns.slice(summaryState.compressedTurnCount, overflowCount);
+      const summary = await this.compressor(delta);
+      const summaryFile = path.join(this.summaryDir, `summary-${Date.now()}.json`);
+      await writeFile(
+        summaryFile,
+        JSON.stringify({ summary, turns: delta.length, from: summaryState.compressedTurnCount }, null, 2),
+        "utf8"
+      );
+      await this.writeSummaryState({ compressedTurnCount: overflowCount });
+    }
 
-    const summaryFile = path.join(this.summaryDir, `summary-${Date.now()}.json`);
-    await writeFile(summaryFile, JSON.stringify({ summary, turns: overflow.length }, null, 2), "utf8");
-    return kept;
+    return turns.slice(-this.maxWorkingTurns);
   }
 
   async saveCheckpoint(state: HarnessState): Promise<string> {
@@ -83,10 +98,31 @@ export class ContextManager {
       .map((name) => name.replace(".json", ""))
       .sort();
   }
+
+  private async readSummaryState(): Promise<SummaryState> {
+    try {
+      const raw = await readFile(this.summaryStatePath, "utf8");
+      const parsed = JSON.parse(raw) as SummaryState;
+      return { compressedTurnCount: parsed.compressedTurnCount ?? 0 };
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return { compressedTurnCount: 0 };
+      }
+      throw error;
+    }
+  }
+
+  private async writeSummaryState(state: SummaryState): Promise<void> {
+    await writeFile(this.summaryStatePath, JSON.stringify(state, null, 2), "utf8");
+  }
 }
 
 async function defaultCompressor(turns: Turn[]): Promise<string> {
   const toolCalls = turns.reduce((total, turn) => total + turn.toolCalls.length, 0);
   const spawned = turns.filter((turn) => Boolean(turn.spawnedAgentResult)).length;
   return `Compressed ${turns.length} turns. Tool calls: ${toolCalls}. Spawned agent turns: ${spawned}.`;
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error !== null && typeof error === "object" && "code" in error;
 }

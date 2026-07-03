@@ -1,20 +1,17 @@
 {
   "name": "micro-harnesses",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "A tiny CLI-first framework for AI micro harnesses.",
-  "main": "dist/cli.js",
-  "bin": {
-    "micro-harness": "dist/cli.js"
-  },
+  "description": "Library-first framework for building micro harnesses.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "npm run build --silent && node dist/cli.js",
-    "run": "npm run build --silent && node dist/cli.js run",
-    "checkpoints:list": "npm run build --silent && node dist/cli.js checkpoints list"
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run build --silent && node apps/cli/dist/index.js",
+    "run": "npm run build --silent && node apps/cli/dist/index.js run",
+    "checkpoints:list": "npm run build --silent && node apps/cli/dist/index.js checkpoints list"
   },
-  "devDependencies": {
-    "@types/node": "^22.20.0",
-    "typescript": "^5.7.2"
-  }
+  "devDependencies": {}
 }

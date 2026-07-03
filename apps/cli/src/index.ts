@@ -1,14 +1,25 @@
 #!/usr/bin/env node
 
 import path from "node:path";
-import { ContextManager } from "./context/manager";
-import { HarnessRuntime } from "./core/runtime";
-import { LocalProcessSpawner } from "./agents/localSpawner";
-import { RuleBasedAdapter } from "./model/ruleBasedAdapter";
-import { PluginLoader } from "./plugins/loader";
-import { echoTool } from "./tools/builtin/echo";
-import { timeTool } from "./tools/builtin/time";
-import { ToolRegistry } from "./tools/registry";
+import {
+  AnthropicAdapter,
+  ContextManager,
+  DefaultModelSelector,
+  DefaultPolicyEngine,
+  EnvCredentialsResolver,
+  FsPromptSource,
+  HarnessRuntime,
+  LocalProcessSpawner,
+  MemoryEventSink,
+  OpenAIAdapter,
+  PluginLoader,
+  ProviderModelAdapter,
+  ProviderRegistry,
+  ProviderId,
+  ToolRegistry,
+  echoTool,
+  timeTool
+} from "@micro-harness/core";
 
 type Command = "run" | "checkpoints";
 
@@ -31,10 +42,14 @@ async function main(): Promise<void> {
 
 async function runCommand(args: string[]): Promise<void> {
   const prompt = args.find((arg) => !arg.startsWith("--")) ?? "hello micro harness";
+  const agentName = getArgValue(args, "--agent") ?? "default";
   const stateDir = getArgValue(args, "--state-dir") ?? path.resolve(process.cwd(), ".micro-harness");
+  const promptDir = getArgValue(args, "--prompts-dir") ?? path.resolve(process.cwd(), "apps/cli/prompts");
   const maxIterations = Number(getArgValue(args, "--iterations") ?? "4");
   const checkpointEvery = Number(getArgValue(args, "--checkpoint-every") ?? "2");
   const pluginsPath = getArgValue(args, "--plugins");
+  const provider = ((getArgValue(args, "--provider") ?? "openai") as ProviderId);
+  const model = getArgValue(args, "--model") ?? "gpt-4.1-mini";
 
   const toolRegistry = new ToolRegistry();
   toolRegistry.register(echoTool);
@@ -44,12 +59,25 @@ async function runCommand(args: string[]): Promise<void> {
     stateDir,
     maxWorkingTurns: 6
   });
+  const prompts = new FsPromptSource({ rootDir: promptDir });
+  const providerRegistry = new ProviderRegistry();
+  providerRegistry.register(new OpenAIAdapter());
+  providerRegistry.register(new AnthropicAdapter());
 
   const runtime = new HarnessRuntime({
-    model: new RuleBasedAdapter(),
+    model: new ProviderModelAdapter({
+      providerRegistry,
+      credentialsResolver: new EnvCredentialsResolver(),
+      providerId: provider,
+      model
+    }),
+    modelSelector: new DefaultModelSelector(),
+    prompts,
     tools: toolRegistry,
     context,
-    spawner: new LocalProcessSpawner(path.resolve(__dirname, "agents/worker.js"))
+    spawner: new LocalProcessSpawner(path.resolve(__dirname, "worker.js")),
+    policy: new DefaultPolicyEngine(),
+    eventSink: new MemoryEventSink()
   });
 
   if (pluginsPath) {
@@ -58,9 +86,14 @@ async function runCommand(args: string[]): Promise<void> {
     await runtime.registerPlugins(plugins);
   }
 
-  const state = await runtime.run(prompt, {
+  const state = await runtime.run(agentName, prompt, {
     maxIterations,
-    checkpointEvery
+    checkpointEvery,
+    profile: {
+      defaultModel: model,
+      fastModel: model
+    },
+    modelProvider: provider
   });
 
   process.stdout.write(JSON.stringify(state, null, 2) + "\n");

@@ -1,37 +1,66 @@
 # microHarnesses
 
-Tiny, CLI-first framework for AI micro harnesses with:
-- tool support
-- loop orchestration
-- lightweight context management (compress, checkpoint, discard)
-- local agent spawning
-- plugin extension points
+Library-first framework to bootstrap agentic micro harnesses with:
+- prompt packs from Markdown folders
+- provider adapters (OpenAI + Anthropic)
+- model selection strategy
+- tool policy enforcement (deny/allow before execution)
+- loop orchestration, checkpoints, local agent spawning, plugins
 
-## Install
+## Workspace layout
+
+- `packages/core`: reusable library (`@micro-harness/core`)
+- `apps/cli`: reference CLI implementation using the core library
+
+## Install and build
 
 ```bash
 npm install
 npm run build
 ```
 
-## Run
+## Run the reference CLI
+
+Set provider credentials:
 
 ```bash
-node dist/cli.js run "tool:echo hello and tell me time spawn: summarize this"
+export OPENAI_API_KEY=...
+# or
+export ANTHROPIC_API_KEY=...
+```
+
+Then run:
+
+```bash
+node apps/cli/dist/index.js run "summarize this task" --agent default --provider openai --model gpt-4.1-mini
 ```
 
 Useful flags:
+- `--agent <name>`
+- `--prompts-dir <path>`
+- `--provider <openai|anthropic>`
+- `--model <name>`
 - `--iterations <n>`
 - `--checkpoint-every <n>`
 - `--state-dir <path>`
 - `--plugins <path-to-plugin.js>`
 
+## Prompt pack convention
+
+`<prompts-dir>/<agent-name>/`:
+- `system.md` (required)
+- `developer.md` (optional)
+- `tools.md` (optional)
+- `prompt.meta.json` (optional metadata)
+
+Frontmatter in markdown is accepted and stripped. Variables use `{{var_name}}`.
+
 ## Checkpoints
 
 ```bash
-node dist/cli.js checkpoints list
-node dist/cli.js checkpoints show <checkpoint-id>
-node dist/cli.js checkpoints delete <checkpoint-id>
+node apps/cli/dist/index.js checkpoints list
+node apps/cli/dist/index.js checkpoints show <checkpoint-id>
+node apps/cli/dist/index.js checkpoints delete <checkpoint-id>
 ```
 
 ## Plugin shape
@@ -43,6 +72,7 @@ module.exports = {
     api.registerTool({
       name: "upper",
       description: "Uppercases text",
+      risk: "low",
       async execute(input) {
         return { text: String(input.text || "").toUpperCase() };
       }
@@ -50,17 +80,3 @@ module.exports = {
   }
 };
 ```
-
-## Code map
-
-- `src/cli.ts` – CLI entrypoint
-- `src/core/runtime.ts` – loop coordinator
-- `src/tools/registry.ts` – tool registration/dispatch
-- `src/context/manager.ts` – compression/checkpoint/discard
-- `src/agents/localSpawner.ts` and `src/agents/worker.ts` – local process workers
-- `src/plugins/loader.ts` – plugin loading
-
-## Notes
-
-This MVP uses a small rule-based adapter (`src/model/ruleBasedAdapter.ts`) as a stand-in model.
-Swap it with a real model adapter while keeping the same `ModelAdapter` contract.

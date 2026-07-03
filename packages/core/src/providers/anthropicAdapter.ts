@@ -1,0 +1,66 @@
+import { ProviderError } from "../errors";
+import { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "../types";
+
+interface AnthropicResponse {
+  content?: Array<{ type?: string; text?: string; name?: string; input?: Record<string, unknown> }>;
+  stop_reason?: string;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+}
+
+export class AnthropicAdapter implements ProviderAdapter {
+  readonly providerId = "anthropic" as const;
+
+  async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
+    const endpoint = `${auth.baseUrl ?? "https://api.anthropic.com/v1"}/messages`;
+    const systemMessage = request.messages.find((m) => m.role === "system")?.content ?? "";
+    const messages = request.messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({
+        role: m.role,
+        content: m.content
+      }));
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": auth.apiKey,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: request.model,
+        max_tokens: request.maxTokens ?? 800,
+        temperature: request.temperature ?? 0.2,
+        system: systemMessage,
+        messages
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new ProviderError(`Anthropic error (${response.status}): ${errorBody}`);
+    }
+
+    const payload = (await response.json()) as AnthropicResponse;
+    return {
+      assistantMessage: payload.content
+        ?.filter((item) => item.type === "text")
+        .map((item) => item.text ?? "")
+        .join("") ?? "",
+      toolCalls: payload.content
+        ?.filter((item) => item.type === "tool_use")
+        .map((item) => ({
+          name: item.name ?? "unknown",
+          input: item.input ?? {}
+        })) ?? [],
+      stop: payload.stop_reason === "end_turn",
+      usage: {
+        inputTokens: payload.usage?.input_tokens,
+        outputTokens: payload.usage?.output_tokens
+      }
+    };
+  }
+}
