@@ -78,14 +78,14 @@ node apps/cli/dist/index.js sessions resume <session-id> "continue from last sta
 | `--prompts-dir <path>` | `apps/cli/prompts` | Prompt pack root |
 | `--iterations <n>` | `4` | Max loop iterations |
 | `--snapshot-every <n>` | `2` | Snapshot cadence |
-| `--session-id <id>` | none | Continue a specific session id |
-| `--resume` | off | Resume from latest snapshot |
+| `--session-id <id>` | none | Continue a specific session id (auto-resume enabled) |
+| `--resume` | off | Resume from latest snapshot (also implied by `--session-id`) |
 | `--goal <text>` | none | Persisted goal in session manifest |
 | `--state-dir <path>` | `.micro-harness` in CWD | State/session root |
 | `--plugins <path>` | none | Load one extra plugin file |
 | `--no-safety` | off | Disable `CommandSafetyRule` |
 
-Exit interactive mode with `/exit` or `/quit`.
+Interactive slash commands: `/info` (show current session/runtime info), `/exit`, `/quit`.
 
 ## Usage examples with installed plugins
 

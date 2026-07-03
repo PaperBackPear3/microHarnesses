@@ -377,6 +377,45 @@ test("includes prior tool execution feedback in subsequent messages", async () =
   assert.match(feedback?.content ?? "", /2026-01-01T00:00:00.000Z/);
 });
 
+test("adds session continuity instruction when working turns exist", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(
+    makeInput({
+      workingTurns: [
+        {
+          id: "t1",
+          iteration: 1,
+          userMessage: "What did we discuss?",
+          assistantMessage: "We discussed X.",
+          toolCalls: [],
+          toolResults: [],
+        },
+      ],
+    }),
+  );
+
+  const continuityInstruction = adapter.seenRequest?.messages.find(
+    (message) =>
+      message.role === "developer" &&
+      message.content.includes("Session history from prior turns is included below"),
+  );
+  assert.ok(continuityInstruction);
+});
+
 test("does not append duplicate task message when latest turn already has same user prompt", async () => {
   const adapter = new FakeAdapter("m", {
     assistantMessage: "ok",

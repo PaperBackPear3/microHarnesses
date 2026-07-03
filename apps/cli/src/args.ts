@@ -49,6 +49,7 @@ export function parseRunArgsWithPrompt(
   prompt: string,
   defaultPromptsDir: string,
 ): RunArgs {
+  const sessionId = getArgValue(args, "--session-id");
   return {
     prompt,
     agentName: getArgValue(args, "--agent") ?? "default",
@@ -63,8 +64,8 @@ export function parseRunArgsWithPrompt(
     provider: getArgValue(args, "--provider") ?? DEFAULT_PROVIDER,
     model: getArgValue(args, "--model"),
     maxTokens: parseOptionalPositiveInt(getArgValue(args, "--max-tokens"), "--max-tokens"),
-    sessionId: getArgValue(args, "--session-id"),
-    resume: hasFlag(args, "--resume"),
+    sessionId,
+    resume: hasFlag(args, "--resume") || typeof sessionId === "string",
     goal: getArgValue(args, "--goal"),
     noSafety: hasFlag(args, "--no-safety"),
   };

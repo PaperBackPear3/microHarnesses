@@ -23,6 +23,9 @@ export interface OpenAICompatResponse {
   choices?: Array<{
     message?: {
       content?: string | OpenAICompatContentPart[];
+      reasoning?: string | OpenAICompatContentPart[];
+      reasoning_content?: string | OpenAICompatContentPart[];
+      thinking?: string;
       tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
     };
     finish_reason?: string;
@@ -153,9 +156,14 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
   const first = payload.choices?.[0];
   if (!first?.message) return null;
   const split = splitContent(first.message.content);
+  const reasoningMessage =
+    split.reasoning +
+    reasoningFieldToText(first.message.reasoning) +
+    reasoningFieldToText(first.message.reasoning_content) +
+    (first.message.thinking ?? "");
   return {
     assistantMessage: split.assistant,
-    ...(split.reasoning.length > 0 ? { reasoningMessage: split.reasoning } : {}),
+    ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
     toolCalls: (first.message.tool_calls ?? []).map((call) => {
       const parsed = parseToolCallArgs(call.function?.arguments ?? "{}");
       return {
@@ -182,8 +190,8 @@ function splitStreamDelta(
     return { assistantDelta: "", reasoningDelta: "" };
   }
   const contentSplit = splitContent(delta.content);
-  const reasoningFromReasoning = splitContent(delta.reasoning).reasoning;
-  const reasoningFromReasoningContent = splitContent(delta.reasoning_content).reasoning;
+  const reasoningFromReasoning = reasoningFieldToText(delta.reasoning);
+  const reasoningFromReasoningContent = reasoningFieldToText(delta.reasoning_content);
   const thinking = delta.thinking ?? "";
 
   return {
@@ -212,4 +220,14 @@ function splitContent(content: string | OpenAICompatContentPart[] | undefined): 
     assistant += text;
   }
   return { assistant, reasoning };
+}
+
+function reasoningFieldToText(content: string | OpenAICompatContentPart[] | undefined): string {
+  if (!content) return "";
+  if (typeof content === "string") return content;
+  let text = "";
+  for (const part of content) {
+    text += part.text ?? "";
+  }
+  return text;
 }

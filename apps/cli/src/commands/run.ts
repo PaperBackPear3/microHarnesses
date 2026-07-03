@@ -36,14 +36,26 @@ async function runInteractiveLoop(runArgs: RunArgs): Promise<void> {
   let sessionId = runArgs.sessionId;
   let resume = runArgs.resume;
 
-  process.stderr.write('Interactive mode. Type "/exit" or "/quit" to quit.\n');
+  process.stderr.write(
+    'Interactive mode. Type "/info" for session details, "/exit" or "/quit" to quit.\n',
+  );
   while (true) {
     const prompt = (await askPrompt("you> ")).trim();
     if (prompt.length === 0) {
       continue;
     }
-    if (isExitPrompt(prompt)) {
+    const slashCommandResult = await runSlashCommand(
+      prompt,
+      composition,
+      runArgs,
+      sessionId,
+      resume,
+    );
+    if (slashCommandResult === "exit") {
       break;
+    }
+    if (slashCommandResult === "handled") {
+      continue;
     }
     try {
       sessionId = await executePrompt(composition, runArgs, prompt, sessionId, resume);
@@ -102,6 +114,60 @@ function isExitPrompt(prompt: string): boolean {
   return lowered === "/exit" || lowered === "/quit";
 }
 
+type SlashCommandResult = "handled" | "exit" | "none";
+
+async function runSlashCommand(
+  prompt: string,
+  composition: Composition,
+  runArgs: RunArgs,
+  sessionId: string | undefined,
+  resume: boolean,
+): Promise<SlashCommandResult> {
+  if (!prompt.startsWith("/")) {
+    return "none";
+  }
+  if (isExitPrompt(prompt)) {
+    return "exit";
+  }
+  if (prompt.toLowerCase() === "/info") {
+    await printSessionInfo(composition, runArgs, sessionId, resume);
+    return "handled";
+  }
+  process.stderr.write('[info] Unknown command. Use "/info", "/exit", or "/quit".\n');
+  return "handled";
+}
+
+async function printSessionInfo(
+  composition: Composition,
+  runArgs: RunArgs,
+  sessionId: string | undefined,
+  resume: boolean,
+): Promise<void> {
+  const model = runArgs.model ?? "provider default";
+  const base = `[info] session=${sessionId ?? "unassigned"} agent=${runArgs.agentName} provider=${runArgs.provider} model=${model} resume=${resume ? "on" : "off"}`;
+
+  if (!sessionId) {
+    process.stderr.write(`${base}\n`);
+    return;
+  }
+
+  try {
+    const manifest = await composition.sessionStore.getSession(sessionId);
+    const details = [
+      `updated=${manifest.updatedAt}`,
+      `events=${manifest.lastEventSeq}`,
+      `latestRun=${manifest.latestRunId ?? "none"}`,
+      `latestSnapshot=${manifest.latestSnapshotId ?? "none"}`,
+    ];
+    if (manifest.goal.length > 0) {
+      details.push(`goal=${truncate(manifest.goal, 80)}`);
+    }
+    process.stderr.write(`${base} ${details.join(" ")}\n`);
+  } catch {
+    process.stderr.write(`${base} status=not-persisted-yet\n`);
+  }
+}
+
 function ensureSessionId(runArgs: RunArgs): RunArgs {
   if (runArgs.sessionId) {
     return runArgs;
@@ -110,4 +176,8 @@ function ensureSessionId(runArgs: RunArgs): RunArgs {
     ...runArgs,
     sessionId: `s-${randomUUID()}`,
   };
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
 }

@@ -8,6 +8,7 @@ export class LiveEventSink implements EventSink {
   private spinnerTimer: NodeJS.Timeout | undefined;
   private spinnerIndex = 0;
   private indicatorMode: "default" | "reasoning" | "fast" | undefined;
+  private activeSpinnerLabel: "thinking" | "reasoning" = "thinking";
   private streamingAssistant = false;
   private streamingReasoning = false;
 
@@ -23,7 +24,7 @@ export class LiveEventSink implements EventSink {
     }
 
     if (event.type === "model.reasoning_delta") {
-      this.stopSpinner(false);
+      this.stopSpinner(true);
       if (!this.streamingReasoning) {
         process.stderr.write("[reasoning] ");
         this.streamingReasoning = true;
@@ -45,7 +46,7 @@ export class LiveEventSink implements EventSink {
     }
 
     if (event.type === "model.delta") {
-      this.stopSpinner(false);
+      this.stopSpinner(true);
       this.streamingAssistant = true;
       const delta = event.payload.delta;
       if (typeof delta === "string" && delta.length > 0) {
@@ -95,7 +96,7 @@ export class LiveEventSink implements EventSink {
   }
 
   reset(): void {
-    this.stopSpinner(false);
+    this.stopSpinner(true);
     this.streamingAssistant = false;
     this.streamingReasoning = false;
     this.indicatorMode = undefined;
@@ -103,7 +104,7 @@ export class LiveEventSink implements EventSink {
   }
 
   private writeCallLine(status: string, payload: Record<string, unknown>): void {
-    this.stopSpinner(false);
+    this.stopSpinner(true);
     const tool = typeof payload.tool === "string" ? payload.tool : "unknown";
     const label = isAgentTool(tool) ? "agent" : "tool";
     const summary = summarizeInput(payload.input);
@@ -121,6 +122,8 @@ export class LiveEventSink implements EventSink {
   private startSpinner(): void {
     this.stopSpinner(false);
     this.spinnerIndex = 0;
+    const mode = this.indicatorMode ?? "default";
+    this.activeSpinnerLabel = mode === "reasoning" ? "reasoning" : "thinking";
     this.renderSpinner();
     this.spinnerTimer = setInterval(() => {
       this.spinnerIndex = (this.spinnerIndex + 1) % this.spinnerFrames.length;
@@ -129,17 +132,14 @@ export class LiveEventSink implements EventSink {
   }
 
   private renderSpinner(): void {
-    const mode = this.indicatorMode ?? "default";
-    const label = mode === "reasoning" ? "reasoning" : "thinking";
     const frame = this.spinnerFrames[this.spinnerIndex];
-    process.stderr.write(`\r[${label}] ${frame}`);
+    process.stderr.write(`\r[${this.activeSpinnerLabel}] ${frame}`);
   }
 
   private stopSpinner(withNewline: boolean): void {
     if (!this.spinnerTimer) return;
     clearInterval(this.spinnerTimer);
     this.spinnerTimer = undefined;
-    process.stderr.write("\r                \r");
     if (withNewline) {
       process.stderr.write("\n");
     }

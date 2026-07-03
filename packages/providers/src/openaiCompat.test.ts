@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseOpenAICompatResponse, parseToolCallArgs } from "./openaiCompat";
+import {
+  applyOpenAICompatStreamChunk,
+  createOpenAICompatStreamState,
+  parseOpenAICompatResponse,
+  parseToolCallArgs,
+} from "./openaiCompat";
 
 test("parseToolCallArgs returns malformed:false for valid JSON", () => {
   const parsed = parseToolCallArgs('{"a":1}');
@@ -77,4 +82,38 @@ test("parseOpenAICompatResponse captures reasoning parts separately", () => {
   });
   assert.equal(parsed?.assistantMessage, "answer");
   assert.equal(parsed?.reasoningMessage, "think ");
+});
+
+test("parseOpenAICompatResponse captures string reasoning fields", () => {
+  const parsed = parseOpenAICompatResponse({
+    choices: [
+      {
+        message: {
+          content: "answer",
+          reasoning: "reason-1 ",
+          reasoning_content: "reason-2 ",
+          thinking: "reason-3",
+        },
+        finish_reason: "stop",
+      },
+    ],
+  });
+  assert.equal(parsed?.assistantMessage, "answer");
+  assert.equal(parsed?.reasoningMessage, "reason-1 reason-2 reason-3");
+});
+
+test("applyOpenAICompatStreamChunk maps string delta.reasoning as reasoning text", () => {
+  const state = createOpenAICompatStreamState();
+  const deltas = applyOpenAICompatStreamChunk(state, {
+    choices: [
+      {
+        delta: {
+          content: "",
+          reasoning: "thinking",
+        },
+      },
+    ],
+  });
+  assert.equal(deltas.assistantDelta, "");
+  assert.equal(deltas.reasoningDelta, "thinking");
 });

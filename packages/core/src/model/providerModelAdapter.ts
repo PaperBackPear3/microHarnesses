@@ -111,6 +111,15 @@ function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): P
       messages.push({ role: "developer", content: instruction.content });
     }
   }
+  if (input.workingTurns.length > 0) {
+    messages.push({
+      role: "developer",
+      content:
+        "Session history from prior turns is included below and is authoritative for this run. " +
+        "When asked what was discussed before, summarize from the provided turns; do not claim " +
+        "that prior discussion is unavailable.",
+    });
+  }
   for (const turn of input.workingTurns) {
     messages.push({ role: "user", content: turn.userMessage });
     if (turn.assistantMessage.trim().length > 0) {

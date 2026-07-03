@@ -113,10 +113,29 @@ export class SessionStore {
     if (!manifest.latestSnapshotPath) {
       return undefined;
     }
-    const snapshotPath = path.join(this.sessionDir(sessionId), manifest.latestSnapshotPath);
-    const raw = await readFile(snapshotPath, "utf8");
-    const parsed = JSON.parse(raw) as SnapshotFile;
-    return parsed.state;
+    const snapshots = await this.readAllSnapshots(sessionId);
+    if (snapshots.length === 0) {
+      return undefined;
+    }
+    const latest = snapshots[snapshots.length - 1];
+    if (!latest) {
+      return undefined;
+    }
+    const seenTurnIds = new Set<string>();
+    const mergedTurns: HarnessState["turns"] = [];
+    for (const snapshot of snapshots) {
+      for (const turn of snapshot.state.turns) {
+        if (seenTurnIds.has(turn.id)) {
+          continue;
+        }
+        seenTurnIds.add(turn.id);
+        mergedTurns.push(turn);
+      }
+    }
+    return {
+      ...latest.state,
+      turns: mergedTurns,
+    };
   }
 
   async listSessions(): Promise<SessionManifest[]> {
@@ -173,5 +192,21 @@ export class SessionStore {
   private async writeManifest(manifest: SessionManifest): Promise<void> {
     const manifestPath = path.join(this.sessionDir(manifest.sessionId), "manifest.json");
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  }
+
+  private async readAllSnapshots(sessionId: string): Promise<SnapshotFile[]> {
+    const snapshotsDir = path.join(this.sessionDir(sessionId), "snapshots");
+    const entries = await readdir(snapshotsDir, { withFileTypes: true });
+    const snapshots = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map(async (entry) => {
+          const snapshotPath = path.join(snapshotsDir, entry.name);
+          const raw = await readFile(snapshotPath, "utf8");
+          return JSON.parse(raw) as SnapshotFile;
+        }),
+    );
+    snapshots.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return snapshots;
   }
 }

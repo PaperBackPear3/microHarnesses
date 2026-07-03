@@ -97,14 +97,14 @@ Load additional plugins with `--plugins <path>` (a file whose default export is 
 | `--prompts-dir <path>` | `apps/cli/prompts` | Root directory for prompt packs |
 | `--iterations <n>` | `4` | Maximum loop iterations |
 | `--snapshot-every <n>` | `2` | Save session snapshot every N iterations |
-| `--session-id <id>` | new | Re-use an existing session |
-| `--resume` | off | Resume from latest session snapshot |
+| `--session-id <id>` | new | Re-use an existing session (auto-resume enabled) |
+| `--resume` | off | Resume from latest session snapshot (also implied by `--session-id`) |
 | `--goal <text>` | prompt text | Explicit goal persisted in session manifest |
 | `--state-dir <path>` | `.micro-harness` | State and session storage root |
 | `--plugins <path>` | none | Path to a plugin file (loaded after built-ins) |
 | `--no-safety` | off | Disable `CommandSafetyRule` (use only for local dev / trusted env) |
 
-Exit interactive mode with `/exit` or `/quit`.
+Interactive slash commands: `/info` (show current session/runtime info), `/exit`, `/quit`.
 
 ### Session operations
 
