@@ -24,7 +24,7 @@ import {
   ToolRegistry,
   createCommandSafetyRule,
 } from "@micro-harness/core";
-import { exampleToolsPlugin } from "@micro-harness/plugin-example-tools";
+import { basicToolsPlugin } from "@micro-harness/plugin-basic-tools";
 import { PlanModePlugin } from "@micro-harness/plugin-plan-mode";
 import { subagentsPlugin } from "@micro-harness/plugin-subagents";
 import { builtInProviderPlugins } from "@micro-harness/providers";
@@ -41,7 +41,7 @@ export interface Composition {
 
 /**
  * Wires the full dependency graph for one `run` invocation. Registers the
- * built-in providers, example tools, subagents, and plan-mode plugins into the
+ * built-in providers, basic tools, subagents, and plan-mode plugins into the
  * host; loads any user plugin last so it can override built-in behavior.
  */
 export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
@@ -165,7 +165,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
 
   await pluginHost.register([
     ...builtInProviderPlugins(),
-    exampleToolsPlugin,
+    basicToolsPlugin,
     subagentsPlugin,
     planModePlugin,
   ]);

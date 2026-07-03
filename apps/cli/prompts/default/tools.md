@@ -1,6 +1,13 @@
 Available tools:
-- echo
-- time
+- fs_list
+- fs_read
+- fs_write
+- fs_append
+- fs_mkdir
+- fs_move
+- fs_remove
+- grep_search
+- shell_exec
 - spawn_subagent
 - plan_agent
 - explore_agent

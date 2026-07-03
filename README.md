@@ -12,6 +12,7 @@ subagents — and swap any implementation with your own.
 | [`@micro-harness/providers`](packages/providers) | Provider plugins: OpenAI, Anthropic, Ollama. Each is a `HarnessPlugin` that registers an adapter + env-based credentials resolver. |
 | [`@micro-harness/plugin-plan-mode`](packages/plugin-plan-mode) | Read-only planning and file exploration tools. |
 | [`@micro-harness/plugin-subagents`](packages/plugin-subagents) | `spawn_subagent` tool built on core's `InProcessSubagentRunner`. |
+| [`@micro-harness/plugin-basic-tools`](packages/plugin-basic-tools) | Workspace-scoped utility tools: file IO, grep search, and shell execution. |
 | [`@micro-harness/plugin-example-tools`](packages/plugin-example-tools) | Reference tool plugin (`echo`, `time`). Doubles as a plugin-authoring example. |
 | `apps/cli` (private) | Reference CLI that wires everything together. See [`apps/cli/README.md`](apps/cli/README.md) and `apps/cli/src/composition.ts`. |
 
@@ -80,7 +81,7 @@ npm run cli:run -- "summarise this task" --provider ollama --model llama3.2:3b
 The CLI auto-registers the following plugins (see [`apps/cli/src/composition.ts`](apps/cli/src/composition.ts)):
 
 - `builtInProviderPlugins()` — OpenAI, Anthropic, Ollama
-- `exampleToolsPlugin` — `echo`, `time`
+- `basicToolsPlugin` — `fs_list`, `fs_read`, `fs_write`, `fs_append`, `fs_mkdir`, `fs_move`, `fs_remove`, `grep_search`, `shell_exec`
 - `subagentsPlugin` — `spawn_subagent`
 - `PlanModePlugin` — `plan_agent`, `explore_agent`, `plan_mode_info`
 
