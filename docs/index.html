@@ -6,7 +6,7 @@
     <title>microHarnesses</title>
     <meta
       name="description"
-      content="microHarnesses is a composable, plugin-first library for building LLM agent runtimes with pluggable providers, tools, planning, and subagents."
+      content="Build agent loops with ease, extend later. microHarnesses is a plugin-first library for composing LLM providers, tools, policy, and subagents."
     />
     <style>
       :root {
@@ -16,18 +16,35 @@
         margin: 0;
         font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         line-height: 1.5;
-        display: grid;
-        min-height: 100vh;
-        place-items: center;
         background: Canvas;
         color: CanvasText;
       }
+      .layout {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 2rem 1.25rem;
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: 1.5rem;
+      }
+      aside {
+        border: 1px solid color-mix(in oklab, CanvasText 18%, Canvas 82%);
+        border-radius: 12px;
+        padding: 1rem;
+        height: fit-content;
+        position: sticky;
+        top: 1rem;
+      }
       main {
-        max-width: 860px;
-        padding: 2rem;
+        border: 1px solid color-mix(in oklab, CanvasText 12%, Canvas 88%);
+        border-radius: 12px;
+        padding: 1.25rem;
       }
       h1 {
         margin: 0 0 0.75rem;
+      }
+      h3 {
+        margin: 0 0 0.6rem;
       }
       h2 {
         margin: 2rem 0 0.75rem;
@@ -52,53 +69,107 @@
         display: block;
         margin-bottom: 0.35rem;
       }
+      .docs-menu {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .docs-menu li {
+        margin: 0 0 0.8rem;
+      }
+      .docs-links {
+        font-size: 0.95rem;
+      }
+      .docs-links a {
+        margin-right: 0.5rem;
+      }
       a {
         color: LinkText;
+      }
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: static;
+        }
       }
     </style>
   </head>
   <body>
-    <main>
-      <h1>microHarnesses</h1>
-      <p class="lead">
-        A composable, plugin-first library for building LLM agent harnesses.
-      </p>
+    <div class="layout">
+      <aside>
+        <h3>Docs</h3>
+        <ul class="docs-menu">
+          <li>
+            <strong>Getting started</strong>
+            <div class="docs-links">
+              <a href="./how-to-get-started.md">Open</a>
+              <a href="./how-to-get-started.md" download>Download .md</a>
+            </div>
+          </li>
+          <li>
+            <strong>Running the CLI</strong>
+            <div class="docs-links">
+              <a href="./how-to-run-cli.md">Open</a>
+              <a href="./how-to-run-cli.md" download>Download .md</a>
+            </div>
+          </li>
+          <li>
+            <strong>Composing plugins</strong>
+            <div class="docs-links">
+              <a href="./how-to-compose-plugins.md">Open</a>
+              <a href="./how-to-compose-plugins.md" download>Download .md</a>
+            </div>
+          </li>
+        </ul>
+      </aside>
 
-      <p>
-        The idea is simple: keep a small runtime core, then add only the
-        capabilities you need. Instead of a fixed framework, microHarnesses lets
-        you compose providers, tools, policy, planning, and subagents as
-        independent modules.
-      </p>
+      <main>
+        <h1>microHarnesses</h1>
+        <p class="lead">
+          Build agent loops with ease, extend later.
+        </p>
 
-      <h2>How the library is structured</h2>
-      <div class="grid">
-        <div class="card">
-          <strong>@micro-harness/core</strong>
-          Runtime loop, tool execution, context/session management, plugin host.
+        <p>
+          microHarnesses is for teams building LLM agents who want to start fast
+          without locking into a rigid framework. Use the core runtime to run
+          agent loops, then add capabilities through plugins: providers, tools,
+          policy, planning, and subagents.
+        </p>
+
+        <h2>How the library is structured</h2>
+        <div class="grid">
+          <div class="card">
+            <strong>@micro-harness/core</strong>
+            Runtime loop, tool execution, context/session management, plugin
+            host.
+          </div>
+          <div class="card">
+            <strong>@micro-harness/providers</strong>
+            Provider adapters and credentials resolvers (OpenAI, Anthropic,
+            Ollama).
+          </div>
+          <div class="card">
+            <strong>Plugin packages</strong>
+            Add focused capabilities like planning mode, subagents, and utility
+            tools without bloating core.
+          </div>
         </div>
-        <div class="card">
-          <strong>@micro-harness/providers</strong>
-          Provider adapters and credentials resolvers (OpenAI, Anthropic,
-          Ollama).
-        </div>
-        <div class="card">
-          <strong>Plugin packages</strong>
-          Add focused capabilities like planning mode, subagents, and utility
-          tools without bloating core.
-        </div>
-      </div>
 
-      <h2>Why plugins</h2>
-      <p>
-        Plugins keep the system flexible: teams can swap implementations, enforce
-        policy, and extend behavior without forking the runtime. You build the
-        agent stack you actually need, and evolve it incrementally.
-      </p>
+        <h2>Why plugins</h2>
+        <p>
+          Plugins keep the system flexible: teams can swap implementations,
+          enforce policy, and extend behavior without forking the runtime. You
+          build the agent stack you actually need, and evolve it incrementally.
+        </p>
 
-      <p>
-        <a href="https://github.com/PaperBackPear3/microHarnesses">GitHub repository</a>
-      </p>
-    </main>
+        <p>
+          <a href="https://github.com/PaperBackPear3/microHarnesses"
+            >GitHub repository</a
+          >
+        </p>
+      </main>
+    </div>
   </body>
 </html>
