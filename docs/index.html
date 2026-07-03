@@ -6,7 +6,7 @@
     <title>microHarnesses</title>
     <meta
       name="description"
-      content="Composable, plugin-first library for building LLM agent harnesses."
+      content="microHarnesses is a composable, plugin-first library for building LLM agent runtimes with pluggable providers, tools, planning, and subagents."
     />
     <style>
       :root {
@@ -23,14 +23,34 @@
         color: CanvasText;
       }
       main {
-        max-width: 720px;
+        max-width: 860px;
         padding: 2rem;
       }
       h1 {
         margin: 0 0 0.75rem;
       }
+      h2 {
+        margin: 2rem 0 0.75rem;
+      }
       p {
         margin: 0 0 1rem;
+      }
+      .lead {
+        font-size: 1.1rem;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.75rem;
+      }
+      .card {
+        border: 1px solid color-mix(in oklab, CanvasText 18%, Canvas 82%);
+        border-radius: 10px;
+        padding: 0.85rem;
+      }
+      .card strong {
+        display: block;
+        margin-bottom: 0.35rem;
       }
       a {
         color: LinkText;
@@ -40,9 +60,42 @@
   <body>
     <main>
       <h1>microHarnesses</h1>
-      <p>
-        Composable, plugin-first library for building LLM agent harnesses.
+      <p class="lead">
+        A composable, plugin-first library for building LLM agent harnesses.
       </p>
+
+      <p>
+        The idea is simple: keep a small runtime core, then add only the
+        capabilities you need. Instead of a fixed framework, microHarnesses lets
+        you compose providers, tools, policy, planning, and subagents as
+        independent modules.
+      </p>
+
+      <h2>How the library is structured</h2>
+      <div class="grid">
+        <div class="card">
+          <strong>@micro-harness/core</strong>
+          Runtime loop, tool execution, context/session management, plugin host.
+        </div>
+        <div class="card">
+          <strong>@micro-harness/providers</strong>
+          Provider adapters and credentials resolvers (OpenAI, Anthropic,
+          Ollama).
+        </div>
+        <div class="card">
+          <strong>Plugin packages</strong>
+          Add focused capabilities like planning mode, subagents, and utility
+          tools without bloating core.
+        </div>
+      </div>
+
+      <h2>Why plugins</h2>
+      <p>
+        Plugins keep the system flexible: teams can swap implementations, enforce
+        policy, and extend behavior without forking the runtime. You build the
+        agent stack you actually need, and evolve it incrementally.
+      </p>
+
       <p>
         <a href="https://github.com/PaperBackPear3/microHarnesses">GitHub repository</a>
       </p>
