@@ -88,6 +88,17 @@ test("PlannerPlugin rejects empty goal", async () => {
   await assert.rejects(() => tools.get("plan_agent")!.execute({ goal: "" }));
 });
 
+test("PlannerPlugin declares goal as required in input schema", () => {
+  const tools = new Map<string, ToolDefinition>();
+  new PlannerPlugin().register(makeApi(tools));
+  const schema = tools.get("plan_agent")!.inputSchema as {
+    required?: string[];
+    additionalProperties?: boolean;
+  };
+  assert.deepEqual(schema.required, ["goal"]);
+  assert.equal(schema.additionalProperties, false);
+});
+
 // ── ExplorerPlugin ────────────────────────────────────────────────────────────
 
 test("ExplorerPlugin finds matching files and returns relative root_path", async () => {
@@ -120,6 +131,37 @@ test("ExplorerPlugin blocks path traversal", async () => {
   await assert.rejects(() =>
     tools.get("explore_agent")!.execute({ query: "x", root_path: "../../" }),
   );
+});
+
+test("ExplorerPlugin accepts root_directory alias for root_path", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-alias-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "index.ts"), "const marker = 'root-directory-alias';\n", "utf8");
+
+  try {
+    const tools = new Map<string, ToolDefinition>();
+    new ExplorerPlugin({ rootDir: root }).register(makeApi(tools));
+    const result = (await tools.get("explore_agent")!.execute({
+      query: "root-directory-alias",
+      root_directory: "src",
+      max_files: 5,
+    })) as { total_results: number; root_path: string };
+    assert.equal(result.total_results > 0, true);
+    assert.equal(result.root_path, "src");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ExplorerPlugin declares query as required in input schema", () => {
+  const tools = new Map<string, ToolDefinition>();
+  new ExplorerPlugin({ rootDir: process.cwd() }).register(makeApi(tools));
+  const schema = tools.get("explore_agent")!.inputSchema as {
+    required?: string[];
+    additionalProperties?: boolean;
+  };
+  assert.deepEqual(schema.required, ["query"]);
+  assert.equal(schema.additionalProperties, false);
 });
 
 // ── plan_mode_info ────────────────────────────────────────────────────────────

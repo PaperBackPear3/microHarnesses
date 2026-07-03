@@ -22,6 +22,41 @@ export class PlannerPlugin implements HarnessPlugin {
       name: "plan_agent",
       description: "Read-only planner that turns a goal into prioritised execution steps.",
       risk: "low",
+      inputSchema: {
+        type: "object",
+        properties: {
+          goal: {
+            type: "string",
+            description: "Required planning goal.",
+          },
+          scope: {
+            oneOf: [
+              { type: "string", description: "Comma-separated scoped areas." },
+              {
+                type: "array",
+                items: { type: "string" },
+                description: "List of scoped areas.",
+              },
+            ],
+          },
+          constraints: {
+            oneOf: [
+              { type: "string", description: "Comma-separated constraints." },
+              {
+                type: "array",
+                items: { type: "string" },
+                description: "List of constraints.",
+              },
+            ],
+          },
+          max_steps: {
+            type: "number",
+            description: "Optional desired number of steps; clamped to [3, 12].",
+          },
+        },
+        required: ["goal"],
+        additionalProperties: false,
+      },
       async execute(input) {
         const goal = String(input.goal ?? "").trim();
         if (!goal) throw new Error("plan_agent requires 'goal'");

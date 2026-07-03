@@ -45,11 +45,39 @@ export class ExplorerPlugin implements HarnessPlugin {
       description:
         "Read-only explorer that searches file names and content snippets under a root directory.",
       risk: "low",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Required text to search for inside file contents.",
+          },
+          root_path: {
+            type: "string",
+            description: "Optional path (relative to plugin root) to narrow exploration scope.",
+          },
+          root_directory: {
+            type: "string",
+            description:
+              "Alias for root_path. Supported for compatibility with OpenAI/Ollama prompts.",
+          },
+          max_files: {
+            type: "number",
+            description: "Optional cap on result files. Clamped to plugin limits.",
+          },
+          max_depth: {
+            type: "number",
+            description: "Optional traversal depth. Clamped to plugin limits.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
       async execute(input) {
         const query = String(input.query ?? "").trim();
         if (!query) throw new Error("explore_agent requires 'query'");
 
-        const requestedRoot = String(input.root_path ?? "").trim();
+        const requestedRoot = String(input.root_path ?? input.root_directory ?? "").trim();
         const absoluteRoot = requestedRoot ? safeResolve(rootDir, requestedRoot) : rootDir;
         const maxFiles = clampNumber(input.max_files, 1, maxExploreFiles, 8);
         const depth = clampNumber(input.max_depth, 1, maxDepth, 4);
