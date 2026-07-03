@@ -8,6 +8,7 @@ export interface RunArgs {
   pluginsPath?: string;
   provider: string;
   model?: string;
+  maxTokens?: number;
   sessionId?: string;
   resume: boolean;
   goal?: string;
@@ -33,6 +34,7 @@ const VALUE_FLAGS = new Set([
   "--plugins",
   "--provider",
   "--model",
+  "--max-tokens",
   "--session-id",
   "--goal",
 ]);
@@ -60,6 +62,7 @@ export function parseRunArgsWithPrompt(
     pluginsPath: getArgValue(args, "--plugins"),
     provider: getArgValue(args, "--provider") ?? DEFAULT_PROVIDER,
     model: getArgValue(args, "--model"),
+    maxTokens: parseOptionalPositiveInt(getArgValue(args, "--max-tokens"), "--max-tokens"),
     sessionId: getArgValue(args, "--session-id"),
     resume: hasFlag(args, "--resume"),
     goal: getArgValue(args, "--goal"),
@@ -93,6 +96,13 @@ export function parsePositiveInt(raw: string, flagName: string): number {
     throw new Error(`${flagName} must be a positive integer, got "${raw}"`);
   }
   return parsed;
+}
+
+function parseOptionalPositiveInt(raw: string | undefined, flagName: string): number | undefined {
+  if (typeof raw === "undefined") {
+    return undefined;
+  }
+  return parsePositiveInt(raw, flagName);
 }
 
 export function extractPositionalArgs(args: string[]): string[] {

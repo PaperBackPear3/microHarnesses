@@ -27,12 +27,14 @@ interface AnthropicStreamPayload {
   content_block?: {
     type?: string;
     text?: string;
+    thinking?: string;
     name?: string;
     input?: Record<string, unknown>;
   };
   delta?: {
     type?: string;
     text?: string;
+    thinking?: string;
     partial_json?: string;
     stop_reason?: string;
   };
@@ -84,6 +86,7 @@ export class AnthropicAdapter implements ProviderAdapter {
     }
 
     let assistantMessage = "";
+    let reasoningMessage = "";
     let stopReason = "";
     const usage: { inputTokens?: number; outputTokens?: number } = {};
     const toolUses = new Map<number, ToolUseAccumulator>();
@@ -104,6 +107,14 @@ export class AnthropicAdapter implements ProviderAdapter {
           }
           continue;
         }
+        if (payload.content_block?.type === "thinking") {
+          const initial = payload.content_block.thinking ?? payload.content_block.text ?? "";
+          if (initial.length > 0) {
+            reasoningMessage += initial;
+            yield { type: "reasoning.delta", delta: initial };
+          }
+          continue;
+        }
         if (payload.content_block?.type === "tool_use") {
           toolUses.set(index, {
             name: payload.content_block.name ?? "unknown",
@@ -120,6 +131,14 @@ export class AnthropicAdapter implements ProviderAdapter {
           if (text.length > 0) {
             assistantMessage += text;
             yield { type: "assistant.delta", delta: text };
+          }
+          continue;
+        }
+        if (payload.delta?.type === "thinking_delta") {
+          const text = payload.delta.thinking ?? payload.delta.text ?? "";
+          if (text.length > 0) {
+            reasoningMessage += text;
+            yield { type: "reasoning.delta", delta: text };
           }
           continue;
         }
@@ -162,6 +181,7 @@ export class AnthropicAdapter implements ProviderAdapter {
       type: "final",
       response: {
         assistantMessage,
+        ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
         toolCalls,
         stop: stopReason === "end_turn",
         usage,
@@ -187,12 +207,18 @@ export class AnthropicAdapter implements ProviderAdapter {
     }
 
     const payload = (await response.json()) as AnthropicResponse;
+    const reasoningMessage =
+      payload.content
+        ?.filter((item) => item.type === "thinking")
+        .map((item) => item.text ?? "")
+        .join("") ?? "";
     return {
       assistantMessage:
         payload.content
           ?.filter((item) => item.type === "text")
           .map((item) => item.text ?? "")
           .join("") ?? "",
+      ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
       toolCalls:
         payload.content
           ?.filter((item) => item.type === "tool_use")
@@ -223,7 +249,7 @@ function toAnthropicBody(request: CompletionRequest): Record<string, unknown> {
 
   return {
     model: request.model,
-    max_tokens: request.maxTokens ?? 800,
+    max_tokens: request.maxTokens ?? 4096,
     temperature: request.temperature ?? 0.2,
     system: systemMessage,
     messages,

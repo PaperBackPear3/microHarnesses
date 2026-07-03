@@ -2,7 +2,7 @@ import type { ToolCall, ToolDefinition } from "../tools/types";
 
 export type SafetyMode = "strict" | "balanced" | "open";
 
-export type PolicyDecision = "allow" | "deny" | "require_approval" | "sandbox_only";
+export type PolicyDecision = "allow" | "deny" | "require_approval";
 
 export interface ToolPolicyEvaluation {
   decision: PolicyDecision;

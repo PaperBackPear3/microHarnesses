@@ -32,6 +32,7 @@ class FakeModel implements ModelAdapter {
 
 class FakeStreamingModel implements ModelAdapter {
   async nextStep(input: StepInput): Promise<StepPlan> {
+    await input.onReasoningDelta?.("thinking...");
     await input.onAssistantDelta?.("hello ");
     await input.onAssistantDelta?.("world");
     return {
@@ -223,12 +224,18 @@ test("runtime emits model.delta and stream completion events", async () => {
   assert.equal(state.turns[0]?.assistantMessage, "hello world");
   const deltaEvents = events.events.filter((event) => event.type === "model.delta");
   assert.equal(deltaEvents.length, 2);
+  const reasoningEvents = events.events.filter((event) => event.type === "model.reasoning_delta");
+  assert.equal(reasoningEvents.length, 1);
   assert.equal(
     events.events.some((event) => event.type === "model.thinking_started"),
     true,
   );
   assert.equal(
     events.events.some((event) => event.type === "model.thinking_completed"),
+    true,
+  );
+  assert.equal(
+    events.events.some((event) => event.type === "model.reasoning_stream_completed"),
     true,
   );
   assert.equal(

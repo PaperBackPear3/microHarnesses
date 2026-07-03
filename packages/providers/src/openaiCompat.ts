@@ -1,14 +1,9 @@
 /** Shared utilities for OpenAI-compatible provider adapters. */
 
-export function contentToText(
-  content: string | Array<{ type?: string; text?: string }> | undefined,
-): string {
-  if (!content) return "";
-  if (typeof content === "string") return content;
-  return content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text ?? "")
-    .join("");
+type OpenAICompatContentPart = { type?: string; text?: string };
+
+export function contentToText(content: string | OpenAICompatContentPart[] | undefined): string {
+  return splitContent(content).assistant;
 }
 
 export interface ParsedToolCallArgs {
@@ -27,7 +22,7 @@ export function parseToolCallArgs(rawArgs: string): ParsedToolCallArgs {
 export interface OpenAICompatResponse {
   choices?: Array<{
     message?: {
-      content?: string | Array<{ type: string; text?: string }>;
+      content?: string | OpenAICompatContentPart[];
       tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
     };
     finish_reason?: string;
@@ -41,7 +36,10 @@ export interface OpenAICompatResponse {
 export interface OpenAICompatStreamChunk {
   choices?: Array<{
     delta?: {
-      content?: string | Array<{ type?: string; text?: string }>;
+      content?: string | OpenAICompatContentPart[];
+      reasoning?: string | OpenAICompatContentPart[];
+      reasoning_content?: string | OpenAICompatContentPart[];
+      thinking?: string;
       tool_calls?: Array<{
         index?: number;
         function?: { name?: string; arguments?: string };
@@ -62,6 +60,7 @@ interface ToolCallBuffer {
 
 export interface OpenAICompatStreamState {
   assistantMessage: string;
+  reasoningMessage: string;
   toolCalls: Map<number, ToolCallBuffer>;
   usage: {
     inputTokens?: number;
@@ -70,9 +69,15 @@ export interface OpenAICompatStreamState {
   stop: boolean;
 }
 
+export interface OpenAICompatStreamDelta {
+  assistantDelta: string;
+  reasoningDelta: string;
+}
+
 export function createOpenAICompatStreamState(): OpenAICompatStreamState {
   return {
     assistantMessage: "",
+    reasoningMessage: "",
     toolCalls: new Map<number, ToolCallBuffer>(),
     usage: {},
     stop: false,
@@ -82,7 +87,7 @@ export function createOpenAICompatStreamState(): OpenAICompatStreamState {
 export function applyOpenAICompatStreamChunk(
   state: OpenAICompatStreamState,
   payload: OpenAICompatStreamChunk,
-): string {
+): OpenAICompatStreamDelta {
   if (payload.usage?.prompt_tokens !== undefined) {
     state.usage.inputTokens = payload.usage.prompt_tokens;
   }
@@ -94,12 +99,15 @@ export function applyOpenAICompatStreamChunk(
     if (choice?.finish_reason === "stop") {
       state.stop = true;
     }
-    return "";
+    return { assistantDelta: "", reasoningDelta: "" };
   }
 
-  const text = contentToText(choice.delta.content);
-  if (text.length > 0) {
-    state.assistantMessage += text;
+  const { assistantDelta, reasoningDelta } = splitStreamDelta(choice.delta);
+  if (assistantDelta.length > 0) {
+    state.assistantMessage += assistantDelta;
+  }
+  if (reasoningDelta.length > 0) {
+    state.reasoningMessage += reasoningDelta;
   }
 
   for (const [fallbackIndex, toolCall] of (choice.delta.tool_calls ?? []).entries()) {
@@ -117,7 +125,7 @@ export function applyOpenAICompatStreamChunk(
   if (choice.finish_reason === "stop") {
     state.stop = true;
   }
-  return text;
+  return { assistantDelta, reasoningDelta };
 }
 
 export function finalizeOpenAICompatStream(state: OpenAICompatStreamState) {
@@ -134,6 +142,7 @@ export function finalizeOpenAICompatStream(state: OpenAICompatStreamState) {
 
   return {
     assistantMessage: state.assistantMessage,
+    ...(state.reasoningMessage.length > 0 ? { reasoningMessage: state.reasoningMessage } : {}),
     toolCalls,
     stop: state.stop,
     usage: state.usage,
@@ -143,8 +152,10 @@ export function finalizeOpenAICompatStream(state: OpenAICompatStreamState) {
 export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
   const first = payload.choices?.[0];
   if (!first?.message) return null;
+  const split = splitContent(first.message.content);
   return {
-    assistantMessage: contentToText(first.message.content),
+    assistantMessage: split.assistant,
+    ...(split.reasoning.length > 0 ? { reasoningMessage: split.reasoning } : {}),
     toolCalls: (first.message.tool_calls ?? []).map((call) => {
       const parsed = parseToolCallArgs(call.function?.arguments ?? "{}");
       return {
@@ -159,4 +170,46 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
       outputTokens: payload.usage?.completion_tokens,
     },
   };
+}
+
+function splitStreamDelta(
+  delta: NonNullable<OpenAICompatStreamChunk["choices"]>[number]["delta"],
+): {
+  assistantDelta: string;
+  reasoningDelta: string;
+} {
+  if (!delta) {
+    return { assistantDelta: "", reasoningDelta: "" };
+  }
+  const contentSplit = splitContent(delta.content);
+  const reasoningFromReasoning = splitContent(delta.reasoning).reasoning;
+  const reasoningFromReasoningContent = splitContent(delta.reasoning_content).reasoning;
+  const thinking = delta.thinking ?? "";
+
+  return {
+    assistantDelta: contentSplit.assistant,
+    reasoningDelta:
+      contentSplit.reasoning + reasoningFromReasoning + reasoningFromReasoningContent + thinking,
+  };
+}
+
+function splitContent(content: string | OpenAICompatContentPart[] | undefined): {
+  assistant: string;
+  reasoning: string;
+} {
+  if (!content) return { assistant: "", reasoning: "" };
+  if (typeof content === "string") return { assistant: content, reasoning: "" };
+  let assistant = "";
+  let reasoning = "";
+  for (const part of content) {
+    const text = part.text ?? "";
+    if (text.length === 0) continue;
+    const kind = (part.type ?? "").toLowerCase();
+    if (kind.includes("reason") || kind.includes("thinking")) {
+      reasoning += text;
+      continue;
+    }
+    assistant += text;
+  }
+  return { assistant, reasoning };
 }

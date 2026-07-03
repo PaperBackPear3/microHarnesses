@@ -1,15 +1,15 @@
-import { type EventSink, type ExecutionEvent, MemoryEventSink } from "@micro-harness/core";
+import type { EventSink, ExecutionEvent } from "@micro-harness/core";
 
 /**
- * Mirrors runtime events to an in-memory sink and streams compact progress to stderr.
+ * Streams compact runtime progress to stderr.
  */
 export class LiveEventSink implements EventSink {
-  private readonly memory = new MemoryEventSink();
   private readonly spinnerFrames = ["|", "/", "-", "\\"];
   private spinnerTimer: NodeJS.Timeout | undefined;
   private spinnerIndex = 0;
   private indicatorMode: "default" | "reasoning" | "fast" | undefined;
-  private streaming = false;
+  private streamingAssistant = false;
+  private streamingReasoning = false;
 
   async push(event: ExecutionEvent): Promise<void> {
     if (event.type === "model.thinking_started") {
@@ -19,15 +19,39 @@ export class LiveEventSink implements EventSink {
           ? taskType
           : "default";
       this.startSpinner();
+      return;
     }
 
-    if (event.type === "model.delta") {
+    if (event.type === "model.reasoning_delta") {
       this.stopSpinner(false);
-      this.streaming = true;
+      if (!this.streamingReasoning) {
+        process.stderr.write("[reasoning] ");
+        this.streamingReasoning = true;
+      }
       const delta = event.payload.delta;
       if (typeof delta === "string" && delta.length > 0) {
         process.stderr.write(delta);
       }
+      return;
+    }
+
+    if (event.type === "model.reasoning_stream_completed") {
+      const chars = event.payload.chars;
+      if (typeof chars === "number" && chars > 0) {
+        process.stderr.write("\n");
+      }
+      this.streamingReasoning = false;
+      return;
+    }
+
+    if (event.type === "model.delta") {
+      this.stopSpinner(false);
+      this.streamingAssistant = true;
+      const delta = event.payload.delta;
+      if (typeof delta === "string" && delta.length > 0) {
+        process.stderr.write(delta);
+      }
+      return;
     }
 
     if (event.type === "model.stream_completed") {
@@ -35,36 +59,51 @@ export class LiveEventSink implements EventSink {
       if (typeof chars === "number" && chars > 0) {
         process.stderr.write("\n");
       }
-      this.streaming = false;
+      this.streamingAssistant = false;
       this.indicatorMode = undefined;
+      return;
     }
 
     if (event.type === "tool.allowed") {
       this.writeCallLine("call", event.payload);
+      return;
     }
     if (event.type === "tool.blocked") {
       this.writeCallLine("blocked", event.payload);
+      return;
     }
     if (event.type === "tool.approval_requested") {
       this.writeCallLine("approval requested", event.payload);
+      return;
     }
     if (event.type === "tool.approval_approved") {
       this.writeCallLine("approval granted", event.payload);
+      return;
     }
     if (event.type === "tool.approval_denied") {
       this.writeCallLine("approval denied", event.payload);
+      return;
     }
 
     if (event.type === "model.thinking_completed" || event.type === "run.completed") {
-      this.stopSpinner(!this.streaming);
-      this.streaming = false;
-      this.indicatorMode = undefined;
+      this.stopSpinner(!this.streamingAssistant && !this.streamingReasoning);
+      if (event.type === "run.completed") {
+        this.streamingAssistant = false;
+        this.streamingReasoning = false;
+      }
     }
+  }
 
-    await this.memory.push(event);
+  reset(): void {
+    this.stopSpinner(false);
+    this.streamingAssistant = false;
+    this.streamingReasoning = false;
+    this.indicatorMode = undefined;
+    this.spinnerIndex = 0;
   }
 
   private writeCallLine(status: string, payload: Record<string, unknown>): void {
+    this.stopSpinner(false);
     const tool = typeof payload.tool === "string" ? payload.tool : "unknown";
     const label = isAgentTool(tool) ? "agent" : "tool";
     const summary = summarizeInput(payload.input);
@@ -76,7 +115,6 @@ export class LiveEventSink implements EventSink {
     if (reason && (status === "blocked" || status.startsWith("approval"))) {
       parts.push(`reason=${truncate(reason, 140)}`);
     }
-    this.stopSpinner(false);
     process.stderr.write(`${parts.join(" ")}\n`);
   }
 
@@ -98,13 +136,12 @@ export class LiveEventSink implements EventSink {
   }
 
   private stopSpinner(withNewline: boolean): void {
-    if (this.spinnerTimer) {
-      clearInterval(this.spinnerTimer);
-      this.spinnerTimer = undefined;
-      process.stderr.write("\r                \r");
-      if (withNewline) {
-        process.stderr.write("\n");
-      }
+    if (!this.spinnerTimer) return;
+    clearInterval(this.spinnerTimer);
+    this.spinnerTimer = undefined;
+    process.stderr.write("\r                \r");
+    if (withNewline) {
+      process.stderr.write("\n");
     }
   }
 }
@@ -125,10 +162,5 @@ function truncate(value: string, maxLength: number): string {
 }
 
 function isAgentTool(toolName: string): boolean {
-  return (
-    toolName === "spawn_subagent" ||
-    toolName.endsWith("_agent") ||
-    toolName.includes("subagent") ||
-    toolName.includes("agent")
-  );
+  return toolName === "spawn_subagent" || toolName.endsWith("_agent");
 }

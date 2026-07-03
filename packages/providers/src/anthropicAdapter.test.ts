@@ -53,6 +53,10 @@ test("AnthropicAdapter streamComplete emits deltas and final response", async ()
     const sse = [
       'data: {"type":"message_start","message":{"usage":{"input_tokens":4}}}',
       "",
+      'data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"plan "}}',
+      "",
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"first"}}',
+      "",
       'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
       "",
       'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello "}}',
@@ -73,7 +77,7 @@ test("AnthropicAdapter streamComplete emits deltas and final response", async ()
     { model: "m", messages: [{ role: "user", content: "x" }] },
     { apiKey: "k" },
   )) {
-    if (event.type === "assistant.delta") {
+    if (event.type === "assistant.delta" || event.type === "reasoning.delta") {
       events.push({ type: event.type, delta: event.delta });
     } else {
       events.push({ type: event.type, assistantMessage: event.response.assistantMessage });
@@ -81,6 +85,8 @@ test("AnthropicAdapter streamComplete emits deltas and final response", async ()
   }
 
   assert.deepEqual(events, [
+    { type: "reasoning.delta", delta: "plan " },
+    { type: "reasoning.delta", delta: "first" },
     { type: "assistant.delta", delta: "hello " },
     { type: "assistant.delta", delta: "world" },
     { type: "final", assistantMessage: "hello world" },

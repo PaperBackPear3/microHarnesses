@@ -56,9 +56,12 @@ export class OllamaAdapter implements ProviderAdapter {
         break;
       }
       const payload = JSON.parse(data) as OpenAICompatStreamChunk;
-      const delta = applyOpenAICompatStreamChunk(state, payload);
-      if (delta.length > 0) {
-        yield { type: "assistant.delta", delta };
+      const deltas = applyOpenAICompatStreamChunk(state, payload);
+      if (deltas.reasoningDelta.length > 0) {
+        yield { type: "reasoning.delta", delta: deltas.reasoningDelta };
+      }
+      if (deltas.assistantDelta.length > 0) {
+        yield { type: "assistant.delta", delta: deltas.assistantDelta };
       }
     }
 
@@ -108,6 +111,6 @@ function toOllamaBody(request: CompletionRequest): Record<string, unknown> {
         }
       : {}),
     temperature: request.temperature ?? 0.2,
-    max_tokens: request.maxTokens ?? 800,
+    max_tokens: request.maxTokens ?? 4096,
   };
 }

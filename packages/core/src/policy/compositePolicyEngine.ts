@@ -10,7 +10,6 @@ import type {
 const RESTRICTIVENESS: Record<PolicyDecision, number> = {
   deny: 3,
   require_approval: 2,
-  sandbox_only: 1,
   allow: 0,
 };
 

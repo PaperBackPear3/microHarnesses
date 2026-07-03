@@ -76,7 +76,7 @@ test("OllamaAdapter streamComplete emits deltas and final response", async () =>
     { model: "m", messages: [{ role: "user", content: "x" }] },
     { apiKey: "k" },
   )) {
-    if (event.type === "assistant.delta") {
+    if (event.type === "assistant.delta" || event.type === "reasoning.delta") {
       events.push({ type: event.type, delta: event.delta });
     } else {
       events.push({ type: event.type, assistantMessage: event.response.assistantMessage });

@@ -40,7 +40,8 @@ export class RunEmitter {
       payload,
     };
     await this.deps.eventSink.push(event);
-    if (this.deps.sessionStore && this.binding.sessionId) {
+    // model.delta can be very high-frequency; avoid persisting each token.
+    if (this.deps.sessionStore && this.binding.sessionId && type !== "model.delta") {
       await this.deps.sessionStore.appendEvent(this.binding.sessionId, event);
     }
   }

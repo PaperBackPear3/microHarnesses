@@ -46,6 +46,7 @@ class FakeStreamingAdapter implements ProviderAdapter {
   ): AsyncIterable<ProviderStreamEvent> {
     this.seenRequest = request;
     this.seenAuth = auth;
+    yield { type: "reasoning.delta", delta: "thinking..." };
     yield { type: "assistant.delta", delta: "hel" };
     yield { type: "assistant.delta", delta: "lo" };
     yield {
@@ -174,6 +175,40 @@ test("threads usage and malformedInput back into StepPlan", async () => {
   assert.deepEqual(plan.usage, { inputTokens: 5, outputTokens: 3 });
 });
 
+test("forwards non-stream reasoning content when provider returns it", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "answer",
+    reasoningMessage: "thinking trail",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  const reasoning: string[] = [];
+  const assistant: string[] = [];
+  await model.nextStep(
+    makeInput({
+      onReasoningDelta: (delta) => {
+        reasoning.push(delta);
+      },
+      onAssistantDelta: (delta) => {
+        assistant.push(delta);
+      },
+    }),
+  );
+
+  assert.deepEqual(reasoning, ["thinking trail"]);
+  assert.deepEqual(assistant, ["answer"]);
+});
+
 test("uses streamComplete and forwards assistant deltas", async () => {
   const adapter = new FakeStreamingAdapter();
   const providers = new ProviderRegistry();
@@ -187,14 +222,19 @@ test("uses streamComplete and forwards assistant deltas", async () => {
   });
 
   const deltas: string[] = [];
+  const reasoning: string[] = [];
   const plan = await model.nextStep(
     makeInput({
       onAssistantDelta: (delta) => {
         deltas.push(delta);
       },
+      onReasoningDelta: (delta) => {
+        reasoning.push(delta);
+      },
     }),
   );
 
+  assert.deepEqual(reasoning, ["thinking..."]);
   assert.deepEqual(deltas, ["hel", "lo"]);
   assert.equal(plan.assistantMessage, "hello");
   assert.equal(plan.stop, true);

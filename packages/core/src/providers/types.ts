@@ -30,6 +30,7 @@ export interface ProviderToolCall {
 
 export interface ProviderResponse {
   assistantMessage: string;
+  reasoningMessage?: string;
   toolCalls: ProviderToolCall[];
   stop: boolean;
   usage?: {
@@ -41,6 +42,10 @@ export interface ProviderResponse {
 export type ProviderStreamEvent =
   | {
       type: "assistant.delta";
+      delta: string;
+    }
+  | {
+      type: "reasoning.delta";
       delta: string;
     }
   | {

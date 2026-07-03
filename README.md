@@ -68,6 +68,8 @@ Interactive (no initial prompt; loops until you exit):
 npm run cli:run -- --provider openai --model gpt-4.1-mini
 ```
 
+`run` streams progress directly to stderr (thinking/reasoning, tool/agent calls, assistant deltas) and does not emit a final JSON blob. Streamed reasoning/thinking deltas are also written to the session event log.
+
 Local Ollama (no API key):
 
 ```bash
@@ -91,6 +93,7 @@ Load additional plugins with `--plugins <path>` (a file whose default export is 
 | `--agent <name>` | `default` | Prompt pack to load from `--prompts-dir` |
 | `--provider <openai\|anthropic\|ollama>` | `openai` | LLM provider |
 | `--model <name>` | provider's `defaultModel` | Model override |
+| `--max-tokens <n>` | `4096` | Maximum output tokens per model call |
 | `--prompts-dir <path>` | `apps/cli/prompts` | Root directory for prompt packs |
 | `--iterations <n>` | `4` | Maximum loop iterations |
 | `--snapshot-every <n>` | `2` | Save session snapshot every N iterations |
@@ -100,6 +103,8 @@ Load additional plugins with `--plugins <path>` (a file whose default export is 
 | `--state-dir <path>` | `.micro-harness` | State and session storage root |
 | `--plugins <path>` | none | Path to a plugin file (loaded after built-ins) |
 | `--no-safety` | off | Disable `CommandSafetyRule` (use only for local dev / trusted env) |
+
+Exit interactive mode with `/exit` or `/quit`.
 
 ### Session operations
 
@@ -147,7 +152,7 @@ to see the full pattern; the key seams are:
   system.md          # required
   developer.md       # optional
   tools.md           # optional
-  prompt.meta.json   # optional (modelHint, safetyMode: "strict"|"balanced"|"open", tags)
+  prompt.meta.json   # optional (modelHint, taskTypeHint, safetyMode: "strict"|"balanced"|"open", tags)
 ```
 
 Frontmatter (`---`) is stripped. Variables use `{{name}}` syntax.

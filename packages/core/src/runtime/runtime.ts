@@ -187,6 +187,7 @@ export class HarnessRuntime {
       });
 
       let streamedChars = 0;
+      let reasoningChars = 0;
       await emitter.emit("model.thinking_started", {
         model: modelSelection.model,
         iteration,
@@ -205,12 +206,23 @@ export class HarnessRuntime {
           streamedChars += delta.length;
           await emitter.emit("model.delta", { iteration, delta });
         },
+        onReasoningDelta: async (delta) => {
+          if (delta.length === 0) return;
+          reasoningChars += delta.length;
+          await emitter.emit("model.reasoning_delta", { iteration, delta });
+        },
       });
       await emitter.emit("model.thinking_completed", {
         model: modelSelection.model,
         iteration,
         taskType,
       });
+      if (reasoningChars > 0) {
+        await emitter.emit("model.reasoning_stream_completed", {
+          iteration,
+          chars: reasoningChars,
+        });
+      }
       if (streamedChars > 0) {
         await emitter.emit("model.stream_completed", { iteration, chars: streamedChars });
       }

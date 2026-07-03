@@ -26,7 +26,7 @@ export class ProviderModelAdapter implements ModelAdapter {
     this.credentialsRegistry = options.credentialsRegistry;
     this.providerId = options.providerId;
     this.model = options.model;
-    this.maxTokens = options.maxTokens ?? 1000;
+    this.maxTokens = options.maxTokens ?? 4096;
   }
 
   async nextStep(input: StepInput): Promise<StepPlan> {
@@ -53,6 +53,10 @@ export class ProviderModelAdapter implements ModelAdapter {
           await input.onAssistantDelta?.(event.delta);
           continue;
         }
+        if (event.type === "reasoning.delta") {
+          await input.onReasoningDelta?.(event.delta);
+          continue;
+        }
         finalResponse = event.response;
       }
       if (!finalResponse) {
@@ -62,6 +66,9 @@ export class ProviderModelAdapter implements ModelAdapter {
     }
 
     const response = await adapter.complete(request, auth);
+    if (response.reasoningMessage && response.reasoningMessage.length > 0) {
+      await input.onReasoningDelta?.(response.reasoningMessage);
+    }
     if (response.assistantMessage.length > 0) {
       await input.onAssistantDelta?.(response.assistantMessage);
     }

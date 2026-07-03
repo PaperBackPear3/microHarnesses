@@ -54,7 +54,7 @@ npm run cli:run -- --provider openai --model gpt-4.1-mini
 
 | Command | Purpose |
 |---|---|
-| `run` | Starts interactive mode when no prompt is provided; prints compact thinking/reasoning status, tool/agent calls, and streamed deltas on stderr |
+| `run` | Starts interactive mode when no prompt is provided; prints compact thinking/reasoning status, tool/agent calls, and streamed deltas on stderr (no final JSON output). Reasoning/thinking deltas are persisted in session events. |
 | `sessions list` | Lists sessions in `--state-dir` |
 | `sessions show <session-id>` | Prints one session JSON |
 | `sessions resume <session-id> <prompt>` | Resumes a session and continues with a new prompt |
@@ -74,6 +74,7 @@ node apps/cli/dist/index.js sessions resume <session-id> "continue from last sta
 | `--agent <name>` | `default` | Prompt pack under `--prompts-dir` |
 | `--provider <id>` | `openai` | `openai`, `anthropic`, `ollama` |
 | `--model <name>` | provider default | Model override |
+| `--max-tokens <n>` | `4096` | Maximum output tokens per model call |
 | `--prompts-dir <path>` | `apps/cli/prompts` | Prompt pack root |
 | `--iterations <n>` | `4` | Max loop iterations |
 | `--snapshot-every <n>` | `2` | Snapshot cadence |
@@ -83,6 +84,8 @@ node apps/cli/dist/index.js sessions resume <session-id> "continue from last sta
 | `--state-dir <path>` | `.micro-harness` in CWD | State/session root |
 | `--plugins <path>` | none | Load one extra plugin file |
 | `--no-safety` | off | Disable `CommandSafetyRule` |
+
+Exit interactive mode with `/exit` or `/quit`.
 
 ## Usage examples with installed plugins
 

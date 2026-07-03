@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 import readline from "node:readline/promises";
 import {
   type ApprovalHandler,
@@ -11,7 +13,6 @@ import {
   type HarnessPlugin,
   HarnessRuntime,
   InProcessSubagentRunner,
-  MemoryEventSink,
   PluginHost,
   PluginLoader,
   ProviderModelAdapter,
@@ -32,6 +33,7 @@ import { LiveEventSink } from "./liveEventSink";
 
 export interface Composition {
   runtime: HarnessRuntime;
+  liveEventSink: LiveEventSink;
   pluginHost: PluginHost;
   sessionStore: SessionStore;
   loadUserPlugins(): Promise<HarnessPlugin[]>;
@@ -44,9 +46,11 @@ export interface Composition {
  */
 export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
   const toolRegistry = new ToolRegistry();
+  const rootSessionId = runArgs.sessionId ?? `s-${randomUUID()}`;
+  const liveEventSink = new LiveEventSink();
 
   const context = new ContextManager({
-    stateDir: runArgs.stateDir,
+    stateDir: path.join(runArgs.stateDir, "sessions", rootSessionId, "context"),
     maxWorkingTurns: 6,
     goal: runArgs.goal,
   });
@@ -55,7 +59,9 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
   const providerRegistry = new ProviderRegistry();
   const credentialsRegistry = new CredentialsRegistry();
 
-  const policy = new CompositePolicyEngine(new DefaultPolicyEngine());
+  const policy = new CompositePolicyEngine(
+    new DefaultPolicyEngine({ allowedHighRiskTools: ["spawn_subagent"] }),
+  );
   if (!runArgs.noSafety) {
     policy.addRule(createCommandSafetyRule());
   }
@@ -68,19 +74,21 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
       credentialsRegistry,
       providerId: runArgs.provider,
       model: runArgs.model,
+      maxTokens: runArgs.maxTokens,
     }),
     modelSelector: new DefaultModelSelector(),
     prompts,
     tools: toolRegistry,
     context,
     policy,
-    eventSink: new LiveEventSink(),
+    eventSink: liveEventSink,
     sessionStore,
     approvalHandler: ttyApprovalHandler,
   });
 
   const subagentFactory: SubagentRuntimeFactory = {
     async build(request: SubagentRunOptions, parent): Promise<SubagentBuiltRuntime> {
+      const childSessionId = `s-${randomUUID()}`;
       const childTools = new ToolRegistry();
       const parentTools = toolRegistry.list();
       const allow = request.allowedTools;
@@ -91,7 +99,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
       }
 
       const childContext = new ContextManager({
-        stateDir: runArgs.stateDir,
+        stateDir: path.join(runArgs.stateDir, "sessions", childSessionId, "context"),
         maxWorkingTurns: 6,
         goal: request.goal ?? request.prompt,
       });
@@ -102,13 +110,14 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
           credentialsRegistry,
           providerId: runArgs.provider,
           model: runArgs.model,
+          maxTokens: runArgs.maxTokens,
         }),
         modelSelector: new DefaultModelSelector(),
         prompts,
         tools: childTools,
         context: childContext,
         policy,
-        eventSink: new MemoryEventSink(),
+        eventSink: liveEventSink,
         sessionStore,
         approvalHandler: ttyApprovalHandler,
       });
@@ -126,6 +135,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
             reasoningModel: runArgs.model,
           },
           modelOverride: runArgs.model,
+          sessionId: childSessionId,
           goal: request.goal ?? request.prompt,
           parentSessionId: parent.sessionId,
         },
@@ -162,6 +172,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
 
   return {
     runtime,
+    liveEventSink,
     pluginHost,
     sessionStore,
     async loadUserPlugins(): Promise<HarnessPlugin[]> {
@@ -173,7 +184,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
 }
 
 export const ttyApprovalHandler: ApprovalHandler = async (request: ApprovalRequest) => {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  if (!process.stdin.isTTY) {
     process.stderr.write(
       `[approval] Auto-denying "${request.tool.name}" (non-TTY): ${request.reason}\n`,
     );

@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import readline from "node:readline/promises";
 import { type RunArgs, parseRunArgs, parseRunArgsWithPrompt } from "../args";
 import { type Composition, buildComposition } from "../composition";
 
 export async function runCommand(args: string[], defaultPromptsDir: string): Promise<void> {
-  const runArgs = parseRunArgs(args, defaultPromptsDir);
+  const runArgs = ensureSessionId(parseRunArgs(args, defaultPromptsDir));
   if (runArgs.prompt.trim().length === 0) {
     await runInteractiveLoop(runArgs);
     return;
@@ -16,13 +17,18 @@ export async function runCommandWithPrompt(
   prompt: string,
   defaultPromptsDir: string,
 ): Promise<void> {
-  const runArgs = parseRunArgsWithPrompt(args, prompt, defaultPromptsDir);
+  const runArgs = ensureSessionId(parseRunArgsWithPrompt(args, prompt, defaultPromptsDir));
   await runSinglePrompt(runArgs, prompt);
 }
 
 async function runSinglePrompt(runArgs: RunArgs, prompt: string): Promise<void> {
   const composition = await prepareComposition(runArgs);
-  await executePrompt(composition, runArgs, prompt, runArgs.sessionId, runArgs.resume);
+  try {
+    await executePrompt(composition, runArgs, prompt, runArgs.sessionId, runArgs.resume);
+  } catch (error: unknown) {
+    composition.liveEventSink.reset();
+    throw error;
+  }
 }
 
 async function runInteractiveLoop(runArgs: RunArgs): Promise<void> {
@@ -30,7 +36,7 @@ async function runInteractiveLoop(runArgs: RunArgs): Promise<void> {
   let sessionId = runArgs.sessionId;
   let resume = runArgs.resume;
 
-  process.stderr.write('Interactive mode. Type "/exit" to quit.\n');
+  process.stderr.write('Interactive mode. Type "/exit" or "/quit" to quit.\n');
   while (true) {
     const prompt = (await askPrompt("you> ")).trim();
     if (prompt.length === 0) {
@@ -43,6 +49,7 @@ async function runInteractiveLoop(runArgs: RunArgs): Promise<void> {
       sessionId = await executePrompt(composition, runArgs, prompt, sessionId, resume);
       resume = true;
     } catch (error: unknown) {
+      composition.liveEventSink.reset();
       const message = error instanceof Error ? error.message : "unknown run error";
       process.stderr.write(`[error] ${message}\n`);
     }
@@ -92,5 +99,15 @@ async function askPrompt(question: string): Promise<string> {
 
 function isExitPrompt(prompt: string): boolean {
   const lowered = prompt.toLowerCase();
-  return lowered === "/exit" || lowered === "exit" || lowered === "/quit" || lowered === "quit";
+  return lowered === "/exit" || lowered === "/quit";
+}
+
+function ensureSessionId(runArgs: RunArgs): RunArgs {
+  if (runArgs.sessionId) {
+    return runArgs;
+  }
+  return {
+    ...runArgs,
+    sessionId: `s-${randomUUID()}`,
+  };
 }

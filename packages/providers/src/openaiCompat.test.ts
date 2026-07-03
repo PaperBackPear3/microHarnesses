@@ -60,3 +60,21 @@ test("parseOpenAICompatResponse handles array-form content", () => {
   });
   assert.equal(parsed?.assistantMessage, "hello world");
 });
+
+test("parseOpenAICompatResponse captures reasoning parts separately", () => {
+  const parsed = parseOpenAICompatResponse({
+    choices: [
+      {
+        message: {
+          content: [
+            { type: "reasoning", text: "think " },
+            { type: "text", text: "answer" },
+          ],
+        },
+        finish_reason: "stop",
+      },
+    ],
+  });
+  assert.equal(parsed?.assistantMessage, "answer");
+  assert.equal(parsed?.reasoningMessage, "think ");
+});

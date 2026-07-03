@@ -101,7 +101,7 @@ test("OpenAIAdapter includes tools payload when provided", async () => {
 test("OpenAIAdapter streamComplete emits deltas and final response", async () => {
   const fetchImpl = (async () => {
     const sse = [
-      'data: {"choices":[{"delta":{"content":"hel"}}]}',
+      'data: {"choices":[{"delta":{"content":[{"type":"reasoning","text":"think "},{"type":"text","text":"hel"}]}}]}',
       "",
       'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}',
       "",
@@ -117,7 +117,7 @@ test("OpenAIAdapter streamComplete emits deltas and final response", async () =>
     { model: "gpt-x", messages: [{ role: "user", content: "hello" }] },
     { apiKey: "sk-test" },
   )) {
-    if (event.type === "assistant.delta") {
+    if (event.type === "assistant.delta" || event.type === "reasoning.delta") {
       events.push({ type: event.type, delta: event.delta });
     } else {
       events.push({ type: event.type, assistantMessage: event.response.assistantMessage });
@@ -125,6 +125,7 @@ test("OpenAIAdapter streamComplete emits deltas and final response", async () =>
   }
 
   assert.deepEqual(events, [
+    { type: "reasoning.delta", delta: "think " },
     { type: "assistant.delta", delta: "hel" },
     { type: "assistant.delta", delta: "lo" },
     { type: "final", assistantMessage: "hello" },
