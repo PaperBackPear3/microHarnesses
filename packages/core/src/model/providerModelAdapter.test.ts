@@ -238,3 +238,87 @@ test("does not inject fallback tool catalog for structured-tools providers", asy
   const system = adapter.seenRequest?.messages[0]?.content ?? "";
   assert.doesNotMatch(system, /Runtime tool catalog/);
 });
+
+test("includes prior tool execution feedback in subsequent messages", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(
+    makeInput({
+      workingTurns: [
+        {
+          id: "t1",
+          iteration: 1,
+          userMessage: "Use time, then echo",
+          assistantMessage: "",
+          toolCalls: [{ name: "time", input: {} }],
+          toolResults: [{ ok: true, output: { now: "2026-01-01T00:00:00.000Z" } }],
+        },
+      ],
+    }),
+  );
+
+  const feedback = adapter.seenRequest?.messages.find((m) =>
+    m.content.includes("Tool execution feedback from the previous step:"),
+  );
+  assert.ok(feedback);
+  assert.equal(feedback?.role, "user");
+  assert.match(feedback?.content ?? "", /time/);
+  assert.match(feedback?.content ?? "", /2026-01-01T00:00:00.000Z/);
+});
+
+test("does not append duplicate task message when latest turn already has same user prompt", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(
+    makeInput({
+      bundle: {
+        system: "sys",
+        instructions: [],
+        task: "Use time then echo",
+        metadata: { name: "default" },
+      },
+      workingTurns: [
+        {
+          id: "t1",
+          iteration: 1,
+          userMessage: "Use time then echo",
+          assistantMessage: "",
+          toolCalls: [{ name: "time", input: {} }],
+          toolResults: [{ ok: true, output: { now: "2026-01-01T00:00:00.000Z" } }],
+        },
+      ],
+    }),
+  );
+
+  const userMessages = (adapter.seenRequest?.messages ?? []).filter((m) => m.role === "user");
+  const taskMentions = userMessages.filter((m) => m.content === "Use time then echo");
+  assert.equal(taskMentions.length, 1);
+});
