@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { PromptBundle, PromptInstruction, PromptMetadata, PromptSource } from "../types";
+import { isNodeError } from "../shared/nodeError";
+import { safeResolve } from "../shared/paths";
+import type { PromptBundle, PromptInstruction, PromptMetadata, PromptSource } from "./types";
 
 export interface FsPromptSourceOptions {
   rootDir: string;
@@ -19,14 +21,18 @@ export class FsPromptSource implements PromptSource {
     this.strictVariables = options.strictVariables ?? false;
   }
 
-  async load(agentName: string, task: string, variables: Record<string, string> = {}): Promise<PromptBundle> {
-    const base = resolveAgentDir(this.rootDir, agentName);
+  async load(
+    agentName: string,
+    task: string,
+    variables: Record<string, string> = {},
+  ): Promise<PromptBundle> {
+    const base = safeResolve(this.rootDir, agentName);
     const systemRaw = await readFile(path.join(base, "system.md"), "utf8");
     const optionalSections = await Promise.all(
       this.sections.map(async (section) => ({
         section,
-        raw: await readOptional(path.join(base, `${section}.md`))
-      }))
+        raw: await readOptional(path.join(base, `${section}.md`)),
+      })),
     );
     const metadata = await readMetadata(path.join(base, "prompt.meta.json"), agentName);
 
@@ -34,12 +40,17 @@ export class FsPromptSource implements PromptSource {
     const instructions: PromptInstruction[] = optionalSections
       .filter((entry) => Boolean(entry.raw))
       .map((entry) => {
-        const rendered = renderTemplate(stripFrontmatter(entry.raw as string), variables, this.strictVariables);
-        const role = entry.section === "developer" || entry.section === "tools" ? entry.section : "custom";
+        const rendered = renderTemplate(
+          stripFrontmatter(entry.raw as string),
+          variables,
+          this.strictVariables,
+        );
+        const role =
+          entry.section === "developer" || entry.section === "tools" ? entry.section : "custom";
         return {
           role,
           name: entry.section,
-          content: rendered
+          content: rendered,
         };
       });
 
@@ -47,7 +58,7 @@ export class FsPromptSource implements PromptSource {
       system,
       instructions,
       task: renderTemplate(task, variables, this.strictVariables),
-      metadata
+      metadata,
     };
   }
 }
@@ -63,10 +74,6 @@ async function readOptional(filePath: string): Promise<string | undefined> {
   }
 }
 
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error !== null && typeof error === "object" && "code" in error;
-}
-
 async function readMetadata(filePath: string, agentName: string): Promise<PromptMetadata> {
   const raw = await readOptional(filePath);
   if (!raw) {
@@ -77,7 +84,7 @@ async function readMetadata(filePath: string, agentName: string): Promise<Prompt
     name: parsed.name ?? agentName,
     modelHint: parsed.modelHint,
     safetyMode: parsed.safetyMode,
-    tags: parsed.tags
+    tags: parsed.tags,
   };
 }
 
@@ -92,7 +99,11 @@ function stripFrontmatter(markdown: string): string {
   return markdown.slice(endIndex + 5);
 }
 
-function renderTemplate(text: string, variables: Record<string, string>, strictVariables: boolean): string {
+function renderTemplate(
+  text: string,
+  variables: Record<string, string>,
+  strictVariables: boolean,
+): string {
   return text.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_, key: string) => {
     if (Object.prototype.hasOwnProperty.call(variables, key)) {
       return variables[key] as string;
@@ -103,12 +114,4 @@ function renderTemplate(text: string, variables: Record<string, string>, strictV
     process.stderr.write(`Warning: missing template variable "${key}"\n`);
     return "";
   });
-}
-
-function resolveAgentDir(rootDir: string, agentName: string): string {
-  const resolved = path.resolve(rootDir, agentName);
-  if (!resolved.startsWith(rootDir + path.sep) && resolved !== rootDir) {
-    throw new Error(`Invalid agent name path: "${agentName}"`);
-  }
-  return resolved;
 }

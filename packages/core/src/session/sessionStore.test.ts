@@ -1,8 +1,8 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import test from "node:test";
 import { SessionStore } from "./sessionStore";
 
 test("SessionStore persists manifest, events, and snapshots", async () => {
@@ -17,14 +17,14 @@ test("SessionStore persists manifest, events, and snapshots", async () => {
       type: "run.started",
       timestamp: new Date().toISOString(),
       runId: "run-1",
-      payload: {}
+      payload: {},
     });
 
     await store.saveSnapshot(manifest.sessionId, "run-1", {
       sessionId: manifest.sessionId,
       runId: "run-1",
       startedAt: new Date().toISOString(),
-      turns: []
+      turns: [],
     });
 
     const sessions = await store.listSessions();

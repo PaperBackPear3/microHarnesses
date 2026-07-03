@@ -1,4 +1,4 @@
-import { ToolDefinition } from "@micro-harness/core";
+import type { ToolDefinition } from "@micro-harness/core";
 
 export const echoTool: ToolDefinition = {
   name: "echo",
@@ -7,5 +7,5 @@ export const echoTool: ToolDefinition = {
   async execute(input) {
     const text = String(input.text ?? "");
     return { text };
-  }
+  },
 };

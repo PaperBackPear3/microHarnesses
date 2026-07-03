@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const raw = await readFile(inputPath, "utf8");
   const input = JSON.parse(raw) as WorkerInput;
   const result = {
-    summary: `Worker processed: ${input.prompt}`
+    summary: `Worker processed: ${input.prompt}`,
   };
 
   await writeFile(outputPath, JSON.stringify(result, null, 2), "utf8");

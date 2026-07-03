@@ -1,17 +1,14 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-/** Resolves a user-supplied path relative to rootDir, rejecting traversal attempts. */
-export function safeResolve(rootDir: string, requestedPath: string): string {
-  const resolved = path.resolve(rootDir, requestedPath);
-  if (!resolved.startsWith(rootDir + path.sep) && resolved !== rootDir) {
-    throw new Error(`Path "${requestedPath}" escapes plugin root`);
-  }
-  return resolved;
-}
+export { safeResolve, truncate } from "@micro-harness/core";
 
 /** Recursively lists files under root up to maxDepth, capped at maxFiles entries. */
-export async function listFiles(root: string, maxDepth: number, maxFiles: number): Promise<string[]> {
+export async function listFiles(
+  root: string,
+  maxDepth: number,
+  maxFiles: number,
+): Promise<string[]> {
   const out: string[] = [];
   const queue: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }];
 
@@ -52,7 +49,10 @@ export function normalizeStringList(value: unknown): string[] {
     return value.map((item) => String(item).trim()).filter(Boolean);
   }
   if (typeof value === "string") {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
   return [];
 }
@@ -62,10 +62,4 @@ export function clampNumber(value: unknown, min: number, max: number, fallback: 
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, Math.floor(parsed)));
-}
-
-/** Truncates text to maxLength, appending an ellipsis if trimmed. */
-export function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength - 1)}…`;
 }

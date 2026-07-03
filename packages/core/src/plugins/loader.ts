@@ -1,5 +1,6 @@
 import path from "node:path";
-import { HarnessPlugin } from "../types";
+import { PluginLoadError } from "../shared/errors";
+import type { HarnessPlugin } from "./types";
 
 interface PluginFileShape {
   default?: unknown;
@@ -33,7 +34,7 @@ async function loadOnePlugin(pluginPath: string): Promise<HarnessPlugin> {
   const candidate = (imported.default ?? imported.plugin) as unknown;
 
   if (!isHarnessPlugin(candidate)) {
-    throw new Error(`Invalid plugin at "${pluginPath}"`);
+    throw new PluginLoadError(`Invalid plugin at "${pluginPath}"`);
   }
   return candidate;
 }

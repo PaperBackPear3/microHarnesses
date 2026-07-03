@@ -1,4 +1,4 @@
-import { ToolDefinition } from "@micro-harness/core";
+import type { ToolDefinition } from "@micro-harness/core";
 
 export const timeTool: ToolDefinition = {
   name: "time",
@@ -6,5 +6,5 @@ export const timeTool: ToolDefinition = {
   risk: "low",
   async execute() {
     return { now: new Date().toISOString() };
-  }
+  },
 };

@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import assert from "node:assert/strict";
 import { FsPromptSource } from "./fsPromptSource";
 
 test("FsPromptSource blocks agent path traversal", async () => {

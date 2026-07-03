@@ -1,12 +1,11 @@
 import path from "node:path";
-import { HarnessPlugin, PluginApi, ToolDefinition } from "@micro-harness/core";
-import {
-  clampNumber,
-  listFiles,
-  readTextFileSafely,
-  safeResolve,
-  truncate
-} from "../utils";
+import type {
+  HarnessPlugin,
+  PluginApi,
+  PluginCapability,
+  ToolDefinition,
+} from "@micro-harness/core";
+import { clampNumber, listFiles, readTextFileSafely, safeResolve, truncate } from "../utils";
 
 export interface ExplorerPluginOptions {
   /** Root directory that exploration is restricted to. Defaults to `process.cwd()`. */
@@ -21,6 +20,7 @@ export interface ExplorerPluginOptions {
 
 export class ExplorerPlugin implements HarnessPlugin {
   readonly name = "explorer-plugin";
+  readonly capabilities: PluginCapability[] = ["tools"];
   private readonly rootDir: string;
   private readonly maxExploreFiles: number;
   private readonly maxDepth: number;
@@ -42,7 +42,8 @@ export class ExplorerPlugin implements HarnessPlugin {
 
     return {
       name: "explore_agent",
-      description: "Read-only explorer that searches file names and content snippets under a root directory.",
+      description:
+        "Read-only explorer that searches file names and content snippets under a root directory.",
       risk: "low",
       async execute(input) {
         const query = String(input.query ?? "").trim();
@@ -74,8 +75,8 @@ export class ExplorerPlugin implements HarnessPlugin {
             file: path.relative(absoluteRoot, filePath),
             matches: matches.map((entry) => ({
               line: entry.index,
-              snippet: truncate(entry.line, maxSnippetLength)
-            }))
+              snippet: truncate(entry.line, maxSnippetLength),
+            })),
           });
         }
 
@@ -85,9 +86,9 @@ export class ExplorerPlugin implements HarnessPlugin {
           query,
           root_path: requestedRoot || ".",
           total_results: results.length,
-          results
+          results,
         };
-      }
+      },
     };
   }
 }

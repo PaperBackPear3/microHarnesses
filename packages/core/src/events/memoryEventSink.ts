@@ -1,4 +1,4 @@
-import { EventSink, ExecutionEvent } from "../types";
+import type { EventSink, ExecutionEvent } from "./types";
 
 export class MemoryEventSink implements EventSink {
   private readonly events: ExecutionEvent[] = [];

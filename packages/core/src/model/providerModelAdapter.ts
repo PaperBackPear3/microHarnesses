@@ -1,52 +1,57 @@
-import { ProviderRegistry } from "../providers/registry";
-import {
-  CompletionRequest,
-  ModelAdapter,
-  ProviderCredentialsResolver,
-  ProviderId,
-  ProviderMessage,
-  StepInput,
-  StepPlan
-} from "../types";
+import type { CredentialsRegistry } from "../providers/credentialsRegistry";
+import { ConfigError } from "../shared/errors";
+import type { ProviderRegistry } from "../providers/registry";
+import type { CompletionRequest, ProviderId, ProviderMessage } from "../providers/types";
+import type { ModelAdapter, StepInput, StepPlan } from "./types";
 
 export interface ProviderModelAdapterOptions {
   providerRegistry: ProviderRegistry;
-  credentialsResolver: ProviderCredentialsResolver;
+  credentialsRegistry: CredentialsRegistry;
   providerId: ProviderId;
-  model: string;
+  model?: string;
   maxTokens?: number;
 }
 
 export class ProviderModelAdapter implements ModelAdapter {
   private readonly providerRegistry: ProviderRegistry;
-  private readonly credentialsResolver: ProviderCredentialsResolver;
+  private readonly credentialsRegistry: CredentialsRegistry;
   private readonly providerId: ProviderId;
-  private readonly model: string;
+  private readonly model?: string;
   private readonly maxTokens: number;
 
   constructor(options: ProviderModelAdapterOptions) {
     this.providerRegistry = options.providerRegistry;
-    this.credentialsResolver = options.credentialsResolver;
+    this.credentialsRegistry = options.credentialsRegistry;
     this.providerId = options.providerId;
     this.model = options.model;
     this.maxTokens = options.maxTokens ?? 1000;
   }
 
   async nextStep(input: StepInput): Promise<StepPlan> {
-    const resolvedModel = input.selectedModel ?? this.model;
-    const auth = await this.credentialsResolver.resolve(this.providerId);
     const adapter = this.providerRegistry.get(this.providerId);
+    const resolvedModel = input.selectedModel ?? this.model ?? adapter.defaultModel;
+    if (!resolvedModel) {
+      throw new ConfigError(
+        `No model specified and provider "${this.providerId}" declares no defaultModel`,
+      );
+    }
+    const auth = await this.credentialsRegistry.get(this.providerId).resolve();
     const request: CompletionRequest = {
       model: resolvedModel,
       messages: buildMessages(input),
-      maxTokens: this.maxTokens
+      maxTokens: this.maxTokens,
     };
 
     const response = await adapter.complete(request, auth);
     return {
       assistantMessage: response.assistantMessage,
-      toolCalls: response.toolCalls.map((t) => ({ name: t.name, input: t.input })),
-      stop: response.stop
+      toolCalls: response.toolCalls.map((t) => ({
+        name: t.name,
+        input: t.input,
+        ...(t.malformedInput ? { malformedInput: true } : {}),
+      })),
+      stop: response.stop,
+      usage: response.usage,
     };
   }
 }

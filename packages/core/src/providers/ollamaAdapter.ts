@@ -1,13 +1,22 @@
-import { ProviderError } from "../errors";
-import { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "../types";
-import { OpenAICompatResponse, parseOpenAICompatResponse } from "./openaiCompat";
+import { ProviderError } from "../shared/errors";
+import { type OpenAICompatResponse, parseOpenAICompatResponse } from "./openaiCompat";
+import type { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "./types";
+
+export interface OllamaAdapterOptions {
+  fetchImpl?: typeof fetch;
+}
 
 export class OllamaAdapter implements ProviderAdapter {
   readonly providerId = "ollama" as const;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: OllamaAdapterOptions = {}) {
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
     const endpoint = `${auth.baseUrl ?? "http://127.0.0.1:11434/v1"}/chat/completions`;
-    const response = await fetch(endpoint, {
+    const response = await this.fetchImpl(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -15,12 +24,12 @@ export class OllamaAdapter implements ProviderAdapter {
         // Ollama does not support the "developer" role — fold it into "system"
         messages: request.messages.map((m) => ({
           role: m.role === "developer" ? "system" : m.role,
-          content: m.content
+          content: m.content,
         })),
         temperature: request.temperature ?? 0.2,
         max_tokens: request.maxTokens ?? 800,
-        stream: false
-      })
+        stream: false,
+      }),
     });
 
     if (!response.ok) {

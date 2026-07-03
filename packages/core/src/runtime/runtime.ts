@@ -1,25 +1,23 @@
 import { randomUUID } from "node:crypto";
-import { ContextManager } from "../context/manager";
-import { SessionStore } from "../session/sessionStore";
-import { ToolRegistry } from "../tools/registry";
-import { ToolTimeoutError } from "../errors";
-import {
+import type { ContextManager } from "../context/manager";
+import type { HarnessState } from "../context/types";
+import type { EventSink } from "../events/types";
+import type { ModelAdapter, ModelSelector } from "../model/types";
+import type { ToolPolicyEngine } from "../policy/types";
+import type { PromptSource } from "../prompts/types";
+import type { SessionStore } from "../session/sessionStore";
+import { ValidationError } from "../shared/errors";
+import { ToolExecutionEngine } from "../tools/executionEngine";
+import type { ToolRegistry } from "../tools/registry";
+import { RunEmitter } from "./runEmitter";
+import { shouldSnapshot } from "./snapshotCadence";
+import type {
   AfterLoopHook,
   AgentSpawner,
   BeforeLoopHook,
-  EventSink,
-  ExecutionEvent,
-  HarnessPlugin,
-  HarnessState,
-  ModelAdapter,
-  ModelSelector,
-  PromptSource,
   RunOptions,
   RuntimeLimits,
-  StepPlan,
-  ToolPolicyEngine,
-  ToolResult
-} from "../types";
+} from "./types";
 
 interface RuntimeDeps {
   model: ModelAdapter;
@@ -34,9 +32,14 @@ interface RuntimeDeps {
   limits?: RuntimeLimits;
 }
 
+const DEFAULT_LIMITS: RuntimeLimits = {
+  toolTimeoutMs: 20_000,
+  maxToolCallsPerRun: 20,
+};
+
 export class HarnessRuntime {
   private readonly model: ModelAdapter;
-  private readonly modelSelector: ModelSelector;
+  private modelSelector: ModelSelector;
   private readonly prompts: PromptSource;
   private readonly tools: ToolRegistry;
   private readonly context: ContextManager;
@@ -44,12 +47,11 @@ export class HarnessRuntime {
   private readonly policy: ToolPolicyEngine;
   private readonly eventSink: EventSink;
   private readonly sessionStore?: SessionStore;
-  private readonly limits: RuntimeLimits;
+  private readonly defaultLimits: RuntimeLimits;
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
   private cancelled = false;
-  private activeToolController?: AbortController;
-  private currentSessionId?: string;
+  private activeEngine?: ToolExecutionEngine;
 
   constructor(deps: RuntimeDeps) {
     this.model = deps.model;
@@ -61,31 +63,35 @@ export class HarnessRuntime {
     this.policy = deps.policy;
     this.eventSink = deps.eventSink;
     this.sessionStore = deps.sessionStore;
-    this.limits = deps.limits ?? {
-      toolTimeoutMs: 20_000,
-      maxToolCallsPerRun: 20
-    };
+    this.defaultLimits = deps.limits ?? DEFAULT_LIMITS;
   }
 
   kill(): void {
     this.cancelled = true;
-    this.activeToolController?.abort("runtime killed");
+    this.activeEngine?.abort("runtime killed");
   }
 
-  async registerPlugins(plugins: HarnessPlugin[]): Promise<void> {
-    for (const plugin of plugins) {
-      await plugin.register({
-        registerTool: (tool) => this.tools.register(tool),
-        onBeforeLoop: (hook) => this.beforeHooks.push(hook),
-        onAfterLoop: (hook) => this.afterHooks.push(hook),
-        setCompressor: (compressor) => this.context.setCompressor(compressor)
-      });
-    }
+  addBeforeHook(hook: BeforeLoopHook): void {
+    this.beforeHooks.push(hook);
+  }
+
+  addAfterHook(hook: AfterLoopHook): void {
+    this.afterHooks.push(hook);
+  }
+
+  setCompressor(compressor: Parameters<ContextManager["setCompressor"]>[0]): void {
+    this.context.setCompressor(compressor);
+  }
+
+  setModelSelector(selector: ModelSelector): void {
+    this.modelSelector = selector;
   }
 
   async run(agentName: string, userPrompt: string, options: RunOptions): Promise<HarnessState> {
+    validateRunOptions(options);
     this.cancelled = false;
     const runId = randomUUID();
+    const limits: RuntimeLimits = { ...this.defaultLimits, ...options.limits };
     let sessionId = options.sessionId;
     let goal = options.goal ?? userPrompt;
 
@@ -97,13 +103,19 @@ export class HarnessRuntime {
         await this.sessionStore.updateGoal(sessionId, goal);
       }
     }
-    this.currentSessionId = sessionId;
+
+    const emitter = new RunEmitter(
+      { eventSink: this.eventSink, sessionStore: this.sessionStore },
+      { runId, sessionId },
+    );
+    const engine = new ToolExecutionEngine({ tools: this.tools, policy: this.policy, limits });
+    this.activeEngine = engine;
 
     let state: HarnessState = {
       sessionId,
       runId,
       startedAt: new Date().toISOString(),
-      turns: []
+      turns: [],
     };
 
     if (this.sessionStore && options.resume && sessionId) {
@@ -113,18 +125,18 @@ export class HarnessRuntime {
           ...restored,
           sessionId,
           runId,
-          startedAt: new Date().toISOString()
+          startedAt: new Date().toISOString(),
         };
       }
     }
 
     await this.context.init();
     this.context.setGoal(goal);
-    await this.pushEvent({
-      type: "run.started",
-      timestamp: new Date().toISOString(),
-      runId,
-      payload: { agentName, sessionId, resume: Boolean(options.resume), goal }
+    await emitter.emit("run.started", {
+      agentName,
+      sessionId,
+      resume: Boolean(options.resume),
+      goal,
     });
 
     const bundle = await this.prompts.load(agentName, userPrompt);
@@ -132,11 +144,9 @@ export class HarnessRuntime {
 
     for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
       if (this.cancelled) {
-        await this.pushEvent({
-          type: "tool.killed",
-          timestamp: new Date().toISOString(),
-          runId,
-          payload: { reason: "runtime killed before next iteration", iteration }
+        await emitter.emit("tool.killed", {
+          reason: "runtime killed before next iteration",
+          iteration,
         });
         break;
       }
@@ -151,19 +161,14 @@ export class HarnessRuntime {
           agentName,
           iteration,
           overrideModel: options.modelOverride,
-          promptHintModel: bundle.metadata.modelHint
+          promptHintModel: bundle.metadata.modelHint,
         },
-        options.profile
+        options.profile,
       );
-      await this.pushEvent({
-        type: "model.selected",
-        timestamp: new Date().toISOString(),
-        runId,
-        payload: {
-          model: modelSelection.model,
-          reason: modelSelection.reason,
-          iteration
-        }
+      await emitter.emit("model.selected", {
+        model: modelSelection.model,
+        reason: modelSelection.reason,
+        iteration,
       });
 
       const step = await this.model.nextStep({
@@ -172,25 +177,35 @@ export class HarnessRuntime {
         bundle,
         workingTurns,
         iteration,
-        selectedModel: modelSelection.model
+        selectedModel: modelSelection.model,
       });
+      if (step.usage) {
+        await emitter.emit("model.completed", {
+          model: modelSelection.model,
+          iteration,
+          usage: step.usage,
+        });
+      }
 
       totalToolCalls += step.toolCalls.length;
-      if (totalToolCalls > this.limits.maxToolCallsPerRun) {
-        await this.pushEvent({
-          type: "run.limit_reached",
-          timestamp: new Date().toISOString(),
-          runId,
-          payload: {
-            limit: this.limits.maxToolCallsPerRun,
-            totalToolCalls
-          }
+      if (totalToolCalls > limits.maxToolCallsPerRun) {
+        await emitter.emit("run.limit_reached", {
+          limit: limits.maxToolCallsPerRun,
+          totalToolCalls,
         });
         break;
       }
 
-      const toolResults = await this.executeTools(step, runId, agentName, iteration, bundle.metadata.safetyMode);
-      const spawnedAgentResult = step.spawnRequest ? await this.spawner.spawn(step.spawnRequest) : undefined;
+      const toolResults = await engine.executeCalls(step.toolCalls, {
+        agentName,
+        iteration,
+        safetyMode: bundle.metadata.safetyMode,
+        emitter,
+        isCancelled: () => this.cancelled,
+      });
+      const spawnedAgentResult = step.spawnRequest
+        ? await this.spawner.spawn(step.spawnRequest)
+        : undefined;
 
       state.turns.push({
         id: randomUUID(),
@@ -199,18 +214,11 @@ export class HarnessRuntime {
         assistantMessage: step.assistantMessage,
         toolCalls: step.toolCalls,
         toolResults,
-        spawnedAgentResult
+        spawnedAgentResult,
       });
 
-      if (iteration % options.checkpointEvery === 0) {
-        await this.context.saveCheckpoint(state);
-      }
-
-      if (this.sessionStore && sessionId) {
-        const snapshotEvery = options.snapshotEveryIterations ?? options.checkpointEvery;
-        if (iteration % snapshotEvery === 0) {
-          await this.sessionStore.saveSnapshot(sessionId, runId, state);
-        }
+      if (this.sessionStore && sessionId && shouldSnapshot(iteration, options.snapshotEvery)) {
+        await this.sessionStore.saveSnapshot(sessionId, runId, state);
       }
 
       for (const hook of this.afterHooks) {
@@ -222,168 +230,32 @@ export class HarnessRuntime {
       }
     }
 
-    await this.context.saveCheckpoint(state);
     if (this.sessionStore && sessionId) {
       await this.sessionStore.saveSnapshot(sessionId, runId, state);
     }
-    await this.pushEvent({
-      type: "run.completed",
-      timestamp: new Date().toISOString(),
-      runId,
-      payload: { turns: state.turns.length, sessionId }
-    });
+    await emitter.emit("run.completed", { turns: state.turns.length, sessionId });
 
-    this.currentSessionId = undefined;
+    this.activeEngine = undefined;
     return state;
-  }
-
-  private async executeTools(
-    step: StepPlan,
-    runId: string,
-    agentName: string,
-    iteration: number,
-    safetyMode?: "strict" | "balanced" | "open"
-  ): Promise<ToolResult[]> {
-    const results: ToolResult[] = [];
-    for (const call of step.toolCalls) {
-      if (this.cancelled) {
-        await this.pushEvent({
-          type: "tool.killed",
-          timestamp: new Date().toISOString(),
-          runId,
-          payload: { tool: call.name, reason: "runtime killed during tool phase", iteration }
-        });
-        await this.appendSupportHistory({
-          runId,
-          iteration,
-          tool: call.name,
-          category: "killed",
-          reason: "runtime killed during tool phase"
-        });
-        results.push({
-          ok: false,
-          output: {},
-          error: "Tool skipped because runtime was killed"
-        });
-        continue;
-      }
-
-      let tool;
-      try {
-        tool = this.tools.get(call.name);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Unknown tool";
-        await this.pushEvent({
-          type: "tool.blocked",
-          timestamp: new Date().toISOString(),
-          runId,
-          payload: { tool: call.name, decision: "deny", reason: message, iteration }
-        });
-        await this.appendSupportHistory({
-          runId,
-          iteration,
-          tool: call.name,
-          category: "unknown_tool",
-          reason: message
-        });
-        results.push({ ok: false, output: {}, error: message });
-        continue;
-      }
-
-      const policy = await this.policy.evaluate(tool, call, {
-        runId,
-        agentName,
-        iteration,
-        safetyMode
-      });
-
-      if (policy.decision !== "allow") {
-        await this.pushEvent({
-          type: "tool.blocked",
-          timestamp: new Date().toISOString(),
-          runId,
-          payload: { tool: call.name, decision: policy.decision, reason: policy.reason, iteration }
-        });
-        await this.appendSupportHistory({
-          runId,
-          iteration,
-          tool: call.name,
-          category: "policy",
-          reason: policy.reason
-        });
-        results.push({
-          ok: false,
-          output: {},
-          error: policy.reason
-        });
-        continue;
-      }
-
-      await this.pushEvent({
-        type: "tool.allowed",
-        timestamp: new Date().toISOString(),
-        runId,
-        payload: { tool: call.name, iteration }
-      });
-
-      try {
-        this.activeToolController = new AbortController();
-        const output = await withTimeout(
-          (signal) => tool.execute(call.input, { signal }),
-          this.limits.toolTimeoutMs,
-          this.activeToolController
-        );
-        results.push({ ok: true, output });
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown tool error";
-        await this.appendSupportHistory({
-          runId,
-          iteration,
-          tool: call.name,
-          category: "tool_error",
-          reason: message
-        });
-        results.push({ ok: false, output: {}, error: message });
-      } finally {
-        this.activeToolController = undefined;
-      }
-    }
-    return results;
-  }
-
-  private async pushEvent(event: ExecutionEvent): Promise<void> {
-    await this.eventSink.push(event);
-    if (this.sessionStore && this.currentSessionId) {
-      await this.sessionStore.appendEvent(this.currentSessionId, event);
-    }
-  }
-
-  private async appendSupportHistory(data: Record<string, unknown>): Promise<void> {
-    if (this.sessionStore && this.currentSessionId) {
-      await this.sessionStore.appendSupportHistory(this.currentSessionId, data);
-    }
   }
 }
 
-async function withTimeout<T>(
-  runner: (signal: AbortSignal) => Promise<T>,
-  timeoutMs: number,
-  controller: AbortController
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      controller.abort(`tool timeout ${timeoutMs}ms`);
-      reject(new ToolTimeoutError(`Tool exceeded timeout of ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    runner(controller.signal)
-      .then((value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
-  });
+export function validateRunOptions(options: RunOptions): void {
+  if (!Number.isInteger(options.maxIterations) || options.maxIterations < 1) {
+    throw new ValidationError(
+      `maxIterations must be a positive integer, got ${String(options.maxIterations)}`,
+    );
+  }
+  if (!Number.isInteger(options.snapshotEvery) || options.snapshotEvery < 1) {
+    throw new ValidationError(
+      `snapshotEvery must be a positive integer, got ${String(options.snapshotEvery)}`,
+    );
+  }
+  if (options.limits) {
+    for (const [key, value] of Object.entries(options.limits)) {
+      if (value !== undefined && (!Number.isFinite(value) || value < 1)) {
+        throw new ValidationError(`limits.${key} must be a positive number, got ${String(value)}`);
+      }
+    }
+  }
 }

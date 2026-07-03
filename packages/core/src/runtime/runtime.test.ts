@@ -1,26 +1,22 @@
-import test from "node:test";
 import assert from "node:assert/strict";
-import { HarnessRuntime } from "./runtime";
-import { ToolRegistry } from "../tools/registry";
-import {
-  EventSink,
-  ExecutionEvent,
-  HarnessState,
-  ModelSelectionDecision,
-  ModelSelectionInput,
+import test from "node:test";
+import type { HarnessState } from "../context/types";
+import type { EventSink, ExecutionEvent } from "../events/types";
+import type {
   ModelAdapter,
   ModelProfile,
+  ModelSelectionDecision,
+  ModelSelectionInput,
   ModelSelector,
-  PromptBundle,
-  PromptSource,
-  RunOptions,
   StepInput,
   StepPlan,
-  ToolCall,
-  ToolPolicyContext,
-  ToolDefinition,
-  ToolPolicyEngine
-} from "../types";
+} from "../model/types";
+import type { ToolPolicyContext, ToolPolicyEngine } from "../policy/types";
+import type { PromptBundle, PromptSource } from "../prompts/types";
+import { ToolRegistry } from "../tools/registry";
+import type { ToolCall, ToolDefinition } from "../tools/types";
+import { HarnessRuntime } from "./runtime";
+import type { RunOptions } from "./types";
 
 class FakeModel implements ModelAdapter {
   private readonly step: StepPlan;
@@ -40,7 +36,7 @@ class FakePromptSource implements PromptSource {
       system: "system",
       instructions: [],
       task,
-      metadata: { name: "default" }
+      metadata: { name: "default" },
     };
   }
 }
@@ -55,7 +51,7 @@ class AllowPolicy implements ToolPolicyEngine {
   async evaluate(
     _tool: ToolDefinition,
     _call: ToolCall,
-    _context: ToolPolicyContext
+    _context: ToolPolicyContext,
   ): Promise<{ decision: "allow"; reason: string }> {
     return { decision: "allow", reason: "ok" };
   }
@@ -88,8 +84,8 @@ class FakeSpawner {
 
 const options: RunOptions = {
   maxIterations: 1,
-  checkpointEvery: 1,
-  profile: { defaultModel: "test-model" } as ModelProfile
+  snapshotEvery: 1,
+  profile: { defaultModel: "test-model" } as ModelProfile,
 };
 
 test("runtime does not crash on unknown tool", async () => {
@@ -98,7 +94,7 @@ test("runtime does not crash on unknown tool", async () => {
     model: new FakeModel({
       assistantMessage: "try tool",
       toolCalls: [{ name: "missing-tool", input: {} }],
-      stop: true
+      stop: true,
     }),
     modelSelector: new FakeModelSelector(),
     prompts: new FakePromptSource(),
@@ -106,7 +102,7 @@ test("runtime does not crash on unknown tool", async () => {
     context: new FakeContextManager() as never,
     spawner: new FakeSpawner() as never,
     policy: new AllowPolicy(),
-    eventSink: events
+    eventSink: events,
   });
 
   const state = await runtime.run("default", "hello", options);
@@ -124,14 +120,14 @@ test("runtime emits limit event and exits gracefully when tool call limit is exc
     risk: "low",
     async execute() {
       return { ok: true };
-    }
+    },
   });
 
   const runtime = new HarnessRuntime({
     model: new FakeModel({
       assistantMessage: "call tool",
       toolCalls: [{ name: "echo", input: {} }],
-      stop: false
+      stop: false,
     }),
     modelSelector: new FakeModelSelector(),
     prompts: new FakePromptSource(),
@@ -142,12 +138,18 @@ test("runtime emits limit event and exits gracefully when tool call limit is exc
     eventSink: events,
     limits: {
       toolTimeoutMs: 1000,
-      maxToolCallsPerRun: 0
-    }
+      maxToolCallsPerRun: 0,
+    },
   });
 
   const state = await runtime.run("default", "hello", options);
   assert.equal(state.turns.length, 0);
-  assert.equal(events.events.some((event) => event.type === "run.limit_reached"), true);
-  assert.equal(events.events.some((event) => event.type === "run.completed"), true);
+  assert.equal(
+    events.events.some((event) => event.type === "run.limit_reached"),
+    true,
+  );
+  assert.equal(
+    events.events.some((event) => event.type === "run.completed"),
+    true,
+  );
 });

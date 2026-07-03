@@ -14,16 +14,16 @@ import {
   OllamaAdapter,
   OpenAIAdapter,
   PluginLoader,
+  type ProviderId,
   ProviderModelAdapter,
   ProviderRegistry,
-  ProviderId,
   SessionStore,
-  ToolRegistry
+  ToolRegistry,
 } from "@micro-harness/core";
 import { echoTool } from "./tools/echo";
 import { timeTool } from "./tools/time";
 
-type Command = "run" | "checkpoints" | "sessions";
+type Command = "run" | "sessions";
 
 async function main(): Promise<void> {
   const [commandArg, ...rest] = process.argv.slice(2);
@@ -31,11 +31,6 @@ async function main(): Promise<void> {
 
   if (command === "run") {
     await runCommand(rest);
-    return;
-  }
-
-  if (command === "checkpoints") {
-    await checkpointsCommand(rest);
     return;
   }
 
@@ -54,11 +49,14 @@ async function runCommand(args: string[]): Promise<void> {
 
 async function runWithOptions(args: string[], prompt: string): Promise<void> {
   const agentName = getArgValue(args, "--agent") ?? "default";
-  const stateDir = getArgValue(args, "--state-dir") ?? path.resolve(process.cwd(), ".micro-harness");
+  const stateDir =
+    getArgValue(args, "--state-dir") ?? path.resolve(process.cwd(), ".micro-harness");
   const promptDir = getArgValue(args, "--prompts-dir") ?? path.resolve(__dirname, "../prompts");
-  const maxIterations = Number(getArgValue(args, "--iterations") ?? "4");
-  const checkpointEvery = Number(getArgValue(args, "--checkpoint-every") ?? "2");
-  const snapshotEvery = Number(getArgValue(args, "--snapshot-every") ?? String(checkpointEvery));
+  const maxIterations = parsePositiveInt(getArgValue(args, "--iterations") ?? "4", "--iterations");
+  const snapshotEvery = parsePositiveInt(
+    getArgValue(args, "--snapshot-every") ?? "2",
+    "--snapshot-every",
+  );
   const pluginsPath = getArgValue(args, "--plugins");
   const provider = parseProvider(getArgValue(args, "--provider") ?? "openai");
   const model = getArgValue(args, "--model") ?? defaultModelFor(provider);
@@ -73,7 +71,7 @@ async function runWithOptions(args: string[], prompt: string): Promise<void> {
   const context = new ContextManager({
     stateDir,
     maxWorkingTurns: 6,
-    goal
+    goal,
   });
   const prompts = new FsPromptSource({ rootDir: promptDir });
   const providerRegistry = new ProviderRegistry();
@@ -87,7 +85,7 @@ async function runWithOptions(args: string[], prompt: string): Promise<void> {
       providerRegistry,
       credentialsResolver: new EnvCredentialsResolver(),
       providerId: provider,
-      model
+      model,
     }),
     modelSelector: new DefaultModelSelector(),
     prompts,
@@ -96,7 +94,7 @@ async function runWithOptions(args: string[], prompt: string): Promise<void> {
     spawner: new LocalProcessSpawner(path.resolve(__dirname, "worker.js")),
     policy: new DefaultPolicyEngine(),
     eventSink: new MemoryEventSink(),
-    sessionStore
+    sessionStore,
   });
 
   if (pluginsPath) {
@@ -107,67 +105,29 @@ async function runWithOptions(args: string[], prompt: string): Promise<void> {
 
   const state = await runtime.run(agentName, prompt, {
     maxIterations,
-    checkpointEvery,
-    snapshotEveryIterations: snapshotEvery,
+    snapshotEvery,
     profile: {
       defaultModel: model,
-      fastModel: model
+      fastModel: model,
     },
     modelOverride: model,
     sessionId,
     resume,
-    goal
+    goal,
   });
 
-  process.stdout.write(JSON.stringify(state, null, 2) + "\n");
-}
-
-async function checkpointsCommand(args: string[]): Promise<void> {
-  const sub = args[0] ?? "list";
-  const stateDir = getArgValue(args, "--state-dir") ?? path.resolve(process.cwd(), ".micro-harness");
-  const context = new ContextManager({
-    stateDir,
-    maxWorkingTurns: 6
-  });
-  await context.init();
-
-  if (sub === "list") {
-    const ids = await context.listCheckpoints();
-    process.stdout.write(ids.join("\n") + (ids.length > 0 ? "\n" : ""));
-    return;
-  }
-
-  if (sub === "show") {
-    const id = args[1];
-    if (!id) {
-      throw new Error("Usage: checkpoints show <checkpoint-id>");
-    }
-    const state = await context.loadCheckpoint(id);
-    process.stdout.write(JSON.stringify(state, null, 2) + "\n");
-    return;
-  }
-
-  if (sub === "delete") {
-    const id = args[1];
-    if (!id) {
-      throw new Error("Usage: checkpoints delete <checkpoint-id>");
-    }
-    await context.discardCheckpoint(id);
-    process.stdout.write(`Deleted ${id}\n`);
-    return;
-  }
-
-  throw new Error(`Unknown checkpoints subcommand: ${sub}`);
+  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
 }
 
 async function sessionsCommand(args: string[]): Promise<void> {
   const sub = args[0] ?? "list";
-  const stateDir = getArgValue(args, "--state-dir") ?? path.resolve(process.cwd(), ".micro-harness");
+  const stateDir =
+    getArgValue(args, "--state-dir") ?? path.resolve(process.cwd(), ".micro-harness");
   const sessionStore = new SessionStore(stateDir);
 
   if (sub === "list") {
     const sessions = await sessionStore.listSessions();
-    process.stdout.write(JSON.stringify(sessions, null, 2) + "\n");
+    process.stdout.write(`${JSON.stringify(sessions, null, 2)}\n`);
     return;
   }
 
@@ -177,7 +137,7 @@ async function sessionsCommand(args: string[]): Promise<void> {
       throw new Error("Usage: sessions show <session-id>");
     }
     const session = await sessionStore.getSession(sessionId);
-    process.stdout.write(JSON.stringify(session, null, 2) + "\n");
+    process.stdout.write(`${JSON.stringify(session, null, 2)}\n`);
     return;
   }
 
@@ -205,6 +165,14 @@ function getArgValue(args: string[], name: string): string | undefined {
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
+}
+
+function parsePositiveInt(raw: string, flagName: string): number {
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${flagName} must be a positive integer, got "${raw}"`);
+  }
+  return parsed;
 }
 
 function parseProvider(raw: string): ProviderId {

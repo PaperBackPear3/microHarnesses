@@ -1,11 +1,14 @@
 {
   "name": "@micro-harness/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Reference CLI built on @micro-harness/core.",
   "main": "dist/index.js",
   "bin": {
     "micro-harness": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json"
@@ -13,9 +16,5 @@
   "dependencies": {
     "@micro-harness/core": "file:../../packages/core",
     "@micro-harness/plugin-plan-mode": "file:../../packages/plugin-plan-mode"
-  },
-  "devDependencies": {
-    "@types/node": "^22.20.0",
-    "typescript": "^5.7.2"
   }
 }

@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AgentSpawner, SpawnRequest } from "../types";
+import type { SpawnRequest } from "../model/types";
+import type { AgentSpawner } from "../runtime/types";
 
 export interface LocalProcessSpawnerOptions {
   /** Additional environment variables to pass to the worker process. */
@@ -42,12 +43,12 @@ function runWorker(
   workerScriptPath: string,
   inputPath: string,
   outputPath: string,
-  extraEnv: Record<string, string>
+  extraEnv: Record<string, string>,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [workerScriptPath, inputPath, outputPath], {
       stdio: ["ignore", "pipe", "pipe"],
-      env: { PATH: process.env.PATH ?? "", ...extraEnv }
+      env: { PATH: process.env.PATH ?? "", ...extraEnv },
     });
     child.stdout?.on("data", (chunk: Buffer) => process.stdout.write(chunk));
     child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(chunk));

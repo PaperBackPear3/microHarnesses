@@ -1,5 +1,5 @@
-import { ProviderError } from "../errors";
-import { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "../types";
+import { ProviderError } from "../shared/errors";
+import type { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "./types";
 
 interface AnthropicResponse {
   content?: Array<{ type?: string; text?: string; name?: string; input?: Record<string, unknown> }>;
@@ -10,8 +10,17 @@ interface AnthropicResponse {
   };
 }
 
+export interface AnthropicAdapterOptions {
+  fetchImpl?: typeof fetch;
+}
+
 export class AnthropicAdapter implements ProviderAdapter {
   readonly providerId = "anthropic" as const;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(options: AnthropicAdapterOptions = {}) {
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
     const endpoint = `${auth.baseUrl ?? "https://api.anthropic.com/v1"}/messages`;
@@ -23,23 +32,23 @@ export class AnthropicAdapter implements ProviderAdapter {
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({
         role: m.role,
-        content: m.content
+        content: m.content,
       }));
 
-    const response = await fetch(endpoint, {
+    const response = await this.fetchImpl(endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         "x-api-key": auth.apiKey,
-        "anthropic-version": "2023-06-01"
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
         model: request.model,
         max_tokens: request.maxTokens ?? 800,
         temperature: request.temperature ?? 0.2,
         system: systemMessage,
-        messages
-      })
+        messages,
+      }),
     });
 
     if (!response.ok) {
@@ -49,21 +58,23 @@ export class AnthropicAdapter implements ProviderAdapter {
 
     const payload = (await response.json()) as AnthropicResponse;
     return {
-      assistantMessage: payload.content
-        ?.filter((item) => item.type === "text")
-        .map((item) => item.text ?? "")
-        .join("") ?? "",
-      toolCalls: payload.content
-        ?.filter((item) => item.type === "tool_use")
-        .map((item) => ({
-          name: item.name ?? "unknown",
-          input: item.input ?? {}
-        })) ?? [],
+      assistantMessage:
+        payload.content
+          ?.filter((item) => item.type === "text")
+          .map((item) => item.text ?? "")
+          .join("") ?? "",
+      toolCalls:
+        payload.content
+          ?.filter((item) => item.type === "tool_use")
+          .map((item) => ({
+            name: item.name ?? "unknown",
+            input: item.input ?? {},
+          })) ?? [],
       stop: payload.stop_reason === "end_turn",
       usage: {
         inputTokens: payload.usage?.input_tokens,
-        outputTokens: payload.usage?.output_tokens
-      }
+        outputTokens: payload.usage?.output_tokens,
+      },
     };
   }
 }

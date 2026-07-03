@@ -1,4 +1,10 @@
-import { ModelProfile, ModelSelectionDecision, ModelSelectionInput, ModelSelector } from "../types";
+import { ConfigError } from "../shared/errors";
+import type {
+  ModelProfile,
+  ModelSelectionDecision,
+  ModelSelectionInput,
+  ModelSelector,
+} from "./types";
 
 export class DefaultModelSelector implements ModelSelector {
   select(input: ModelSelectionInput, profile: ModelProfile): ModelSelectionDecision {
@@ -22,6 +28,6 @@ export class DefaultModelSelector implements ModelSelector {
       return { model: profile.defaultModel, reason: "profile" };
     }
 
-    throw new Error("No default model configured in ModelProfile");
+    throw new ConfigError("No default model configured in ModelProfile");
   }
 }

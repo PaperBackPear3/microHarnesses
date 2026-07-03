@@ -1,18 +1,23 @@
 {
   "name": "micro-harnesses",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Library-first framework for building micro harnesses.",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run build && npm run test --workspaces --if-present",
+    "lint": "biome check .",
+    "format": "biome format --write .",
     "start": "npm run build --silent && node apps/cli/dist/index.js",
-    "cli:run": "npm run build --silent && node apps/cli/dist/index.js run",
-    "checkpoints:list": "npm run build --silent && node apps/cli/dist/index.js checkpoints list"
+    "cli:run": "npm run build --silent && node apps/cli/dist/index.js run"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.20.0",
+    "typescript": "^5.7.2"
+  }
 }

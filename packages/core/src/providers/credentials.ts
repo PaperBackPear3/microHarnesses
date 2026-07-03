@@ -1,5 +1,5 @@
-import { AuthError } from "../errors";
-import { ProviderAuth, ProviderCredentialsResolver, ProviderId } from "../types";
+import { AuthError } from "../shared/errors";
+import type { ProviderAuth, ProviderCredentialsResolver, ProviderId } from "./types";
 
 export class EnvCredentialsResolver implements ProviderCredentialsResolver {
   async resolve(provider: ProviderId): Promise<ProviderAuth> {
@@ -10,14 +10,14 @@ export class EnvCredentialsResolver implements ProviderCredentialsResolver {
       }
       return {
         apiKey,
-        baseUrl: process.env.OPENAI_BASE_URL
+        baseUrl: process.env.OPENAI_BASE_URL,
       };
     }
 
     if (provider === "ollama") {
       return {
         apiKey: process.env.OLLAMA_API_KEY ?? "ollama",
-        baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434/v1"
+        baseUrl: process.env.OLLAMA_BASE_URL ?? "http://127.0.0.1:11434/v1",
       };
     }
 
@@ -27,7 +27,7 @@ export class EnvCredentialsResolver implements ProviderCredentialsResolver {
     }
     return {
       apiKey,
-      baseUrl: process.env.ANTHROPIC_BASE_URL
+      baseUrl: process.env.ANTHROPIC_BASE_URL,
     };
   }
 }

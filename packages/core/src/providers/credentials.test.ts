@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { EnvCredentialsResolver } from "./credentials";
 
 test("EnvCredentialsResolver returns default local config for ollama", async () => {

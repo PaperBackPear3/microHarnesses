@@ -1,11 +1,17 @@
-import { HarnessPlugin, PluginApi, ToolDefinition } from "@micro-harness/core";
-import { clampNumber, normalizeStringList } from "../utils";
+import type {
+  HarnessPlugin,
+  PluginApi,
+  PluginCapability,
+  ToolDefinition,
+} from "@micro-harness/core";
 import STEPS from "../steps.json";
+import { clampNumber, normalizeStringList } from "../utils";
 
 type StepTemplate = { title: string; detail: string };
 
 export class PlannerPlugin implements HarnessPlugin {
   readonly name = "planner-plugin";
+  readonly capabilities: PluginCapability[] = ["tools"];
 
   register(api: PluginApi): void {
     api.registerTool(this.planAgentTool());
@@ -28,7 +34,7 @@ export class PlannerPlugin implements HarnessPlugin {
         const milestones = [
           "Validate requirements and constraints",
           "Implement minimal vertical slice",
-          "Verify behaviour and document operations"
+          "Verify behaviour and document operations",
         ].slice(0, Math.min(3, steps.length));
 
         return {
@@ -43,10 +49,10 @@ export class PlannerPlugin implements HarnessPlugin {
           steps,
           notes: [
             "This tool is read-only and does not execute actions.",
-            "Use explore_agent to gather codebase facts before finalising the plan."
-          ]
+            "Use explore_agent to gather codebase facts before finalising the plan.",
+          ],
         };
-      }
+      },
     };
   }
 }
@@ -55,8 +61,14 @@ function buildPlanSteps(
   goal: string,
   maxSteps: number,
   scope: string[],
-  constraints: string[]
-): Array<{ id: string; title: string; detail: string; priority: "high" | "medium" | "low"; status: "pending" }> {
+  constraints: string[],
+): Array<{
+  id: string;
+  title: string;
+  detail: string;
+  priority: "high" | "medium" | "low";
+  status: "pending";
+}> {
   const templates = (STEPS as StepTemplate[]).slice(0, maxSteps);
 
   return templates.map((step, index) => {
@@ -71,7 +83,7 @@ function buildPlanSteps(
       title: step.title,
       detail,
       priority: index === 0 ? "high" : index < 3 ? "medium" : "low",
-      status: "pending"
+      status: "pending",
     };
   });
 }

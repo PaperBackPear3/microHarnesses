@@ -1,7 +1,10 @@
-import { appendFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ExecutionEvent, HarnessState, SessionManifest } from "../types";
+import type { HarnessState } from "../context/types";
+import type { ExecutionEvent } from "../events/types";
+import { isNodeError } from "../shared/nodeError";
+import type { SessionManifest } from "./types";
 
 interface SnapshotFile {
   id: string;
@@ -36,7 +39,7 @@ export class SessionStore {
       updatedAt: new Date().toISOString(),
       eventLogPath: "events.jsonl",
       supportHistoryPath: "support-history.jsonl",
-      lastEventSeq: 0
+      lastEventSeq: 0,
     };
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
     return manifest;
@@ -47,7 +50,7 @@ export class SessionStore {
     const updated: SessionManifest = {
       ...manifest,
       goal,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
     await this.writeManifest(updated);
   }
@@ -57,7 +60,7 @@ export class SessionStore {
     const nextSeq = manifest.lastEventSeq + 1;
     const row = {
       seq: nextSeq,
-      ...event
+      ...event,
     };
     await appendFile(this.eventLogAbsolutePath(manifest), `${JSON.stringify(row)}\n`, "utf8");
     manifest.lastEventSeq = nextSeq;
@@ -69,7 +72,7 @@ export class SessionStore {
     const manifest = await this.readManifest(sessionId);
     const row = {
       timestamp: new Date().toISOString(),
-      ...data
+      ...data,
     };
     await appendFile(this.supportHistoryAbsolutePath(manifest), `${JSON.stringify(row)}\n`, "utf8");
     manifest.updatedAt = new Date().toISOString();
@@ -85,7 +88,7 @@ export class SessionStore {
       id: snapshotId,
       createdAt: new Date().toISOString(),
       runId,
-      state
+      state,
     };
     await writeFile(snapshotPath, JSON.stringify(payload, null, 2), "utf8");
 
@@ -94,7 +97,7 @@ export class SessionStore {
       latestRunId: runId,
       latestSnapshotId: snapshotId,
       latestSnapshotPath: snapshotRelPath,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
     };
     await this.writeManifest(updated);
     return snapshotId;
@@ -166,8 +169,4 @@ export class SessionStore {
     const manifestPath = path.join(this.sessionDir(manifest.sessionId), "manifest.json");
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
   }
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error !== null && typeof error === "object" && "code" in error;
 }

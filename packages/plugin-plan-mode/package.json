@@ -1,18 +1,17 @@
 {
   "name": "@micro-harness/plugin-plan-mode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read-only planning and exploration plugin for micro-harness.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
     "@micro-harness/core": "file:../core"
-  },
-  "devDependencies": {
-    "@types/node": "^22.20.0",
-    "typescript": "^5.7.2"
   }
 }

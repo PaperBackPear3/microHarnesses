@@ -1,7 +1,7 @@
 /** Shared utilities for OpenAI-compatible provider adapters. */
 
 export function contentToText(
-  content: string | Array<{ type: string; text?: string }> | undefined
+  content: string | Array<{ type: string; text?: string }> | undefined,
 ): string {
   if (!content) return "";
   if (typeof content === "string") return content;
@@ -11,11 +11,16 @@ export function contentToText(
     .join("");
 }
 
-export function parseToolCallArgs(rawArgs: string): Record<string, unknown> {
+export interface ParsedToolCallArgs {
+  input: Record<string, unknown>;
+  malformed: boolean;
+}
+
+export function parseToolCallArgs(rawArgs: string): ParsedToolCallArgs {
   try {
-    return JSON.parse(rawArgs) as Record<string, unknown>;
+    return { input: JSON.parse(rawArgs) as Record<string, unknown>, malformed: false };
   } catch {
-    return { raw: rawArgs };
+    return { input: { raw: rawArgs }, malformed: true };
   }
 }
 
@@ -38,14 +43,18 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
   if (!first?.message) return null;
   return {
     assistantMessage: contentToText(first.message.content),
-    toolCalls: (first.message.tool_calls ?? []).map((call) => ({
-      name: call.function?.name ?? "unknown",
-      input: parseToolCallArgs(call.function?.arguments ?? "{}")
-    })),
+    toolCalls: (first.message.tool_calls ?? []).map((call) => {
+      const parsed = parseToolCallArgs(call.function?.arguments ?? "{}");
+      return {
+        name: call.function?.name ?? "unknown",
+        input: parsed.input,
+        ...(parsed.malformed ? { malformedInput: true } : {}),
+      };
+    }),
     stop: first.finish_reason === "stop",
     usage: {
       inputTokens: payload.usage?.prompt_tokens,
-      outputTokens: payload.usage?.completion_tokens
-    }
+      outputTokens: payload.usage?.completion_tokens,
+    },
   };
 }

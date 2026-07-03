@@ -1,6 +1,11 @@
-import { HarnessPlugin, PluginApi, ToolDefinition } from "@micro-harness/core";
+import type {
+  HarnessPlugin,
+  PluginApi,
+  PluginCapability,
+  ToolDefinition,
+} from "@micro-harness/core";
+import { ExplorerPlugin, type ExplorerPluginOptions } from "./agents/explorerPlugin";
 import { PlannerPlugin } from "./agents/plannerPlugin";
-import { ExplorerPlugin, ExplorerPluginOptions } from "./agents/explorerPlugin";
 
 export type { ExplorerPluginOptions };
 
@@ -13,6 +18,7 @@ export type PlanModePluginOptions = ExplorerPluginOptions;
  */
 export class PlanModePlugin implements HarnessPlugin {
   readonly name = "plan-mode-plugin";
+  readonly capabilities: PluginCapability[] = ["tools"];
   private readonly planner: PlannerPlugin;
   private readonly explorer: ExplorerPlugin;
 
@@ -40,10 +46,10 @@ export class PlanModePlugin implements HarnessPlugin {
             "No file writes",
             "No process execution",
             "No network calls",
-            "Planning and exploration only"
-          ]
+            "Planning and exploration only",
+          ],
         };
-      }
+      },
     };
   }
 }
