@@ -3,6 +3,7 @@ import {
   CompletionRequest,
   ModelAdapter,
   ProviderCredentialsResolver,
+  ProviderId,
   ProviderMessage,
   StepInput,
   StepPlan
@@ -11,14 +12,14 @@ import {
 export interface ProviderModelAdapterOptions {
   providerRegistry: ProviderRegistry;
   credentialsResolver: ProviderCredentialsResolver;
-  providerId: "openai" | "anthropic";
+  providerId: ProviderId;
   model: string;
 }
 
 export class ProviderModelAdapter implements ModelAdapter {
   private readonly providerRegistry: ProviderRegistry;
   private readonly credentialsResolver: ProviderCredentialsResolver;
-  private readonly providerId: "openai" | "anthropic";
+  private readonly providerId: ProviderId;
   private readonly model: string;
 
   constructor(options: ProviderModelAdapterOptions) {

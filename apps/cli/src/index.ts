@@ -11,6 +11,7 @@ import {
   HarnessRuntime,
   LocalProcessSpawner,
   MemoryEventSink,
+  OllamaAdapter,
   OpenAIAdapter,
   PluginLoader,
   ProviderModelAdapter,
@@ -49,7 +50,7 @@ async function runCommand(args: string[]): Promise<void> {
   const checkpointEvery = Number(getArgValue(args, "--checkpoint-every") ?? "2");
   const pluginsPath = getArgValue(args, "--plugins");
   const provider = parseProvider(getArgValue(args, "--provider") ?? "openai");
-  const model = getArgValue(args, "--model") ?? "gpt-4.1-mini";
+  const model = getArgValue(args, "--model") ?? defaultModelFor(provider);
 
   const toolRegistry = new ToolRegistry();
   toolRegistry.register(echoTool);
@@ -63,6 +64,7 @@ async function runCommand(args: string[]): Promise<void> {
   const providerRegistry = new ProviderRegistry();
   providerRegistry.register(new OpenAIAdapter());
   providerRegistry.register(new AnthropicAdapter());
+  providerRegistry.register(new OllamaAdapter());
 
   const runtime = new HarnessRuntime({
     model: new ProviderModelAdapter({
@@ -93,7 +95,8 @@ async function runCommand(args: string[]): Promise<void> {
       defaultModel: model,
       fastModel: model
     },
-    modelProvider: provider
+    modelProvider: provider,
+    modelOverride: model
   });
 
   process.stdout.write(JSON.stringify(state, null, 2) + "\n");
@@ -146,10 +149,17 @@ function getArgValue(args: string[], name: string): string | undefined {
 }
 
 function parseProvider(raw: string): ProviderId {
-  if (raw === "openai" || raw === "anthropic") {
+  if (raw === "openai" || raw === "anthropic" || raw === "ollama") {
     return raw;
   }
-  throw new Error(`Unsupported provider "${raw}". Use "openai" or "anthropic".`);
+  throw new Error(`Unsupported provider "${raw}". Use "openai", "anthropic", or "ollama".`);
+}
+
+function defaultModelFor(provider: ProviderId): string {
+  if (provider === "ollama") {
+    return "llama3.2:3b";
+  }
+  return "gpt-4.1-mini";
 }
 
 void main().catch((error: unknown) => {

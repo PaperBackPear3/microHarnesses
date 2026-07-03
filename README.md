@@ -2,7 +2,7 @@
 
 Library-first framework to bootstrap agentic micro harnesses with:
 - prompt packs from Markdown folders
-- provider adapters (OpenAI + Anthropic)
+- provider adapters (OpenAI + Anthropic + Ollama)
 - model selection strategy
 - tool policy enforcement (deny/allow before execution)
 - loop orchestration, checkpoints, local agent spawning, plugins
@@ -33,6 +33,8 @@ Set provider credentials:
 export OPENAI_API_KEY=...
 # or
 export ANTHROPIC_API_KEY=...
+# for local ollama (optional override)
+export OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
 ```
 
 Then run:
@@ -41,10 +43,17 @@ Then run:
 npm run cli:run -- "summarize this task" --agent default --provider openai --model gpt-4.1-mini
 ```
 
+Run locally with Ollama:
+
+```bash
+ollama pull llama3.2:3b
+npm run cli:run -- "summarize this task" --agent default --provider ollama --model llama3.2:3b
+```
+
 Useful flags:
 - `--agent <name>`
 - `--prompts-dir <path>`
-- `--provider <openai|anthropic>`
+- `--provider <openai|anthropic|ollama>`
 - `--model <name>`
 - `--iterations <n>`
 - `--checkpoint-every <n>`

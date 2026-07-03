@@ -8,6 +8,7 @@ Use npm scripts from the root `package.json`:
 - Run core tests: `npm test`
 - Run a single compiled test file: `node --test packages/core/dist/runtime/runtime.test.js`
 - Run harness (build + run): `npm run cli:run -- "summarize this task" --agent default --provider openai`
+- Run harness locally via Ollama: `npm run cli:run -- "small local task" --agent default --provider ollama --model llama3.2:3b`
 - Start default command (build + run): `npm start`
 - List checkpoints (build + run): `npm run checkpoints:list`
 - Show checkpoint: `node apps/cli/dist/index.js checkpoints show <checkpoint-id>`
@@ -52,8 +53,8 @@ This project is now library-first with a reference CLI:
    - Compresses only newly-overflowed turns into summary files under `<stateDir>/summaries`.
    - Stores checkpoints under `<stateDir>/checkpoints` with full `HarnessState`.
 
-5. `packages/core/src/providers/*` implements OpenAI/Anthropic adapters and auth resolution.
-   - `EnvCredentialsResolver` reads provider keys from environment variables.
+5. `packages/core/src/providers/*` implements OpenAI/Anthropic/Ollama adapters and auth resolution.
+   - `EnvCredentialsResolver` reads provider keys/base URLs from environment variables.
    - Provider adapters normalize responses to shared runtime contracts.
 
 6. `packages/core/src/tools/*` and `packages/core/src/tools/registry.ts` implement tool execution.

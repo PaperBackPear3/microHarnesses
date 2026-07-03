@@ -10,6 +10,7 @@ export * from "./providers/registry";
 export * from "./providers/credentials";
 export * from "./providers/openaiAdapter";
 export * from "./providers/anthropicAdapter";
+export * from "./providers/ollamaAdapter";
 export * from "./model/defaultModelSelector";
 export * from "./model/providerModelAdapter";
 export * from "./agents/localSpawner";

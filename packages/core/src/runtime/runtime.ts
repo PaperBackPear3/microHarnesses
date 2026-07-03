@@ -115,6 +115,7 @@ export class HarnessRuntime {
         {
           agentName,
           iteration,
+          overrideModel: options.modelOverride,
           promptHintModel: bundle.metadata.modelHint
         },
         options.profile

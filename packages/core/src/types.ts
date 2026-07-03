@@ -62,7 +62,7 @@ export interface ProviderResponse {
   };
 }
 
-export type ProviderId = "openai" | "anthropic";
+export type ProviderId = "openai" | "anthropic" | "ollama";
 
 export interface CompletionRequest {
   model: string;
@@ -198,6 +198,7 @@ export interface RunOptions {
   checkpointEvery: number;
   profile: ModelProfile;
   modelProvider: ProviderId;
+  modelOverride?: string;
 }
 
 export type ExecutionEventType =
