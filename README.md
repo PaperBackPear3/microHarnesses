@@ -65,14 +65,6 @@ ollama pull llama3.2:3b
 npm run cli:run -- "summarise this task" --provider ollama --model llama3.2:3b
 ```
 
-With plan-mode plugin:
-
-```bash
-npm run cli:run -- "plan migration" \
-  --plugins ./apps/cli/plugins/plan-mode.plugin.js \
-  --provider openai --model gpt-4.1-mini
-```
-
 ### CLI flags
 
 | Flag | Default | Description |
