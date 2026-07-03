@@ -1,0 +1,65 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { ProviderError } from "@micro-harness/core";
+import { OpenAIAdapter } from "./openaiAdapter";
+
+test("OpenAIAdapter posts to /chat/completions with Bearer auth", async () => {
+  let seenUrl: string | undefined;
+  let seenHeaders: Record<string, string> | undefined;
+  let seenBody: unknown;
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    seenUrl = url;
+    seenHeaders = init.headers as Record<string, string>;
+    seenBody = JSON.parse(init.body as string);
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: "hi" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 2 },
+      }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+
+  const adapter = new OpenAIAdapter({ fetchImpl });
+  const result = await adapter.complete(
+    { model: "gpt-x", messages: [{ role: "user", content: "hello" }] },
+    { apiKey: "sk-test" },
+  );
+  assert.equal(seenUrl, "https://api.openai.com/v1/chat/completions");
+  assert.match(seenHeaders?.authorization ?? "", /^Bearer sk-test$/);
+  assert.equal((seenBody as { model: string }).model, "gpt-x");
+  assert.equal(result.assistantMessage, "hi");
+  assert.equal(result.stop, true);
+});
+
+test("OpenAIAdapter throws ProviderError on non-ok response", async () => {
+  const fetchImpl = (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch;
+  const adapter = new OpenAIAdapter({ fetchImpl });
+  await assert.rejects(
+    () =>
+      adapter.complete({ model: "m", messages: [{ role: "user", content: "x" }] }, { apiKey: "k" }),
+    ProviderError,
+  );
+});
+
+test("OpenAIAdapter uses custom baseUrl when provided", async () => {
+  let seenUrl: string | undefined;
+  const fetchImpl = (async (url: string) => {
+    seenUrl = url;
+    return new Response(
+      JSON.stringify({ choices: [{ message: { content: "" }, finish_reason: "stop" }] }),
+      { status: 200 },
+    );
+  }) as unknown as typeof fetch;
+  const adapter = new OpenAIAdapter({ fetchImpl });
+  await adapter.complete(
+    { model: "m", messages: [] },
+    { apiKey: "k", baseUrl: "https://example.test/v1" },
+  );
+  assert.equal(seenUrl, "https://example.test/v1/chat/completions");
+});
+
+test("OpenAIAdapter exposes defaultModel", () => {
+  const adapter = new OpenAIAdapter({ defaultModel: "custom" });
+  assert.equal(adapter.defaultModel, "custom");
+});

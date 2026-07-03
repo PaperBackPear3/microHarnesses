@@ -1,6 +1,6 @@
 import type { SafetyMode, ToolPolicyEngine } from "../policy/types";
 import type { RunEmitter } from "../runtime/runEmitter";
-import type { RuntimeLimits } from "../runtime/types";
+import type { ApprovalHandler, RuntimeLimits } from "../runtime/types";
 import { ToolTimeoutError } from "../shared/errors";
 import type { ToolRegistry } from "./registry";
 import type { ToolCall, ToolDefinition, ToolResult } from "./types";
@@ -9,6 +9,7 @@ export interface ToolExecutionEngineDeps {
   tools: ToolRegistry;
   policy: ToolPolicyEngine;
   limits: RuntimeLimits;
+  approvalHandler?: ApprovalHandler;
 }
 
 export interface ToolExecutionRunContext {
@@ -28,12 +29,14 @@ export class ToolExecutionEngine {
   private readonly tools: ToolRegistry;
   private readonly policy: ToolPolicyEngine;
   private readonly limits: RuntimeLimits;
+  private readonly approvalHandler?: ApprovalHandler;
   private activeToolController?: AbortController;
 
   constructor(deps: ToolExecutionEngineDeps) {
     this.tools = deps.tools;
     this.policy = deps.policy;
     this.limits = deps.limits;
+    this.approvalHandler = deps.approvalHandler;
   }
 
   abort(reason: string): void {
@@ -104,20 +107,45 @@ export class ToolExecutionEngine {
       });
 
       if (policy.decision !== "allow") {
-        await ctx.emitter.emit("tool.blocked", {
-          tool: call.name,
-          decision: policy.decision,
-          reason: policy.reason,
-          iteration: ctx.iteration,
-        });
-        await ctx.emitter.support({
-          iteration: ctx.iteration,
-          tool: call.name,
-          category: "policy",
-          reason: policy.reason,
-        });
-        results.push({ ok: false, output: {}, error: policy.reason });
-        continue;
+        if (policy.decision === "require_approval") {
+          const approved = await this.requestApproval(tool, call, policy.reason, ctx);
+          if (approved) {
+            // fall through to execution
+          } else {
+            const denialReason = this.approvalHandler
+              ? `Approval denied: ${policy.reason}`
+              : `Approval required but no handler configured: ${policy.reason}`;
+            await ctx.emitter.emit("tool.blocked", {
+              tool: call.name,
+              decision: "require_approval",
+              reason: denialReason,
+              iteration: ctx.iteration,
+            });
+            await ctx.emitter.support({
+              iteration: ctx.iteration,
+              tool: call.name,
+              category: "approval_denied",
+              reason: denialReason,
+            });
+            results.push({ ok: false, output: {}, error: denialReason });
+            continue;
+          }
+        } else {
+          await ctx.emitter.emit("tool.blocked", {
+            tool: call.name,
+            decision: policy.decision,
+            reason: policy.reason,
+            iteration: ctx.iteration,
+          });
+          await ctx.emitter.support({
+            iteration: ctx.iteration,
+            tool: call.name,
+            category: "policy",
+            reason: policy.reason,
+          });
+          results.push({ ok: false, output: {}, error: policy.reason });
+          continue;
+        }
       }
 
       await ctx.emitter.emit("tool.allowed", { tool: call.name, iteration: ctx.iteration });
@@ -146,6 +174,47 @@ export class ToolExecutionEngine {
       }
     }
     return results;
+  }
+
+  private async requestApproval(
+    tool: ToolDefinition,
+    call: ToolCall,
+    reason: string,
+    ctx: ToolExecutionRunContext,
+  ): Promise<boolean> {
+    await ctx.emitter.emit("tool.approval_requested", {
+      tool: call.name,
+      reason,
+      iteration: ctx.iteration,
+    });
+    if (!this.approvalHandler) {
+      return false;
+    }
+    try {
+      const approved = await this.approvalHandler({
+        runId: ctx.emitter.runId,
+        iteration: ctx.iteration,
+        agentName: ctx.agentName,
+        tool,
+        call,
+        reason,
+        safetyMode: ctx.safetyMode,
+      });
+      await ctx.emitter.emit(approved ? "tool.approval_approved" : "tool.approval_denied", {
+        tool: call.name,
+        iteration: ctx.iteration,
+        reason,
+      });
+      return approved;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "approval handler failed";
+      await ctx.emitter.emit("tool.approval_denied", {
+        tool: call.name,
+        iteration: ctx.iteration,
+        reason: `handler error: ${message}`,
+      });
+      return false;
+    }
   }
 }
 

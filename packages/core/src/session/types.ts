@@ -9,4 +9,6 @@ export interface SessionManifest {
   eventLogPath: string;
   supportHistoryPath: string;
   lastEventSeq: number;
+  /** When set, this session is a child spawned by another session. */
+  parentSessionId?: string;
 }

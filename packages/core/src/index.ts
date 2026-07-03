@@ -12,15 +12,15 @@ export * from "./tools/executionEngine";
 // Policy
 export * from "./policy/types";
 export * from "./policy/defaultPolicyEngine";
+export * from "./policy/compositePolicyEngine";
+export * from "./policy/safety/commandNormalizer";
+export * from "./policy/safety/defaultRules";
+export * from "./policy/safety/commandSafetyRule";
 
 // Providers
 export * from "./providers/types";
 export * from "./providers/registry";
-export * from "./providers/credentials";
-export * from "./providers/openaiCompat";
-export * from "./providers/openaiAdapter";
-export * from "./providers/anthropicAdapter";
-export * from "./providers/ollamaAdapter";
+export * from "./providers/credentialsRegistry";
 
 // Model
 export * from "./model/types";
@@ -50,9 +50,11 @@ export * from "./runtime/runtime";
 export * from "./runtime/runEmitter";
 export * from "./runtime/snapshotCadence";
 
-// Agents
-export * from "./agents/localSpawner";
-
 // Plugins
 export * from "./plugins/types";
 export * from "./plugins/loader";
+export * from "./plugins/host";
+
+// Subagents
+export * from "./subagents/types";
+export * from "./subagents/inProcessSubagentRunner";

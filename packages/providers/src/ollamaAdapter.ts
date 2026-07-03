@@ -1,17 +1,27 @@
-import { ProviderError } from "../shared/errors";
+import {
+  type CompletionRequest,
+  type ProviderAdapter,
+  type ProviderAuth,
+  ProviderError,
+  type ProviderResponse,
+} from "@micro-harness/core";
 import { type OpenAICompatResponse, parseOpenAICompatResponse } from "./openaiCompat";
-import type { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "./types";
 
 export interface OllamaAdapterOptions {
   fetchImpl?: typeof fetch;
+  defaultModel?: string;
 }
+
+const DEFAULT_MODEL = "llama3.2:3b";
 
 export class OllamaAdapter implements ProviderAdapter {
   readonly providerId = "ollama" as const;
+  readonly defaultModel: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OllamaAdapterOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.defaultModel = options.defaultModel ?? DEFAULT_MODEL;
   }
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {

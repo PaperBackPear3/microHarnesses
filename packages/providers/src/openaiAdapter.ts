@@ -1,17 +1,27 @@
-import { ProviderError } from "../shared/errors";
+import {
+  type CompletionRequest,
+  type ProviderAdapter,
+  type ProviderAuth,
+  ProviderError,
+  type ProviderResponse,
+} from "@micro-harness/core";
 import { type OpenAICompatResponse, parseOpenAICompatResponse } from "./openaiCompat";
-import type { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "./types";
 
 export interface OpenAIAdapterOptions {
   fetchImpl?: typeof fetch;
+  defaultModel?: string;
 }
+
+const DEFAULT_MODEL = "gpt-4.1-mini";
 
 export class OpenAIAdapter implements ProviderAdapter {
   readonly providerId = "openai" as const;
+  readonly defaultModel: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OpenAIAdapterOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.defaultModel = options.defaultModel ?? DEFAULT_MODEL;
   }
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {

@@ -1,5 +1,10 @@
-import { ProviderError } from "../shared/errors";
-import type { CompletionRequest, ProviderAdapter, ProviderAuth, ProviderResponse } from "./types";
+import {
+  type CompletionRequest,
+  type ProviderAdapter,
+  type ProviderAuth,
+  ProviderError,
+  type ProviderResponse,
+} from "@micro-harness/core";
 
 interface AnthropicResponse {
   content?: Array<{ type?: string; text?: string; name?: string; input?: Record<string, unknown> }>;
@@ -12,14 +17,19 @@ interface AnthropicResponse {
 
 export interface AnthropicAdapterOptions {
   fetchImpl?: typeof fetch;
+  defaultModel?: string;
 }
+
+const DEFAULT_MODEL = "claude-3-5-sonnet-latest";
 
 export class AnthropicAdapter implements ProviderAdapter {
   readonly providerId = "anthropic" as const;
+  readonly defaultModel: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: AnthropicAdapterOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.defaultModel = options.defaultModel ?? DEFAULT_MODEL;
   }
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {

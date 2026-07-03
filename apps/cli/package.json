@@ -15,6 +15,9 @@
   },
   "dependencies": {
     "@micro-harness/core": "file:../../packages/core",
-    "@micro-harness/plugin-plan-mode": "file:../../packages/plugin-plan-mode"
+    "@micro-harness/plugin-example-tools": "file:../../packages/plugin-example-tools",
+    "@micro-harness/plugin-plan-mode": "file:../../packages/plugin-plan-mode",
+    "@micro-harness/plugin-subagents": "file:../../packages/plugin-subagents",
+    "@micro-harness/providers": "file:../../packages/providers"
   }
 }

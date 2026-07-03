@@ -25,14 +25,9 @@ export interface ModelSelector {
   select(input: ModelSelectionInput, profile: ModelProfile): ModelSelectionDecision;
 }
 
-export interface SpawnRequest {
-  prompt: string;
-}
-
 export interface StepPlan {
   assistantMessage: string;
   toolCalls: ToolCall[];
-  spawnRequest?: SpawnRequest;
   stop: boolean;
   usage?: {
     inputTokens?: number;

@@ -1,7 +1,7 @@
 import type { CredentialsRegistry } from "../providers/credentialsRegistry";
-import { ConfigError } from "../shared/errors";
 import type { ProviderRegistry } from "../providers/registry";
 import type { CompletionRequest, ProviderId, ProviderMessage } from "../providers/types";
+import { ConfigError } from "../shared/errors";
 import type { ModelAdapter, StepInput, StepPlan } from "./types";
 
 export interface ProviderModelAdapterOptions {

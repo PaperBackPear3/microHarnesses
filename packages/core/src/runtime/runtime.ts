@@ -13,7 +13,7 @@ import { RunEmitter } from "./runEmitter";
 import { shouldSnapshot } from "./snapshotCadence";
 import type {
   AfterLoopHook,
-  AgentSpawner,
+  ApprovalHandler,
   BeforeLoopHook,
   RunOptions,
   RuntimeLimits,
@@ -25,11 +25,11 @@ interface RuntimeDeps {
   prompts: PromptSource;
   tools: ToolRegistry;
   context: ContextManager;
-  spawner: AgentSpawner;
   policy: ToolPolicyEngine;
   eventSink: EventSink;
   sessionStore?: SessionStore;
   limits?: RuntimeLimits;
+  approvalHandler?: ApprovalHandler;
 }
 
 const DEFAULT_LIMITS: RuntimeLimits = {
@@ -43,15 +43,16 @@ export class HarnessRuntime {
   private readonly prompts: PromptSource;
   private readonly tools: ToolRegistry;
   private readonly context: ContextManager;
-  private readonly spawner: AgentSpawner;
   private readonly policy: ToolPolicyEngine;
   private readonly eventSink: EventSink;
   private readonly sessionStore?: SessionStore;
   private readonly defaultLimits: RuntimeLimits;
+  private readonly approvalHandler?: ApprovalHandler;
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
   private cancelled = false;
   private activeEngine?: ToolExecutionEngine;
+  private currentSessionId?: string;
 
   constructor(deps: RuntimeDeps) {
     this.model = deps.model;
@@ -59,11 +60,11 @@ export class HarnessRuntime {
     this.prompts = deps.prompts;
     this.tools = deps.tools;
     this.context = deps.context;
-    this.spawner = deps.spawner;
     this.policy = deps.policy;
     this.eventSink = deps.eventSink;
     this.sessionStore = deps.sessionStore;
     this.defaultLimits = deps.limits ?? DEFAULT_LIMITS;
+    this.approvalHandler = deps.approvalHandler;
   }
 
   kill(): void {
@@ -96,19 +97,29 @@ export class HarnessRuntime {
     let goal = options.goal ?? userPrompt;
 
     if (this.sessionStore) {
-      const manifest = await this.sessionStore.initSession(options.sessionId, goal);
+      const manifest = await this.sessionStore.initSession(
+        options.sessionId,
+        goal,
+        options.parentSessionId,
+      );
       sessionId = manifest.sessionId;
       goal = manifest.goal || goal;
       if (!manifest.goal && goal) {
         await this.sessionStore.updateGoal(sessionId, goal);
       }
     }
+    this.currentSessionId = sessionId;
 
     const emitter = new RunEmitter(
       { eventSink: this.eventSink, sessionStore: this.sessionStore },
       { runId, sessionId },
     );
-    const engine = new ToolExecutionEngine({ tools: this.tools, policy: this.policy, limits });
+    const engine = new ToolExecutionEngine({
+      tools: this.tools,
+      policy: this.policy,
+      limits,
+      approvalHandler: this.approvalHandler,
+    });
     this.activeEngine = engine;
 
     let state: HarnessState = {
@@ -203,9 +214,6 @@ export class HarnessRuntime {
         emitter,
         isCancelled: () => this.cancelled,
       });
-      const spawnedAgentResult = step.spawnRequest
-        ? await this.spawner.spawn(step.spawnRequest)
-        : undefined;
 
       state.turns.push({
         id: randomUUID(),
@@ -214,7 +222,6 @@ export class HarnessRuntime {
         assistantMessage: step.assistantMessage,
         toolCalls: step.toolCalls,
         toolResults,
-        spawnedAgentResult,
       });
 
       if (this.sessionStore && sessionId && shouldSnapshot(iteration, options.snapshotEvery)) {
@@ -236,7 +243,13 @@ export class HarnessRuntime {
     await emitter.emit("run.completed", { turns: state.turns.length, sessionId });
 
     this.activeEngine = undefined;
+    this.currentSessionId = undefined;
     return state;
+  }
+
+  /** Currently active session id (set only while `run` is executing). */
+  get sessionId(): string | undefined {
+    return this.currentSessionId;
   }
 }
 

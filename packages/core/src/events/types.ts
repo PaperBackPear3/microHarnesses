@@ -5,6 +5,9 @@ export type ExecutionEventType =
   | "tool.allowed"
   | "tool.blocked"
   | "tool.killed"
+  | "tool.approval_requested"
+  | "tool.approval_approved"
+  | "tool.approval_denied"
   | "run.limit_reached"
   | "run.completed";
 

@@ -1,17 +1,26 @@
 {
   "name": "@micro-harness/plugin-plan-mode",
   "version": "0.2.0",
-  "description": "Read-only planning and exploration plugin for micro-harness.",
+  "description": "Read-only planning and exploration plugin for @micro-harness/core. Ships a plan_agent and an explore_agent tool.",
+  "license": "MIT",
+  "keywords": ["micro-harness", "plugin", "planning", "exploration"],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "engines": {
-    "node": ">=20"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
+  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
+  "publishConfig": { "access": "public" },
+  "engines": { "node": ">=20" },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "test": "node --test \"dist/**/*.test.js\""
   },
-  "dependencies": {
-    "@micro-harness/core": "file:../core"
+  "peerDependencies": {
+    "@micro-harness/core": "^0.3.0"
   }
 }

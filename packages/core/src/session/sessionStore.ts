@@ -20,7 +20,11 @@ export class SessionStore {
     this.rootDir = path.join(stateDir, "sessions");
   }
 
-  async initSession(sessionId?: string, goal?: string): Promise<SessionManifest> {
+  async initSession(
+    sessionId?: string,
+    goal?: string,
+    parentSessionId?: string,
+  ): Promise<SessionManifest> {
     await mkdir(this.rootDir, { recursive: true });
     const effectiveSessionId = sessionId ?? `s-${randomUUID()}`;
     const sessionDir = this.sessionDir(effectiveSessionId);
@@ -40,6 +44,7 @@ export class SessionStore {
       eventLogPath: "events.jsonl",
       supportHistoryPath: "support-history.jsonl",
       lastEventSeq: 0,
+      ...(parentSessionId ? { parentSessionId } : {}),
     };
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
     return manifest;

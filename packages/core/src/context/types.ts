@@ -7,7 +7,6 @@ export interface Turn {
   assistantMessage: string;
   toolCalls: ToolCall[];
   toolResults: ToolResult[];
-  spawnedAgentResult?: string;
 }
 
 export interface HarnessState {

@@ -71,15 +71,6 @@ class FakeContextManager {
   async buildWorkingTurns(state: HarnessState["turns"]): Promise<HarnessState["turns"]> {
     return state;
   }
-  async saveCheckpoint(_state: HarnessState): Promise<string> {
-    return "cp-test";
-  }
-}
-
-class FakeSpawner {
-  async spawn(_request: { prompt: string }): Promise<string> {
-    return "spawned";
-  }
 }
 
 const options: RunOptions = {
@@ -100,7 +91,6 @@ test("runtime does not crash on unknown tool", async () => {
     prompts: new FakePromptSource(),
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
-    spawner: new FakeSpawner() as never,
     policy: new AllowPolicy(),
     eventSink: events,
   });
@@ -133,7 +123,6 @@ test("runtime emits limit event and exits gracefully when tool call limit is exc
     prompts: new FakePromptSource(),
     tools,
     context: new FakeContextManager() as never,
-    spawner: new FakeSpawner() as never,
     policy: new AllowPolicy(),
     eventSink: events,
     limits: {
@@ -150,6 +139,143 @@ test("runtime emits limit event and exits gracefully when tool call limit is exc
   );
   assert.equal(
     events.events.some((event) => event.type === "run.completed"),
+    true,
+  );
+});
+
+class ApprovalPolicy implements ToolPolicyEngine {
+  async evaluate() {
+    return { decision: "require_approval" as const, reason: "test approval" };
+  }
+}
+
+test("approval handler that returns true allows the tool call", async () => {
+  const events = new FakeEventSink();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "risky",
+    description: "",
+    risk: "high",
+    async execute() {
+      return { ran: true };
+    },
+  });
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "call risky",
+      toolCalls: [{ name: "risky", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new ApprovalPolicy(),
+    eventSink: events,
+    approvalHandler: async () => true,
+  });
+  const state = await runtime.run("default", "hello", options);
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
+  assert.equal(
+    events.events.some((e) => e.type === "tool.approval_approved"),
+    true,
+  );
+});
+
+test("approval handler that returns false blocks the tool call", async () => {
+  const events = new FakeEventSink();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "risky",
+    description: "",
+    risk: "high",
+    async execute() {
+      return { ran: true };
+    },
+  });
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "call risky",
+      toolCalls: [{ name: "risky", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new ApprovalPolicy(),
+    eventSink: events,
+    approvalHandler: async () => false,
+  });
+  const state = await runtime.run("default", "hello", options);
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, false);
+  assert.match(state.turns[0]?.toolResults[0]?.error ?? "", /Approval denied/);
+});
+
+test("missing approval handler blocks require_approval", async () => {
+  const events = new FakeEventSink();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "risky",
+    description: "",
+    risk: "high",
+    async execute() {
+      return { ran: true };
+    },
+  });
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "call risky",
+      toolCalls: [{ name: "risky", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new ApprovalPolicy(),
+    eventSink: events,
+  });
+  const state = await runtime.run("default", "hello", options);
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, false);
+  assert.match(state.turns[0]?.toolResults[0]?.error ?? "", /no handler/);
+});
+
+test("RunOptions.limits overrides runtime default limits per run", async () => {
+  const events = new FakeEventSink();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "echo",
+    description: "",
+    risk: "low",
+    async execute() {
+      return {};
+    },
+  });
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "",
+      toolCalls: [{ name: "echo", input: {} }],
+      stop: false,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+    limits: { toolTimeoutMs: 5000, maxToolCallsPerRun: 100 },
+  });
+  const state = await runtime.run("default", "hello", {
+    ...options,
+    maxIterations: 3,
+    limits: { maxToolCallsPerRun: 1 },
+  });
+  // First iteration produces 1 tool call → totalToolCalls=1 (not > limit 1) → allowed
+  // Second iteration produces another → totalToolCalls=2 → exceeds limit → break
+  assert.equal(state.turns.length, 1);
+  assert.equal(
+    events.events.some((e) => e.type === "run.limit_reached"),
     true,
   );
 });

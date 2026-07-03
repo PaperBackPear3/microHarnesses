@@ -39,10 +39,7 @@ export async function defaultCompressor(
 
 function computeTurnScore(turn: Turn, index: number, total: number, goal: string): number {
   const recency = total > 1 ? index / (total - 1) : 1;
-  const impact =
-    turn.toolCalls.length * 2 +
-    turn.toolResults.filter((r) => !r.ok).length * 3 +
-    (turn.spawnedAgentResult ? 2 : 0);
+  const impact = turn.toolCalls.length * 2 + turn.toolResults.filter((r) => !r.ok).length * 3;
   const goalMatch =
     includesAny(turn.assistantMessage, goal) || includesAny(turn.userMessage, goal) ? 2 : 0;
   return recency * 5 + impact + goalMatch;
