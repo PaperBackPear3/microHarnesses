@@ -57,8 +57,28 @@ Useful flags:
 - `--model <name>`
 - `--iterations <n>`
 - `--checkpoint-every <n>`
+- `--snapshot-every <n>`
+- `--session-id <id>`
+- `--resume`
+- `--goal <text>`
 - `--state-dir <path>`
 - `--plugins <path-to-plugin.js>`
+
+## Session operations and resume
+
+Sessions are persisted under `<state-dir>/sessions` as:
+- `manifest.json` (session metadata + pointers)
+- `events.jsonl` (append-only operation/event log)
+- `snapshots/*.json` (periodic snapshots for fast resume)
+- `support-history.jsonl` (tool/policy failures and operational diagnostics)
+
+Commands:
+
+```bash
+node apps/cli/dist/index.js sessions list
+node apps/cli/dist/index.js sessions show <session-id>
+node apps/cli/dist/index.js sessions resume <session-id> "continue from where we stopped"
+```
 
 ## Prompt pack convention
 
@@ -95,3 +115,23 @@ module.exports = {
   }
 };
 ```
+
+## Built-in Plan Mode plugin (read-only planning + exploration)
+
+Distributed package: `@micro-harness/plugin-plan-mode`.
+
+A ready plugin file is included at:
+- `apps/cli/plugins/plan-mode.plugin.js`
+
+Use with CLI:
+
+```bash
+npm run cli:run -- "plan migration work" --plugins apps/cli/plugins/plan-mode.plugin.js
+```
+
+This registers read-only tools:
+- `plan_agent`: produces structured plans from a goal/scope/constraints
+- `explore_agent`: explores files/snippets for a query under plugin root
+- `plan_mode_info`: returns plan mode guarantees/capabilities
+
+The plugin is intentionally read-only: it does not write files, execute processes, or call network APIs.

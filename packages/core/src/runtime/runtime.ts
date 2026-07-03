@@ -1,11 +1,14 @@
-import { ContextManager } from "../context/manager";
 import { randomUUID } from "node:crypto";
+import { ContextManager } from "../context/manager";
+import { SessionStore } from "../session/sessionStore";
+import { ToolRegistry } from "../tools/registry";
 import { ToolTimeoutError } from "../errors";
 import {
   AfterLoopHook,
   AgentSpawner,
   BeforeLoopHook,
   EventSink,
+  ExecutionEvent,
   HarnessPlugin,
   HarnessState,
   ModelAdapter,
@@ -17,7 +20,6 @@ import {
   ToolPolicyEngine,
   ToolResult
 } from "../types";
-import { ToolRegistry } from "../tools/registry";
 
 interface RuntimeDeps {
   model: ModelAdapter;
@@ -28,6 +30,7 @@ interface RuntimeDeps {
   spawner: AgentSpawner;
   policy: ToolPolicyEngine;
   eventSink: EventSink;
+  sessionStore?: SessionStore;
   limits?: RuntimeLimits;
 }
 
@@ -40,11 +43,13 @@ export class HarnessRuntime {
   private readonly spawner: AgentSpawner;
   private readonly policy: ToolPolicyEngine;
   private readonly eventSink: EventSink;
+  private readonly sessionStore?: SessionStore;
   private readonly limits: RuntimeLimits;
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
   private cancelled = false;
   private activeToolController?: AbortController;
+  private currentSessionId?: string;
 
   constructor(deps: RuntimeDeps) {
     this.model = deps.model;
@@ -55,6 +60,7 @@ export class HarnessRuntime {
     this.spawner = deps.spawner;
     this.policy = deps.policy;
     this.eventSink = deps.eventSink;
+    this.sessionStore = deps.sessionStore;
     this.limits = deps.limits ?? {
       toolTimeoutMs: 20_000,
       maxToolCallsPerRun: 20
@@ -79,28 +85,57 @@ export class HarnessRuntime {
 
   async run(agentName: string, userPrompt: string, options: RunOptions): Promise<HarnessState> {
     this.cancelled = false;
-    const state: HarnessState = {
-      runId: randomUUID(),
+    const runId = randomUUID();
+    let sessionId = options.sessionId;
+    let goal = options.goal ?? userPrompt;
+
+    if (this.sessionStore) {
+      const manifest = await this.sessionStore.initSession(options.sessionId, goal);
+      sessionId = manifest.sessionId;
+      goal = manifest.goal || goal;
+      if (!manifest.goal && goal) {
+        await this.sessionStore.updateGoal(sessionId, goal);
+      }
+    }
+    this.currentSessionId = sessionId;
+
+    let state: HarnessState = {
+      sessionId,
+      runId,
       startedAt: new Date().toISOString(),
       turns: []
     };
-    await this.eventSink.push({
-      type: "run.started",
-      timestamp: new Date().toISOString(),
-      runId: state.runId,
-      payload: { agentName }
-    });
+
+    if (this.sessionStore && options.resume && sessionId) {
+      const restored = await this.sessionStore.loadLatestSnapshot(sessionId);
+      if (restored) {
+        state = {
+          ...restored,
+          sessionId,
+          runId,
+          startedAt: new Date().toISOString()
+        };
+      }
+    }
 
     await this.context.init();
+    this.context.setGoal(goal);
+    await this.pushEvent({
+      type: "run.started",
+      timestamp: new Date().toISOString(),
+      runId,
+      payload: { agentName, sessionId, resume: Boolean(options.resume), goal }
+    });
+
     const bundle = await this.prompts.load(agentName, userPrompt);
     let totalToolCalls = 0;
 
     for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
       if (this.cancelled) {
-        await this.eventSink.push({
+        await this.pushEvent({
           type: "tool.killed",
           timestamp: new Date().toISOString(),
-          runId: state.runId,
+          runId,
           payload: { reason: "runtime killed before next iteration", iteration }
         });
         break;
@@ -120,13 +155,14 @@ export class HarnessRuntime {
         },
         options.profile
       );
-      await this.eventSink.push({
+      await this.pushEvent({
         type: "model.selected",
         timestamp: new Date().toISOString(),
-        runId: state.runId,
+        runId,
         payload: {
           model: modelSelection.model,
-          reason: modelSelection.reason
+          reason: modelSelection.reason,
+          iteration
         }
       });
 
@@ -141,10 +177,10 @@ export class HarnessRuntime {
 
       totalToolCalls += step.toolCalls.length;
       if (totalToolCalls > this.limits.maxToolCallsPerRun) {
-        await this.eventSink.push({
+        await this.pushEvent({
           type: "run.limit_reached",
           timestamp: new Date().toISOString(),
-          runId: state.runId,
+          runId,
           payload: {
             limit: this.limits.maxToolCallsPerRun,
             totalToolCalls
@@ -153,7 +189,7 @@ export class HarnessRuntime {
         break;
       }
 
-      const toolResults = await this.executeTools(step, state.runId, agentName, iteration, bundle.metadata.safetyMode);
+      const toolResults = await this.executeTools(step, runId, agentName, iteration, bundle.metadata.safetyMode);
       const spawnedAgentResult = step.spawnRequest ? await this.spawner.spawn(step.spawnRequest) : undefined;
 
       state.turns.push({
@@ -170,6 +206,13 @@ export class HarnessRuntime {
         await this.context.saveCheckpoint(state);
       }
 
+      if (this.sessionStore && sessionId) {
+        const snapshotEvery = options.snapshotEveryIterations ?? options.checkpointEvery;
+        if (iteration % snapshotEvery === 0) {
+          await this.sessionStore.saveSnapshot(sessionId, runId, state);
+        }
+      }
+
       for (const hook of this.afterHooks) {
         await hook(state, iteration);
       }
@@ -180,12 +223,17 @@ export class HarnessRuntime {
     }
 
     await this.context.saveCheckpoint(state);
-    await this.eventSink.push({
+    if (this.sessionStore && sessionId) {
+      await this.sessionStore.saveSnapshot(sessionId, runId, state);
+    }
+    await this.pushEvent({
       type: "run.completed",
       timestamp: new Date().toISOString(),
-      runId: state.runId,
-      payload: { turns: state.turns.length }
+      runId,
+      payload: { turns: state.turns.length, sessionId }
     });
+
+    this.currentSessionId = undefined;
     return state;
   }
 
@@ -199,11 +247,18 @@ export class HarnessRuntime {
     const results: ToolResult[] = [];
     for (const call of step.toolCalls) {
       if (this.cancelled) {
-        await this.eventSink.push({
+        await this.pushEvent({
           type: "tool.killed",
           timestamp: new Date().toISOString(),
           runId,
           payload: { tool: call.name, reason: "runtime killed during tool phase", iteration }
+        });
+        await this.appendSupportHistory({
+          runId,
+          iteration,
+          tool: call.name,
+          category: "killed",
+          reason: "runtime killed during tool phase"
         });
         results.push({
           ok: false,
@@ -218,11 +273,18 @@ export class HarnessRuntime {
         tool = this.tools.get(call.name);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "Unknown tool";
-        await this.eventSink.push({
+        await this.pushEvent({
           type: "tool.blocked",
           timestamp: new Date().toISOString(),
           runId,
           payload: { tool: call.name, decision: "deny", reason: message, iteration }
+        });
+        await this.appendSupportHistory({
+          runId,
+          iteration,
+          tool: call.name,
+          category: "unknown_tool",
+          reason: message
         });
         results.push({ ok: false, output: {}, error: message });
         continue;
@@ -236,11 +298,18 @@ export class HarnessRuntime {
       });
 
       if (policy.decision !== "allow") {
-        await this.eventSink.push({
+        await this.pushEvent({
           type: "tool.blocked",
           timestamp: new Date().toISOString(),
           runId,
           payload: { tool: call.name, decision: policy.decision, reason: policy.reason, iteration }
+        });
+        await this.appendSupportHistory({
+          runId,
+          iteration,
+          tool: call.name,
+          category: "policy",
+          reason: policy.reason
         });
         results.push({
           ok: false,
@@ -250,7 +319,7 @@ export class HarnessRuntime {
         continue;
       }
 
-      await this.eventSink.push({
+      await this.pushEvent({
         type: "tool.allowed",
         timestamp: new Date().toISOString(),
         runId,
@@ -267,12 +336,32 @@ export class HarnessRuntime {
         results.push({ ok: true, output });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "unknown tool error";
+        await this.appendSupportHistory({
+          runId,
+          iteration,
+          tool: call.name,
+          category: "tool_error",
+          reason: message
+        });
         results.push({ ok: false, output: {}, error: message });
       } finally {
         this.activeToolController = undefined;
       }
     }
     return results;
+  }
+
+  private async pushEvent(event: ExecutionEvent): Promise<void> {
+    await this.eventSink.push(event);
+    if (this.sessionStore && this.currentSessionId) {
+      await this.sessionStore.appendEvent(this.currentSessionId, event);
+    }
+  }
+
+  private async appendSupportHistory(data: Record<string, unknown>): Promise<void> {
+    if (this.sessionStore && this.currentSessionId) {
+      await this.sessionStore.appendSupportHistory(this.currentSessionId, data);
+    }
   }
 }
 

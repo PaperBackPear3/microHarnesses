@@ -7,6 +7,7 @@ export interface ContextManagerOptions {
   stateDir: string;
   maxWorkingTurns: number;
   compressor?: CompressorFn;
+  goal?: string;
 }
 
 interface CheckpointFile {
@@ -26,6 +27,7 @@ export class ContextManager {
   private readonly summaryStatePath: string;
   private readonly maxWorkingTurns: number;
   private compressor: CompressorFn;
+  private goal?: string;
 
   constructor(options: ContextManagerOptions) {
     this.stateDir = options.stateDir;
@@ -34,10 +36,15 @@ export class ContextManager {
     this.summaryStatePath = path.join(this.summaryDir, "state.json");
     this.maxWorkingTurns = options.maxWorkingTurns;
     this.compressor = options.compressor ?? defaultCompressor;
+    this.goal = options.goal;
   }
 
   setCompressor(compressor: CompressorFn): void {
     this.compressor = compressor;
+  }
+
+  setGoal(goal: string): void {
+    this.goal = goal;
   }
 
   async init(): Promise<void> {
@@ -55,11 +62,22 @@ export class ContextManager {
     const newOverflowCount = overflowCount - summaryState.compressedTurnCount;
     if (newOverflowCount > 0) {
       const delta = turns.slice(summaryState.compressedTurnCount, overflowCount);
-      const summary = await this.compressor(delta);
+      const compression = await this.compressor(delta, { goal: this.goal });
       const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
       await writeFile(
         summaryFile,
-        JSON.stringify({ summary, turns: delta.length, from: summaryState.compressedTurnCount }, null, 2),
+        JSON.stringify(
+          {
+            goal: this.goal ?? "",
+            summary: compression.summary,
+            highlights: compression.highlights,
+            support_history: compression.supportHistory,
+            turns: delta.length,
+            from: summaryState.compressedTurnCount
+          },
+          null,
+          2
+        ),
         "utf8"
       );
       await this.writeSummaryState({ compressedTurnCount: overflowCount });
@@ -118,10 +136,62 @@ export class ContextManager {
   }
 }
 
-async function defaultCompressor(turns: Turn[]): Promise<string> {
-  const toolCalls = turns.reduce((total, turn) => total + turn.toolCalls.length, 0);
-  const spawned = turns.filter((turn) => Boolean(turn.spawnedAgentResult)).length;
-  return `Compressed ${turns.length} turns. Tool calls: ${toolCalls}. Spawned agent turns: ${spawned}.`;
+async function defaultCompressor(turns: Turn[], context: { goal?: string }) {
+  const goal = context.goal?.trim() || "No explicit goal set";
+  const scored = turns
+    .map((turn, index) => ({
+      turn,
+      score: computeTurnScore(turn, index, turns.length, goal)
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const top = scored.slice(0, Math.min(5, scored.length)).map((entry) => entry.turn);
+  const highlights = top.map(
+    (turn) =>
+      `iter=${turn.iteration} tools=${turn.toolCalls.length} assistant="${trim(turn.assistantMessage, 120)}"`
+  );
+
+  const supportHistory = turns.flatMap((turn) =>
+    turn.toolResults
+      .filter((result) => !result.ok)
+      .map((result) => `iter=${turn.iteration} tool-failure: ${result.error ?? "unknown error"}`)
+  );
+
+  return {
+    summary: `Goal: ${goal}. Retained ${highlights.length} high-priority highlights out of ${turns.length} compressed turns.`,
+    highlights,
+    supportHistory
+  };
+}
+
+function computeTurnScore(turn: Turn, index: number, total: number, goal: string): number {
+  const recency = total > 1 ? index / (total - 1) : 1;
+  const impact =
+    turn.toolCalls.length * 2 +
+    turn.toolResults.filter((r) => !r.ok).length * 3 +
+    (turn.spawnedAgentResult ? 2 : 0);
+  const goalMatch = includesAny(turn.assistantMessage, goal) || includesAny(turn.userMessage, goal) ? 2 : 0;
+  return recency * 5 + impact + goalMatch;
+}
+
+function includesAny(text: string, goal: string): boolean {
+  const words = goal
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word.length > 3)
+    .slice(0, 10);
+  if (words.length === 0) {
+    return false;
+  }
+  const lowerText = text.toLowerCase();
+  return words.some((word) => lowerText.includes(word));
+}
+
+function trim(text: string, max: number): string {
+  if (text.length <= max) {
+    return text;
+  }
+  return `${text.slice(0, max - 1)}…`;
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

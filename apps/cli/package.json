@@ -8,10 +8,11 @@
     "micro-harness": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "rm -rf dist && tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@micro-harness/core": "file:../../packages/core"
+    "@micro-harness/core": "file:../../packages/core",
+    "@micro-harness/plugin-plan-mode": "file:../../packages/plugin-plan-mode"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",

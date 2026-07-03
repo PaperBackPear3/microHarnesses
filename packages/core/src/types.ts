@@ -121,6 +121,7 @@ export interface Turn {
 }
 
 export interface HarnessState {
+  sessionId?: string;
   runId: string;
   startedAt: string;
   turns: Turn[];
@@ -179,7 +180,17 @@ export interface RuntimeLimits {
 
 export type BeforeLoopHook = (state: HarnessState, iteration: number) => Promise<void> | void;
 export type AfterLoopHook = (state: HarnessState, iteration: number) => Promise<void> | void;
-export type CompressorFn = (turns: Turn[]) => Promise<string> | string;
+
+export interface CompressionResult {
+  summary: string;
+  highlights: string[];
+  supportHistory: string[];
+}
+
+export type CompressorFn = (
+  turns: Turn[],
+  context: { goal?: string }
+) => Promise<CompressionResult> | CompressionResult;
 
 export interface PluginApi {
   registerTool: (tool: ToolDefinition) => void;
@@ -199,6 +210,10 @@ export interface RunOptions {
   profile: ModelProfile;
   modelProvider: ProviderId;
   modelOverride?: string;
+  sessionId?: string;
+  resume?: boolean;
+  goal?: string;
+  snapshotEveryIterations?: number;
 }
 
 export type ExecutionEventType =
@@ -219,4 +234,17 @@ export interface ExecutionEvent {
 
 export interface EventSink {
   push(event: ExecutionEvent): Promise<void>;
+}
+
+export interface SessionManifest {
+  sessionId: string;
+  goal: string;
+  createdAt: string;
+  updatedAt: string;
+  latestRunId?: string;
+  latestSnapshotId?: string;
+  latestSnapshotPath?: string;
+  eventLogPath: string;
+  supportHistoryPath: string;
+  lastEventSeq: number;
 }

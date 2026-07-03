@@ -1,5 +1,4 @@
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { HarnessPlugin } from "../types";
 
 interface PluginFileShape {
@@ -30,8 +29,7 @@ export class PluginLoader {
 }
 
 async function loadOnePlugin(pluginPath: string): Promise<HarnessPlugin> {
-  const fileUrl = pathToFileURL(pluginPath).href;
-  const imported = (await import(fileUrl)) as PluginFileShape;
+  const imported = (await import(pluginPath)) as PluginFileShape;
   const candidate = (imported.default ?? imported.plugin) as unknown;
 
   if (!isHarnessPlugin(candidate)) {

@@ -70,6 +70,7 @@ class FakeEventSink implements EventSink {
 }
 
 class FakeContextManager {
+  setGoal(_goal: string): void {}
   async init(): Promise<void> {}
   async buildWorkingTurns(state: HarnessState["turns"]): Promise<HarnessState["turns"]> {
     return state;

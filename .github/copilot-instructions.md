@@ -13,6 +13,9 @@ Use npm scripts from the root `package.json`:
 - List checkpoints (build + run): `npm run checkpoints:list`
 - Show checkpoint: `node apps/cli/dist/index.js checkpoints show <checkpoint-id>`
 - Delete checkpoint: `node apps/cli/dist/index.js checkpoints delete <checkpoint-id>`
+- List sessions: `node apps/cli/dist/index.js sessions list`
+- Show session: `node apps/cli/dist/index.js sessions show <session-id>`
+- Resume session: `node apps/cli/dist/index.js sessions resume <session-id> "continue task"`
 
 Current repo state:
 
@@ -50,24 +53,31 @@ This project is now library-first with a reference CLI:
 
 4. `packages/core/src/context/manager.ts` owns context trimming and persistence.
    - Keeps only the last `maxWorkingTurns` in memory for model input.
-   - Compresses only newly-overflowed turns into summary files under `<stateDir>/summaries`.
+   - Compresses only newly-overflowed turns into summary files under `<stateDir>/summaries`, prioritizing recency/high-impact/goal relevance and separating support history.
    - Stores checkpoints under `<stateDir>/checkpoints` with full `HarnessState`.
 
-5. `packages/core/src/providers/*` implements OpenAI/Anthropic/Ollama adapters and auth resolution.
+5. `packages/core/src/session/sessionStore.ts` manages durable sessions.
+   - Session manifest + append-only `events.jsonl` + periodic snapshots.
+   - Support history is written separately to `support-history.jsonl`.
+
+6. `packages/core/src/providers/*` implements OpenAI/Anthropic/Ollama adapters and auth resolution.
    - `EnvCredentialsResolver` reads provider keys/base URLs from environment variables.
    - Provider adapters normalize responses to shared runtime contracts.
 
-6. `packages/core/src/tools/*` and `packages/core/src/tools/registry.ts` implement tool execution.
+7. `packages/core/src/tools/*` and `packages/core/src/tools/registry.ts` implement tool execution.
    - Tools are registered once by unique name.
    - Runtime resolves tool calls by name, evaluates tool policy, then records success/failure in `Turn.toolResults`.
 
-7. `packages/core/src/agents/localSpawner.ts` + `apps/cli/src/worker.ts` implement local child-agent execution.
+8. `packages/core/src/agents/localSpawner.ts` + `apps/cli/src/worker.ts` implement local child-agent execution.
    - Spawner writes JSON input/output in a temp directory and starts worker with `node`.
    - Worker follows file-based contract: read input JSON, write output JSON (or error JSON).
 
-8. `packages/core/src/plugins/loader.ts` loads plugins dynamically by path.
+9. `packages/core/src/plugins/loader.ts` loads plugins dynamically by path.
    - Accepts `default` or `plugin` export.
    - Requires `name` + `register(api)` shape (see `HarnessPlugin` in `packages/core/src/types.ts`).
+
+10. `packages/plugin-plan-mode` is a distributable plugin package.
+   - Exports `PlanModePlugin` and provides read-only `plan_agent` and `explore_agent` tools.
 
 ## Key codebase conventions
 

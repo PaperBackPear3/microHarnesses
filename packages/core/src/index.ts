@@ -17,3 +17,4 @@ export * from "./agents/localSpawner";
 export * from "./plugins/loader";
 export * from "./security/defaultPolicyEngine";
 export * from "./events/memoryEventSink";
+export * from "./session/sessionStore";
