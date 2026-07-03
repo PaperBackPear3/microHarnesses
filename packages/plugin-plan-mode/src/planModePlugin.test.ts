@@ -153,6 +153,57 @@ test("ExplorerPlugin accepts root_directory alias for root_path", async () => {
   }
 });
 
+test("ExplorerPlugin matches filenames when content has no query hit", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-filename-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "cli-summary.ts"), "export const value = 1;\n", "utf8");
+
+  try {
+    const tools = new Map<string, ToolDefinition>();
+    new ExplorerPlugin({ rootDir: root }).register(makeApi(tools));
+    const result = (await tools.get("explore_agent")!.execute({
+      query: "summary",
+      root_path: "src",
+      max_files: 5,
+    })) as {
+      total_results: number;
+      fallback: string;
+      results: Array<{ file: string }>;
+    };
+    assert.equal(result.total_results > 0, true);
+    assert.equal(result.fallback, "match");
+    assert.equal(result.results.some((entry) => entry.file === "cli-summary.ts"), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ExplorerPlugin returns inventory fallback when query has no matches", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-fallback-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "index.ts"), "export const answer = 42;\n", "utf8");
+
+  try {
+    const tools = new Map<string, ToolDefinition>();
+    new ExplorerPlugin({ rootDir: root }).register(makeApi(tools));
+    const result = (await tools.get("explore_agent")!.execute({
+      query: "no-such-token-anywhere",
+      root_path: "src",
+      max_files: 5,
+    })) as {
+      total_results: number;
+      fallback: string;
+      results: Array<{ file: string; matches: Array<{ line: number; snippet: string }> }>;
+    };
+    assert.equal(result.total_results > 0, true);
+    assert.equal(result.fallback, "inventory");
+    assert.equal(result.results[0]?.file, "index.ts");
+    assert.equal(result.results[0]?.matches[0]?.line, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("ExplorerPlugin declares query as required in input schema", () => {
   const tools = new Map<string, ToolDefinition>();
   new ExplorerPlugin({ rootDir: process.cwd() }).register(makeApi(tools));

@@ -84,12 +84,22 @@ export class ExplorerPlugin implements HarnessPlugin {
 
         const files = await listFiles(absoluteRoot, depth, maxFiles * 4);
         const results = [];
+        const inventory: Array<{ file: string; matches: Array<{ line: number; snippet: string }> }> =
+          [];
         const queryLower = query.toLowerCase();
 
         for (const filePath of files) {
-          if (results.length >= maxFiles) break;
+          if (results.length >= maxFiles && inventory.length >= maxFiles) break;
           const raw = await readTextFileSafely(filePath);
           if (!raw) continue;
+          const relativePath = path.relative(absoluteRoot, filePath);
+
+          if (inventory.length < maxFiles) {
+            inventory.push({
+              file: relativePath,
+              matches: [firstLineSnippet(raw, maxSnippetLength)],
+            });
+          }
 
           const matches = raw
             .split(/\r?\n/)
@@ -97,26 +107,49 @@ export class ExplorerPlugin implements HarnessPlugin {
             .filter((entry) => entry.line.toLowerCase().includes(queryLower))
             .slice(0, 4);
 
-          if (matches.length === 0) continue;
+          const filenameMatches = relativePath.toLowerCase().includes(queryLower);
+          if (matches.length === 0 && !filenameMatches) continue;
+
+          const effectiveMatches =
+            matches.length > 0
+              ? matches
+              : [{ index: 0, line: `filename match: ${relativePath}` }];
 
           results.push({
-            file: path.relative(absoluteRoot, filePath),
-            matches: matches.map((entry) => ({
+            file: relativePath,
+            matches: effectiveMatches.map((entry) => ({
               line: entry.index,
               snippet: truncate(entry.line, maxSnippetLength),
             })),
           });
         }
 
+        const outputResults = results.length > 0 ? results : inventory;
+        const fallbackUsed = results.length === 0;
+
         return {
           mode: "explore",
           read_only: true,
           query,
           root_path: requestedRoot || ".",
-          total_results: results.length,
-          results,
+          fallback: fallbackUsed ? "inventory" : "match",
+          total_results: outputResults.length,
+          results: outputResults,
         };
       },
     };
   }
+}
+
+function firstLineSnippet(raw: string, maxSnippetLength: number): { line: number; snippet: string } {
+  const lines = raw.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+    return {
+      line: index + 1,
+      snippet: truncate(line, maxSnippetLength),
+    };
+  }
+  return { line: 1, snippet: "" };
 }
