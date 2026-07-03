@@ -97,3 +97,36 @@ test("OpenAIAdapter includes tools payload when provided", async () => {
     },
   ]);
 });
+
+test("OpenAIAdapter streamComplete emits deltas and final response", async () => {
+  const fetchImpl = (async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"hel"}}]}',
+      "",
+      'data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+    return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as unknown as typeof fetch;
+
+  const adapter = new OpenAIAdapter({ fetchImpl });
+  const events: Array<{ type: string; delta?: string; assistantMessage?: string }> = [];
+  for await (const event of adapter.streamComplete!(
+    { model: "gpt-x", messages: [{ role: "user", content: "hello" }] },
+    { apiKey: "sk-test" },
+  )) {
+    if (event.type === "assistant.delta") {
+      events.push({ type: event.type, delta: event.delta });
+    } else {
+      events.push({ type: event.type, assistantMessage: event.response.assistantMessage });
+    }
+  }
+
+  assert.deepEqual(events, [
+    { type: "assistant.delta", delta: "hel" },
+    { type: "assistant.delta", delta: "lo" },
+    { type: "final", assistantMessage: "hello" },
+  ]);
+});

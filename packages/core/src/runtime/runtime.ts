@@ -152,6 +152,7 @@ export class HarnessRuntime {
     });
 
     const bundle = await this.prompts.load(agentName, userPrompt);
+    const taskType = inferTaskType(userPrompt, bundle.metadata.taskTypeHint);
     let totalToolCalls = 0;
 
     for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
@@ -172,6 +173,7 @@ export class HarnessRuntime {
         {
           agentName,
           iteration,
+          taskType,
           overrideModel: options.modelOverride,
           promptHintModel: bundle.metadata.modelHint,
         },
@@ -183,6 +185,7 @@ export class HarnessRuntime {
         iteration,
       });
 
+      let streamedChars = 0;
       const step = await this.model.nextStep({
         agentName,
         userPrompt,
@@ -191,7 +194,15 @@ export class HarnessRuntime {
         iteration,
         selectedModel: modelSelection.model,
         availableTools: deriveToolDescriptors(this.tools.list()),
+        onAssistantDelta: async (delta) => {
+          if (delta.length === 0) return;
+          streamedChars += delta.length;
+          await emitter.emit("model.delta", { iteration, delta });
+        },
       });
+      if (streamedChars > 0) {
+        await emitter.emit("model.stream_completed", { iteration, chars: streamedChars });
+      }
       if (step.usage) {
         await emitter.emit("model.completed", {
           model: modelSelection.model,
@@ -273,4 +284,21 @@ export function validateRunOptions(options: RunOptions): void {
       }
     }
   }
+}
+
+function inferTaskType(
+  prompt: string,
+  hint?: "default" | "reasoning" | "fast",
+): "default" | "reasoning" | "fast" {
+  if (hint === "default" || hint === "reasoning" || hint === "fast") {
+    return hint;
+  }
+  const lowered = prompt.toLowerCase();
+  if (/\b(quick|brief|short|fast)\b/.test(lowered)) {
+    return "fast";
+  }
+  if (/\b(reason|analy[sz]e|deep|step[- ]by[- ]step|complex|trade[- ]off)\b/.test(lowered)) {
+    return "reasoning";
+  }
+  return "default";
 }

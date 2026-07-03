@@ -8,6 +8,7 @@ import type {
   ProviderAdapter,
   ProviderAuth,
   ProviderResponse,
+  ProviderStreamEvent,
 } from "../providers/types";
 import { ConfigError } from "../shared/errors";
 import { ProviderModelAdapter } from "./providerModelAdapter";
@@ -29,6 +30,32 @@ class FakeAdapter implements ProviderAdapter {
     this.seenRequest = request;
     this.seenAuth = auth;
     return this.response;
+  }
+}
+
+class FakeStreamingAdapter implements ProviderAdapter {
+  readonly providerId = "fake-stream";
+  readonly defaultModel = "fake-stream-model";
+  readonly features = { structuredTools: true };
+  seenRequest?: CompletionRequest;
+  seenAuth?: ProviderAuth;
+
+  async *streamComplete(
+    request: CompletionRequest,
+    auth: ProviderAuth,
+  ): AsyncIterable<ProviderStreamEvent> {
+    this.seenRequest = request;
+    this.seenAuth = auth;
+    yield { type: "assistant.delta", delta: "hel" };
+    yield { type: "assistant.delta", delta: "lo" };
+    yield {
+      type: "final",
+      response: { assistantMessage: "hello", toolCalls: [], stop: true },
+    };
+  }
+
+  async complete(_request: CompletionRequest, _auth: ProviderAuth): Promise<ProviderResponse> {
+    throw new Error("complete should not be called when streamComplete exists");
   }
 }
 
@@ -147,6 +174,32 @@ test("threads usage and malformedInput back into StepPlan", async () => {
   assert.deepEqual(plan.usage, { inputTokens: 5, outputTokens: 3 });
 });
 
+test("uses streamComplete and forwards assistant deltas", async () => {
+  const adapter = new FakeStreamingAdapter();
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake-stream", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake-stream",
+  });
+
+  const deltas: string[] = [];
+  const plan = await model.nextStep(
+    makeInput({
+      onAssistantDelta: (delta) => {
+        deltas.push(delta);
+      },
+    }),
+  );
+
+  assert.deepEqual(deltas, ["hel", "lo"]);
+  assert.equal(plan.assistantMessage, "hello");
+  assert.equal(plan.stop, true);
+});
+
 test("passes availableTools in completion request", async () => {
   const adapter = new FakeAdapter(
     "m",
@@ -198,7 +251,9 @@ test("injects fallback tool catalog for providers without structured tools", asy
 
   await model.nextStep(
     makeInput({
-      availableTools: [{ name: "time", description: "Returns time", inputSchema: { type: "object" } }],
+      availableTools: [
+        { name: "time", description: "Returns time", inputSchema: { type: "object" } },
+      ],
     }),
   );
 
@@ -231,7 +286,9 @@ test("does not inject fallback tool catalog for structured-tools providers", asy
 
   await model.nextStep(
     makeInput({
-      availableTools: [{ name: "time", description: "Returns time", inputSchema: { type: "object" } }],
+      availableTools: [
+        { name: "time", description: "Returns time", inputSchema: { type: "object" } },
+      ],
     }),
   );
 

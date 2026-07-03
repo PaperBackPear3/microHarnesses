@@ -30,6 +30,18 @@ class FakeModel implements ModelAdapter {
   }
 }
 
+class FakeStreamingModel implements ModelAdapter {
+  async nextStep(input: StepInput): Promise<StepPlan> {
+    await input.onAssistantDelta?.("hello ");
+    await input.onAssistantDelta?.("world");
+    return {
+      assistantMessage: "hello world",
+      toolCalls: [],
+      stop: true,
+    };
+  }
+}
+
 class FakePromptSource implements PromptSource {
   async load(_agentName: string, task: string): Promise<PromptBundle> {
     return {
@@ -41,8 +53,27 @@ class FakePromptSource implements PromptSource {
   }
 }
 
+class ReasoningPromptSource implements PromptSource {
+  async load(_agentName: string, task: string): Promise<PromptBundle> {
+    return {
+      system: "system",
+      instructions: [],
+      task,
+      metadata: { name: "default", taskTypeHint: "reasoning" },
+    };
+  }
+}
+
 class FakeModelSelector implements ModelSelector {
   select(_input: ModelSelectionInput, _profile: ModelProfile): ModelSelectionDecision {
+    return { model: "test-model", reason: "profile" };
+  }
+}
+
+class CapturingModelSelector implements ModelSelector {
+  seen?: ModelSelectionInput;
+  select(input: ModelSelectionInput, _profile: ModelProfile): ModelSelectionDecision {
+    this.seen = input;
     return { model: "test-model", reason: "profile" };
   }
 }
@@ -174,6 +205,49 @@ test("runtime emits limit event and exits gracefully when tool call limit is exc
     events.events.some((event) => event.type === "run.completed"),
     true,
   );
+});
+
+test("runtime emits model.delta and stream completion events", async () => {
+  const events = new FakeEventSink();
+  const runtime = new HarnessRuntime({
+    model: new FakeStreamingModel(),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+  });
+
+  const state = await runtime.run("default", "hello", options);
+  assert.equal(state.turns[0]?.assistantMessage, "hello world");
+  const deltaEvents = events.events.filter((event) => event.type === "model.delta");
+  assert.equal(deltaEvents.length, 2);
+  assert.equal(
+    events.events.some((event) => event.type === "model.stream_completed"),
+    true,
+  );
+});
+
+test("runtime passes taskType hint into model selector", async () => {
+  const events = new FakeEventSink();
+  const selector = new CapturingModelSelector();
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "ok",
+      toolCalls: [],
+      stop: true,
+    }),
+    modelSelector: selector,
+    prompts: new ReasoningPromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+  });
+
+  await runtime.run("default", "hello", options);
+  assert.equal(selector.seen?.taskType, "reasoning");
 });
 
 class ApprovalPolicy implements ToolPolicyEngine {

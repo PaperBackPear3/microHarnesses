@@ -44,6 +44,7 @@ export interface StepInput {
   iteration: number;
   selectedModel?: string;
   availableTools?: ToolDescriptor[];
+  onAssistantDelta?: (delta: string) => void | Promise<void>;
 }
 
 export interface ModelAdapter {

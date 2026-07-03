@@ -28,6 +28,7 @@ async function executeRun(runArgs: RunArgs): Promise<void> {
     profile: {
       defaultModel: runArgs.model ?? "",
       fastModel: runArgs.model,
+      reasoningModel: runArgs.model,
     },
     modelOverride: runArgs.model,
     sessionId: runArgs.sessionId,

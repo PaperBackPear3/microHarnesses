@@ -47,3 +47,42 @@ test("AnthropicAdapter throws ProviderError on non-ok response", async () => {
     ProviderError,
   );
 });
+
+test("AnthropicAdapter streamComplete emits deltas and final response", async () => {
+  const fetchImpl = (async () => {
+    const sse = [
+      'data: {"type":"message_start","message":{"usage":{"input_tokens":4}}}',
+      "",
+      'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}',
+      "",
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello "}}',
+      "",
+      'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"world"}}',
+      "",
+      'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}',
+      "",
+      'data: {"type":"message_stop"}',
+      "",
+    ].join("\n");
+    return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as unknown as typeof fetch;
+
+  const adapter = new AnthropicAdapter({ fetchImpl });
+  const events: Array<{ type: string; delta?: string; assistantMessage?: string }> = [];
+  for await (const event of adapter.streamComplete!(
+    { model: "m", messages: [{ role: "user", content: "x" }] },
+    { apiKey: "k" },
+  )) {
+    if (event.type === "assistant.delta") {
+      events.push({ type: event.type, delta: event.delta });
+    } else {
+      events.push({ type: event.type, assistantMessage: event.response.assistantMessage });
+    }
+  }
+
+  assert.deepEqual(events, [
+    { type: "assistant.delta", delta: "hello " },
+    { type: "assistant.delta", delta: "world" },
+    { type: "final", assistantMessage: "hello world" },
+  ]);
+});

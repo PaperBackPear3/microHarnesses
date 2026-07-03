@@ -83,6 +83,12 @@ async function readMetadata(filePath: string, agentName: string): Promise<Prompt
   return {
     name: parsed.name ?? agentName,
     modelHint: parsed.modelHint,
+    taskTypeHint:
+      parsed.taskTypeHint === "default" ||
+      parsed.taskTypeHint === "reasoning" ||
+      parsed.taskTypeHint === "fast"
+        ? parsed.taskTypeHint
+        : undefined,
     safetyMode: parsed.safetyMode,
     tags: parsed.tags,
   };

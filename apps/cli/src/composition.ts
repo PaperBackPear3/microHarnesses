@@ -28,6 +28,7 @@ import { PlanModePlugin } from "@micro-harness/plugin-plan-mode";
 import { subagentsPlugin } from "@micro-harness/plugin-subagents";
 import { builtInProviderPlugins } from "@micro-harness/providers";
 import type { RunArgs } from "./args";
+import { LiveEventSink } from "./liveEventSink";
 
 export interface Composition {
   runtime: HarnessRuntime;
@@ -73,7 +74,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
     tools: toolRegistry,
     context,
     policy,
-    eventSink: new MemoryEventSink(),
+    eventSink: new LiveEventSink(),
     sessionStore,
     approvalHandler: ttyApprovalHandler,
   });
@@ -122,6 +123,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
           profile: {
             defaultModel: runArgs.model ?? "",
             fastModel: runArgs.model,
+            reasoningModel: runArgs.model,
           },
           modelOverride: runArgs.model,
           goal: request.goal ?? request.prompt,

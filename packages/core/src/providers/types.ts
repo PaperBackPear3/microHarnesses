@@ -38,6 +38,16 @@ export interface ProviderResponse {
   };
 }
 
+export type ProviderStreamEvent =
+  | {
+      type: "assistant.delta";
+      delta: string;
+    }
+  | {
+      type: "final";
+      response: ProviderResponse;
+    };
+
 export interface CompletionRequest {
   model: string;
   messages: ProviderMessage[];
@@ -53,5 +63,9 @@ export interface ProviderAdapter {
   features?: {
     structuredTools?: boolean;
   };
+  streamComplete?(
+    request: CompletionRequest,
+    auth: ProviderAuth,
+  ): AsyncIterable<ProviderStreamEvent>;
   complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse>;
 }

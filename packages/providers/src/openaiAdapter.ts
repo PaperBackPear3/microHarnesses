@@ -4,8 +4,17 @@ import {
   type ProviderAuth,
   ProviderError,
   type ProviderResponse,
+  type ProviderStreamEvent,
 } from "@micro-harness/core";
-import { type OpenAICompatResponse, parseOpenAICompatResponse } from "./openaiCompat";
+import {
+  type OpenAICompatResponse,
+  type OpenAICompatStreamChunk,
+  applyOpenAICompatStreamChunk,
+  createOpenAICompatStreamState,
+  finalizeOpenAICompatStream,
+  parseOpenAICompatResponse,
+} from "./openaiCompat";
+import { readSseData } from "./sse";
 
 export interface OpenAIAdapterOptions {
   fetchImpl?: typeof fetch;
@@ -25,7 +34,10 @@ export class OpenAIAdapter implements ProviderAdapter {
     this.defaultModel = options.defaultModel ?? DEFAULT_MODEL;
   }
 
-  async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
+  async *streamComplete(
+    request: CompletionRequest,
+    auth: ProviderAuth,
+  ): AsyncIterable<ProviderStreamEvent> {
     const endpoint = `${auth.baseUrl ?? "https://api.openai.com/v1"}/chat/completions`;
     const response = await this.fetchImpl(endpoint, {
       method: "POST",
@@ -34,23 +46,41 @@ export class OpenAIAdapter implements ProviderAdapter {
         authorization: `Bearer ${auth.apiKey}`,
       },
       body: JSON.stringify({
-        model: request.model,
-        messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
-        ...(request.tools && request.tools.length > 0
-          ? {
-              tools: request.tools.map((tool) => ({
-                type: "function",
-                function: {
-                  name: tool.name,
-                  description: tool.description,
-                  parameters: tool.inputSchema,
-                },
-              })),
-            }
-          : {}),
-        temperature: request.temperature ?? 0.2,
-        max_tokens: request.maxTokens ?? 800,
+        ...toOpenAIBody(request),
+        stream: true,
+        stream_options: { include_usage: true },
       }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new ProviderError(`OpenAI error (${response.status}): ${errorBody}`);
+    }
+
+    const state = createOpenAICompatStreamState();
+    for await (const data of readSseData(response)) {
+      if (data === "[DONE]") {
+        break;
+      }
+      const payload = JSON.parse(data) as OpenAICompatStreamChunk;
+      const delta = applyOpenAICompatStreamChunk(state, payload);
+      if (delta.length > 0) {
+        yield { type: "assistant.delta", delta };
+      }
+    }
+
+    yield { type: "final", response: finalizeOpenAICompatStream(state) };
+  }
+
+  async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
+    const endpoint = `${auth.baseUrl ?? "https://api.openai.com/v1"}/chat/completions`;
+    const response = await this.fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${auth.apiKey}`,
+      },
+      body: JSON.stringify(toOpenAIBody(request)),
     });
 
     if (!response.ok) {
@@ -65,4 +95,25 @@ export class OpenAIAdapter implements ProviderAdapter {
     }
     return parsed;
   }
+}
+
+function toOpenAIBody(request: CompletionRequest): Record<string, unknown> {
+  return {
+    model: request.model,
+    messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
+    ...(request.tools && request.tools.length > 0
+      ? {
+          tools: request.tools.map((tool) => ({
+            type: "function",
+            function: {
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.inputSchema,
+            },
+          })),
+        }
+      : {}),
+    temperature: request.temperature ?? 0.2,
+    max_tokens: request.maxTokens ?? 800,
+  };
 }

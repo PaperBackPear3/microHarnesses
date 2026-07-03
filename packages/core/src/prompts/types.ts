@@ -16,6 +16,7 @@ export interface PromptInstruction {
 export interface PromptMetadata {
   name: string;
   modelHint?: string;
+  taskTypeHint?: "default" | "reasoning" | "fast";
   safetyMode?: SafetyMode;
   tags?: string[];
 }

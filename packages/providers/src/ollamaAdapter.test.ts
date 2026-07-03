@@ -56,3 +56,36 @@ test("OllamaAdapter throws ProviderError on non-ok response", async () => {
     ProviderError,
   );
 });
+
+test("OllamaAdapter streamComplete emits deltas and final response", async () => {
+  const fetchImpl = (async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"hi "}}]}',
+      "",
+      'data: {"choices":[{"delta":{"content":"there"},"finish_reason":"stop"}]}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+    return new Response(sse, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as unknown as typeof fetch;
+
+  const adapter = new OllamaAdapter({ fetchImpl });
+  const events: Array<{ type: string; delta?: string; assistantMessage?: string }> = [];
+  for await (const event of adapter.streamComplete!(
+    { model: "m", messages: [{ role: "user", content: "x" }] },
+    { apiKey: "k" },
+  )) {
+    if (event.type === "assistant.delta") {
+      events.push({ type: event.type, delta: event.delta });
+    } else {
+      events.push({ type: event.type, assistantMessage: event.response.assistantMessage });
+    }
+  }
+
+  assert.deepEqual(events, [
+    { type: "assistant.delta", delta: "hi " },
+    { type: "assistant.delta", delta: "there" },
+    { type: "final", assistantMessage: "hi there" },
+  ]);
+});

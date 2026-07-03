@@ -46,18 +46,45 @@ export class ProviderModelAdapter implements ModelAdapter {
       tools: input.availableTools,
     };
 
+    if (adapter.streamComplete) {
+      let finalResponse: Awaited<ReturnType<typeof adapter.complete>> | undefined;
+      for await (const event of adapter.streamComplete(request, auth)) {
+        if (event.type === "assistant.delta") {
+          await input.onAssistantDelta?.(event.delta);
+          continue;
+        }
+        finalResponse = event.response;
+      }
+      if (!finalResponse) {
+        throw new ConfigError(`Provider "${this.providerId}" stream did not emit a final response`);
+      }
+      return toStepPlan(finalResponse);
+    }
+
     const response = await adapter.complete(request, auth);
-    return {
-      assistantMessage: response.assistantMessage,
-      toolCalls: response.toolCalls.map((t) => ({
-        name: t.name,
-        input: t.input,
-        ...(t.malformedInput ? { malformedInput: true } : {}),
-      })),
-      stop: response.stop,
-      usage: response.usage,
-    };
+    if (response.assistantMessage.length > 0) {
+      await input.onAssistantDelta?.(response.assistantMessage);
+    }
+    return toStepPlan(response);
   }
+}
+
+function toStepPlan(response: {
+  assistantMessage: string;
+  toolCalls: Array<{ name: string; input: Record<string, unknown>; malformedInput?: boolean }>;
+  stop: boolean;
+  usage?: { inputTokens?: number; outputTokens?: number };
+}): StepPlan {
+  return {
+    assistantMessage: response.assistantMessage,
+    toolCalls: response.toolCalls.map((t) => ({
+      name: t.name,
+      input: t.input,
+      ...(t.malformedInput ? { malformedInput: true } : {}),
+    })),
+    stop: response.stop,
+    usage: response.usage,
+  };
 }
 
 function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): ProviderMessage[] {
