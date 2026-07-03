@@ -13,7 +13,7 @@ subagents — and swap any implementation with your own.
 | [`@micro-harness/plugin-plan-mode`](packages/plugin-plan-mode) | Read-only planning and file exploration tools. |
 | [`@micro-harness/plugin-subagents`](packages/plugin-subagents) | `spawn_subagent` tool built on core's `InProcessSubagentRunner`. |
 | [`@micro-harness/plugin-example-tools`](packages/plugin-example-tools) | Reference tool plugin (`echo`, `time`). Doubles as a plugin-authoring example. |
-| `apps/cli` (private) | Reference CLI that wires everything together. Study `apps/cli/src/composition.ts` for the composition pattern. |
+| `apps/cli` (private) | Reference CLI that wires everything together. See [`apps/cli/README.md`](apps/cli/README.md) and `apps/cli/src/composition.ts`. |
 
 ## Design principles
 
