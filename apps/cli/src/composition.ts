@@ -24,6 +24,7 @@ import {
   createCommandSafetyRule,
 } from "@micro-harness/core";
 import { exampleToolsPlugin } from "@micro-harness/plugin-example-tools";
+import { PlanModePlugin } from "@micro-harness/plugin-plan-mode";
 import { subagentsPlugin } from "@micro-harness/plugin-subagents";
 import { builtInProviderPlugins } from "@micro-harness/providers";
 import type { RunArgs } from "./args";
@@ -37,8 +38,8 @@ export interface Composition {
 
 /**
  * Wires the full dependency graph for one `run` invocation. Registers the
- * built-in providers, example tools, and subagents plugin into the host;
- * loads any user plugin last so it can override built-in behavior.
+ * built-in providers, example tools, subagents, and plan-mode plugins into the
+ * host; loads any user plugin last so it can override built-in behavior.
  */
 export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
   const toolRegistry = new ToolRegistry();
@@ -144,7 +145,18 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
     subagents: subagentRunner,
   });
 
-  await pluginHost.register([...builtInProviderPlugins(), exampleToolsPlugin, subagentsPlugin]);
+  const planModePlugin = new PlanModePlugin({
+    rootDir: process.cwd(),
+    maxExploreFiles: 30,
+    maxDepth: 6,
+  });
+
+  await pluginHost.register([
+    ...builtInProviderPlugins(),
+    exampleToolsPlugin,
+    subagentsPlugin,
+    planModePlugin,
+  ]);
 
   return {
     runtime,

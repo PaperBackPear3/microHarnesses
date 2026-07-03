@@ -65,6 +65,15 @@ ollama pull llama3.2:3b
 npm run cli:run -- "summarise this task" --provider ollama --model llama3.2:3b
 ```
 
+The CLI auto-registers the following plugins (see [`apps/cli/src/composition.ts`](apps/cli/src/composition.ts)):
+
+- `builtInProviderPlugins()` — OpenAI, Anthropic, Ollama
+- `exampleToolsPlugin` — `echo`, `time`
+- `subagentsPlugin` — `spawn_subagent`
+- `PlanModePlugin` — `plan_agent`, `explore_agent`, `plan_mode_info`
+
+Load additional plugins with `--plugins <path>` (a file whose default export is a `HarnessPlugin`).
+
 ### CLI flags
 
 | Flag | Default | Description |
