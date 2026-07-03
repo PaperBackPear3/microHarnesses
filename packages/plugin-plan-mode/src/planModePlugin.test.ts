@@ -172,7 +172,7 @@ test("ExplorerPlugin matches filenames when content has no query hit", async () 
     };
     assert.equal(result.total_results > 0, true);
     assert.equal(result.fallback, "match");
-    assert.equal(result.results.some((entry) => entry.file === "cli-summary.ts"), true);
+    assert.equal(result.results.some((entry) => entry.file === "src/cli-summary.ts"), true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -197,21 +197,109 @@ test("ExplorerPlugin returns inventory fallback when query has no matches", asyn
     };
     assert.equal(result.total_results > 0, true);
     assert.equal(result.fallback, "inventory");
-    assert.equal(result.results[0]?.file, "index.ts");
+    assert.equal(result.results[0]?.file, "src/index.ts");
     assert.equal(result.results[0]?.matches[0]?.line, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("ExplorerPlugin declares query as required in input schema", () => {
+test("ExplorerPlugin accepts a single file path as root_path", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-single-file-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(
+    path.join(root, "src", "single.ts"),
+    "export const singleFileMarker = true;\n",
+    "utf8",
+  );
+
+  try {
+    const tools = new Map<string, ToolDefinition>();
+    new ExplorerPlugin({ rootDir: root }).register(makeApi(tools));
+    const result = (await tools.get("explore_agent")!.execute({
+      query: "singleFileMarker",
+      root_path: "src/single.ts",
+      max_files: 5,
+    })) as {
+      total_results: number;
+      fallback: string;
+      results: Array<{ file: string }>;
+    };
+    assert.equal(result.total_results, 1);
+    assert.equal(result.fallback, "match");
+    assert.equal(result.results[0]?.file, "src/single.ts");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ExplorerPlugin can explore without query using inventory fallback", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-no-query-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "index.ts"), "export const noQuery = true;\n", "utf8");
+
+  try {
+    const tools = new Map<string, ToolDefinition>();
+    new ExplorerPlugin({ rootDir: root }).register(makeApi(tools));
+    const result = (await tools.get("explore_agent")!.execute({
+      root_path: "src",
+      max_files: 5,
+    })) as {
+      fallback: string;
+      report: { query_provided: boolean };
+      total_results: number;
+    };
+    assert.equal(result.fallback, "inventory");
+    assert.equal(result.report.query_provided, false);
+    assert.equal(result.total_results > 0, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ExplorerPlugin supports mixed file and directory targets", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-mixed-targets-"));
+  await mkdir(path.join(root, "src"), { recursive: true });
+  await writeFile(path.join(root, "src", "alpha.ts"), "export const alpha = 'mixed-target';\n", "utf8");
+  await writeFile(path.join(root, "single.ts"), "export const single = 'mixed-target';\n", "utf8");
+
+  try {
+    const tools = new Map<string, ToolDefinition>();
+    new ExplorerPlugin({ rootDir: root }).register(makeApi(tools));
+    const result = (await tools.get("explore_agent")!.execute({
+      query: "mixed-target",
+      targets: ["src", "single.ts"],
+      max_files: 6,
+    })) as {
+      total_results: number;
+      targets: string[];
+      report: { explored_targets: Array<{ requested: string; kind: "file" | "directory" }> };
+      results: Array<{ file: string }>;
+    };
+    assert.equal(result.total_results >= 2, true);
+    assert.deepEqual(result.targets, ["src", "single.ts"]);
+    assert.equal(result.report.explored_targets.some((target) => target.requested === "src"), true);
+    assert.equal(
+      result.report.explored_targets.some(
+        (target) => target.requested === "single.ts" && target.kind === "file",
+      ),
+      true,
+    );
+    assert.equal(result.results.some((entry) => entry.file === "src/alpha.ts"), true);
+    assert.equal(result.results.some((entry) => entry.file === "single.ts"), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ExplorerPlugin does not require query in input schema", () => {
   const tools = new Map<string, ToolDefinition>();
   new ExplorerPlugin({ rootDir: process.cwd() }).register(makeApi(tools));
   const schema = tools.get("explore_agent")!.inputSchema as {
     required?: string[];
     additionalProperties?: boolean;
   };
-  assert.deepEqual(schema.required, ["query"]);
+  assert.equal(Array.isArray(schema.required), false);
   assert.equal(schema.additionalProperties, false);
 });
 

@@ -7,7 +7,7 @@ Ships three composable tools — **no file writes, no process execution, no netw
 | Tool | Description |
 |---|---|
 | `plan_agent` | Turns a goal + optional scope/constraints into a prioritised execution plan |
-| `explore_agent` | Searches file names and content snippets under a root directory |
+| `explore_agent` | Explores one or more files/directories, reading snippets and returning a structured report |
 | `plan_mode_info` | Returns plan-mode tool list and safety guarantees |
 
 ## Install

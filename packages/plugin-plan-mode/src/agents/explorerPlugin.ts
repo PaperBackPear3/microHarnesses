@@ -1,4 +1,5 @@
 import path from "node:path";
+import { stat } from "node:fs/promises";
 import type {
   HarnessPlugin,
   PluginApi,
@@ -50,11 +51,18 @@ export class ExplorerPlugin implements HarnessPlugin {
         properties: {
           query: {
             type: "string",
-            description: "Required text to search for inside file contents.",
+            description:
+              "Optional text to search for in file contents and filenames. When omitted, returns inventory.",
+          },
+          targets: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "Optional list of file/directory paths (relative to plugin root) to explore in one call.",
           },
           root_path: {
             type: "string",
-            description: "Optional path (relative to plugin root) to narrow exploration scope.",
+            description: "Legacy single-path input (file or directory, relative to plugin root).",
           },
           root_directory: {
             type: "string",
@@ -70,29 +78,33 @@ export class ExplorerPlugin implements HarnessPlugin {
             description: "Optional traversal depth. Clamped to plugin limits.",
           },
         },
-        required: ["query"],
         additionalProperties: false,
       },
       async execute(input) {
         const query = String(input.query ?? "").trim();
-        if (!query) throw new Error("explore_agent requires 'query'");
-
         const requestedRoot = String(input.root_path ?? input.root_directory ?? "").trim();
-        const absoluteRoot = requestedRoot ? safeResolve(rootDir, requestedRoot) : rootDir;
+        const requestedTargets = normalizeTargets(input, requestedRoot);
         const maxFiles = clampNumber(input.max_files, 1, maxExploreFiles, 8);
         const depth = clampNumber(input.max_depth, 1, maxDepth, 4);
 
-        const files = await listFiles(absoluteRoot, depth, maxFiles * 4);
+        const resolvedTargets = await resolveExploreTargets(
+          rootDir,
+          requestedTargets,
+          depth,
+          maxFiles * 4,
+        );
+        const files = resolvedTargets.files;
         const results = [];
         const inventory: Array<{ file: string; matches: Array<{ line: number; snippet: string }> }> =
           [];
         const queryLower = query.toLowerCase();
+        const hasQuery = query.length > 0;
 
         for (const filePath of files) {
           if (results.length >= maxFiles && inventory.length >= maxFiles) break;
           const raw = await readTextFileSafely(filePath);
           if (!raw) continue;
-          const relativePath = path.relative(absoluteRoot, filePath);
+          const relativePath = path.relative(rootDir, filePath);
 
           if (inventory.length < maxFiles) {
             inventory.push({
@@ -104,10 +116,10 @@ export class ExplorerPlugin implements HarnessPlugin {
           const matches = raw
             .split(/\r?\n/)
             .map((line, index) => ({ index: index + 1, line }))
-            .filter((entry) => entry.line.toLowerCase().includes(queryLower))
+            .filter((entry) => hasQuery && entry.line.toLowerCase().includes(queryLower))
             .slice(0, 4);
 
-          const filenameMatches = relativePath.toLowerCase().includes(queryLower);
+          const filenameMatches = hasQuery && relativePath.toLowerCase().includes(queryLower);
           if (matches.length === 0 && !filenameMatches) continue;
 
           const effectiveMatches =
@@ -125,15 +137,23 @@ export class ExplorerPlugin implements HarnessPlugin {
         }
 
         const outputResults = results.length > 0 ? results : inventory;
-        const fallbackUsed = results.length === 0;
+        const fallbackUsed = !hasQuery || results.length === 0;
 
         return {
           mode: "explore",
           read_only: true,
           query,
           root_path: requestedRoot || ".",
+          targets: requestedTargets,
           fallback: fallbackUsed ? "inventory" : "match",
           total_results: outputResults.length,
+          report: {
+            query_provided: hasQuery,
+            scanned_files: files.length,
+            matched_files: results.length,
+            returned_files: outputResults.length,
+            explored_targets: resolvedTargets.targets,
+          },
           results: outputResults,
         };
       },
@@ -152,4 +172,45 @@ function firstLineSnippet(raw: string, maxSnippetLength: number): { line: number
     };
   }
   return { line: 1, snippet: "" };
+}
+
+function normalizeTargets(input: Record<string, unknown>, requestedRoot: string): string[] {
+  const requested = Array.isArray(input.targets)
+    ? input.targets
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : [];
+  if (requested.length > 0) return requested;
+  return [requestedRoot || "."];
+}
+
+async function resolveExploreTargets(
+  rootDir: string,
+  requestedTargets: string[],
+  depth: number,
+  maxFiles: number,
+): Promise<{
+  files: string[];
+  targets: Array<{ requested: string; resolved: string; kind: "file" | "directory" }>;
+}> {
+  const deduped = new Set<string>();
+  const targets: Array<{ requested: string; resolved: string; kind: "file" | "directory" }> = [];
+  for (const requested of requestedTargets) {
+    const absoluteRoot = safeResolve(rootDir, requested);
+    const rootInfo = await stat(absoluteRoot);
+    if (rootInfo.isFile()) {
+      deduped.add(absoluteRoot);
+      targets.push({ requested, resolved: absoluteRoot, kind: "file" });
+      continue;
+    }
+    targets.push({ requested, resolved: absoluteRoot, kind: "directory" });
+    const files = await listFiles(absoluteRoot, depth, maxFiles);
+    for (const file of files) {
+      deduped.add(file);
+      if (deduped.size >= maxFiles) break;
+    }
+    if (deduped.size >= maxFiles) break;
+  }
+  return { files: Array.from(deduped), targets };
 }
