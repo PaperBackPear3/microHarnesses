@@ -4,6 +4,15 @@
   "description": "Reference tool plugin (echo, time) for @micro-harness/core. Doubles as a plugin-authoring example.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "example", "tools"],
+  "homepage": "https://paperbackpear3.github.io/microHarnesses/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaperBackPear3/microHarnesses.git",
+    "directory": "packages/plugin-example-tools"
+  },
+  "bugs": {
+    "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

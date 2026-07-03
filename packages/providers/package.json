@@ -4,6 +4,15 @@
   "description": "Provider plugins (OpenAI, Anthropic, Ollama) for @micro-harness/core. Each provider is a HarnessPlugin that registers its adapter and env-based credentials resolver.",
   "license": "MIT",
   "keywords": ["micro-harness", "llm", "openai", "anthropic", "ollama"],
+  "homepage": "https://paperbackpear3.github.io/microHarnesses/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaperBackPear3/microHarnesses.git",
+    "directory": "packages/providers"
+  },
+  "bugs": {
+    "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

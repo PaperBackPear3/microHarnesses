@@ -4,6 +4,15 @@
   "description": "Read-only planning and exploration plugin for @micro-harness/core. Ships a plan_agent and an explore_agent tool.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "planning", "exploration"],
+  "homepage": "https://paperbackpear3.github.io/microHarnesses/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaperBackPear3/microHarnesses.git",
+    "directory": "packages/plugin-plan-mode"
+  },
+  "bugs": {
+    "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

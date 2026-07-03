@@ -3,6 +3,15 @@
   "version": "0.3.0",
   "private": true,
   "description": "Library-first framework for building micro harnesses.",
+  "homepage": "https://paperbackpear3.github.io/microHarnesses/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaperBackPear3/microHarnesses.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
+  },
+  "keywords": ["micro-harness", "llm", "ai-agent", "typescript", "plugin-system", "tool-calling"],
   "engines": {
     "node": ">=20"
   },

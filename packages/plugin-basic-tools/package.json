@@ -4,6 +4,15 @@
   "description": "Workspace-scoped file, grep, and shell tools for @micro-harness/core.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell", "grep"],
+  "homepage": "https://paperbackpear3.github.io/microHarnesses/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaperBackPear3/microHarnesses.git",
+    "directory": "packages/plugin-basic-tools"
+  },
+  "bugs": {
+    "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

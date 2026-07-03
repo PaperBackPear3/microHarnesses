@@ -4,6 +4,15 @@
   "description": "spawn_subagent tool built on @micro-harness/core's InProcessSubagentRunner.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "subagents", "delegation"],
+  "homepage": "https://paperbackpear3.github.io/microHarnesses/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaperBackPear3/microHarnesses.git",
+    "directory": "packages/plugin-subagents"
+  },
+  "bugs": {
+    "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
