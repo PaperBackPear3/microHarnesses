@@ -183,9 +183,15 @@ export class HarnessRuntime {
         model: modelSelection.model,
         reason: modelSelection.reason,
         iteration,
+        taskType,
       });
 
       let streamedChars = 0;
+      await emitter.emit("model.thinking_started", {
+        model: modelSelection.model,
+        iteration,
+        taskType,
+      });
       const step = await this.model.nextStep({
         agentName,
         userPrompt,
@@ -199,6 +205,11 @@ export class HarnessRuntime {
           streamedChars += delta.length;
           await emitter.emit("model.delta", { iteration, delta });
         },
+      });
+      await emitter.emit("model.thinking_completed", {
+        model: modelSelection.model,
+        iteration,
+        taskType,
       });
       if (streamedChars > 0) {
         await emitter.emit("model.stream_completed", { iteration, chars: streamedChars });

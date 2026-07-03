@@ -224,6 +224,14 @@ test("runtime emits model.delta and stream completion events", async () => {
   const deltaEvents = events.events.filter((event) => event.type === "model.delta");
   assert.equal(deltaEvents.length, 2);
   assert.equal(
+    events.events.some((event) => event.type === "model.thinking_started"),
+    true,
+  );
+  assert.equal(
+    events.events.some((event) => event.type === "model.thinking_completed"),
+    true,
+  );
+  assert.equal(
     events.events.some((event) => event.type === "model.stream_completed"),
     true,
   );
@@ -248,6 +256,8 @@ test("runtime passes taskType hint into model selector", async () => {
 
   await runtime.run("default", "hello", options);
   assert.equal(selector.seen?.taskType, "reasoning");
+  const selected = events.events.find((event) => event.type === "model.selected");
+  assert.equal(selected?.payload.taskType, "reasoning");
 });
 
 class ApprovalPolicy implements ToolPolicyEngine {

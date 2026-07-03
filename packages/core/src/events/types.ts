@@ -1,8 +1,10 @@
 export type ExecutionEventType =
   | "run.started"
   | "model.selected"
+  | "model.thinking_started"
   | "model.delta"
   | "model.stream_completed"
+  | "model.thinking_completed"
   | "model.completed"
   | "tool.allowed"
   | "tool.blocked"
