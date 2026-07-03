@@ -1,10 +1,8 @@
-# How to compose plugins
+# Composing plugins
 
-microHarnesses uses plugins to extend behavior without changing core runtime code.
+Plugins extend behavior without changing core runtime code. Register capabilities through `PluginApi`.
 
-## 1. What plugins can register
-
-Plugins can register one or more capabilities through `PluginApi`, including:
+## What plugins can register
 
 - tools
 - providers
@@ -15,7 +13,7 @@ Plugins can register one or more capabilities through `PluginApi`, including:
 - compressor
 - subagents
 
-## 2. Use built-in plugins in the reference composition
+## Use built-in plugins
 
 The CLI composition (`apps/cli/src/composition.ts`) wires common defaults:
 
@@ -24,7 +22,7 @@ The CLI composition (`apps/cli/src/composition.ts`) wires common defaults:
 - subagents plugin
 - plan mode plugin
 
-## 3. Load an extra plugin
+## Load an extra plugin
 
 ```bash
 npm run cli:run -- "use my custom tool" \
@@ -37,7 +35,7 @@ The plugin file should export either:
 - `default` export with a `HarnessPlugin`, or
 - named export `plugin`.
 
-## 4. Minimal plugin example
+## Minimal plugin example
 
 ```ts
 import type { HarnessPlugin, PluginApi } from "@micro-harness/core";
