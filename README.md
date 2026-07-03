@@ -6,15 +6,15 @@ subagents — and swap any implementation with your own.
 
 ## Packages
 
-| Package | Purpose |
-|---|---|
-| [`@micro-harness/core`](packages/core) | Agent loop, tool registry, sessions/context/compression, plugin host, policy engine + command-safety rule, provider/credentials registries, in-process subagent primitive. Zero runtime dependencies. |
-| [`@micro-harness/providers`](packages/providers) | Provider plugins: OpenAI, Anthropic, Ollama. Each is a `HarnessPlugin` that registers an adapter + env-based credentials resolver. |
-| [`@micro-harness/plugin-plan-mode`](packages/plugin-plan-mode) | Read-only planning and file exploration tools. |
-| [`@micro-harness/plugin-subagents`](packages/plugin-subagents) | `spawn_subagent` tool built on core's `InProcessSubagentRunner`. |
-| [`@micro-harness/plugin-basic-tools`](packages/plugin-basic-tools) | Workspace-scoped utility tools: file IO, grep search, and shell execution. |
-| [`@micro-harness/plugin-example-tools`](packages/plugin-example-tools) | Reference tool plugin (`echo`, `time`). Doubles as a plugin-authoring example. |
-| `apps/cli` (private) | Reference CLI that wires everything together. See [`apps/cli/README.md`](apps/cli/README.md) and `apps/cli/src/composition.ts`. |
+| Package                                                                | Purpose                                                                                                                                                                                               |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@micro-harness/core`](packages/core)                                 | Agent loop, tool registry, sessions/context/compression, plugin host, policy engine + command-safety rule, provider/credentials registries, in-process subagent primitive. Zero runtime dependencies. |
+| [`@micro-harness/providers`](packages/providers)                       | Provider plugins: OpenAI, Anthropic, Ollama. Each is a `HarnessPlugin` that registers an adapter + env-based credentials resolver.                                                                    |
+| [`@micro-harness/plugin-plan-mode`](packages/plugin-plan-mode)         | Read-only planning and file exploration tools.                                                                                                                                                        |
+| [`@micro-harness/plugin-subagents`](packages/plugin-subagents)         | `spawn_subagent` tool built on core's `InProcessSubagentRunner`.                                                                                                                                      |
+| [`@micro-harness/plugin-basic-tools`](packages/plugin-basic-tools)     | Workspace-scoped utility tools: file IO, grep search, and shell execution.                                                                                                                            |
+| [`@micro-harness/plugin-example-tools`](packages/plugin-example-tools) | Reference tool plugin (`echo`, `time`). Doubles as a plugin-authoring example.                                                                                                                        |
+| `apps/cli` (private)                                                   | Reference CLI that wires everything together. See [`apps/cli/README.md`](apps/cli/README.md) and `apps/cli/src/composition.ts`.                                                                       |
 
 ## Design principles
 
@@ -32,10 +32,6 @@ subagents — and swap any implementation with your own.
 - **Approval seam.** When policy returns `require_approval`, the runtime
   emits `tool.approval_requested` and awaits a caller-supplied
   `ApprovalHandler`. No handler → the tool is blocked.
-
-## Specs
-
-- [Tool capability exposure for model-driven tool use](docs/specs/tool-capability-exposure.md)
 
 ## Install and build
 
@@ -89,21 +85,21 @@ Load additional plugins with `--plugins <path>` (a file whose default export is 
 
 ### CLI flags
 
-| Flag | Default | Description |
-|---|---|---|
-| `--agent <name>` | `default` | Prompt pack to load from `--prompts-dir` |
-| `--provider <openai\|anthropic\|ollama>` | `openai` | LLM provider |
-| `--model <name>` | provider's `defaultModel` | Model override |
-| `--max-tokens <n>` | `4096` | Maximum output tokens per model call |
-| `--prompts-dir <path>` | `apps/cli/prompts` | Root directory for prompt packs |
-| `--iterations <n>` | `4` | Maximum loop iterations |
-| `--snapshot-every <n>` | `2` | Save session snapshot every N iterations |
-| `--session-id <id>` | new | Re-use an existing session (auto-resume enabled) |
-| `--resume` | off | Resume from latest session snapshot (also implied by `--session-id`) |
-| `--goal <text>` | prompt text | Explicit goal persisted in session manifest |
-| `--state-dir <path>` | `.micro-harness` | State and session storage root |
-| `--plugins <path>` | none | Path to a plugin file (loaded after built-ins) |
-| `--no-safety` | off | Disable `CommandSafetyRule` (use only for local dev / trusted env) |
+| Flag                                     | Default                   | Description                                                          |
+| ---------------------------------------- | ------------------------- | -------------------------------------------------------------------- |
+| `--agent <name>`                         | `default`                 | Prompt pack to load from `--prompts-dir`                             |
+| `--provider <openai\|anthropic\|ollama>` | `openai`                  | LLM provider                                                         |
+| `--model <name>`                         | provider's `defaultModel` | Model override                                                       |
+| `--max-tokens <n>`                       | `4096`                    | Maximum output tokens per model call                                 |
+| `--prompts-dir <path>`                   | `apps/cli/prompts`        | Root directory for prompt packs                                      |
+| `--iterations <n>`                       | `4`                       | Maximum loop iterations                                              |
+| `--snapshot-every <n>`                   | `2`                       | Save session snapshot every N iterations                             |
+| `--session-id <id>`                      | new                       | Re-use an existing session (auto-resume enabled)                     |
+| `--resume`                               | off                       | Resume from latest session snapshot (also implied by `--session-id`) |
+| `--goal <text>`                          | prompt text               | Explicit goal persisted in session manifest                          |
+| `--state-dir <path>`                     | `.micro-harness`          | State and session storage root                                       |
+| `--plugins <path>`                       | none                      | Path to a plugin file (loaded after built-ins)                       |
+| `--no-safety`                            | off                       | Disable `CommandSafetyRule` (use only for local dev / trusted env)   |
 
 Interactive slash commands: `/info` (show current session/runtime info), `/exit`, `/quit`.
 
@@ -111,12 +107,12 @@ Interactive slash commands: `/info` (show current session/runtime info), `/exit`
 
 Sessions live under `<state-dir>/sessions/<session-id>/`:
 
-| File | Purpose |
-|---|---|
-| `manifest.json` | Session metadata and file pointers (incl. `parentSessionId` for subagent sessions) |
-| `events.jsonl` | Append-only event/operation log |
-| `snapshots/*.json` | Periodic state snapshots for fast resume |
-| `support-history.jsonl` | Tool/policy failures and diagnostics |
+| File                    | Purpose                                                                            |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `manifest.json`         | Session metadata and file pointers (incl. `parentSessionId` for subagent sessions) |
+| `events.jsonl`          | Append-only event/operation log                                                    |
+| `snapshots/*.json`      | Periodic state snapshots for fast resume                                           |
+| `support-history.jsonl` | Tool/policy failures and diagnostics                                               |
 
 ```bash
 node apps/cli/dist/index.js sessions list
@@ -197,11 +193,11 @@ non-exhaustive** — see
 and treat it as one layer of defense-in-depth. Add rules for your threat
 model via `policy.addRule(...)`. Severity × `safetyMode` mapping:
 
-| Severity ↓ / mode → | strict | balanced | open |
-|---|---|---|---|
-| critical | deny | deny | require_approval |
-| high | deny | require_approval | require_approval |
-| medium | require_approval | require_approval | allow |
+| Severity ↓ / mode → | strict           | balanced         | open             |
+| ------------------- | ---------------- | ---------------- | ---------------- |
+| critical            | deny             | deny             | require_approval |
+| high                | deny             | require_approval | require_approval |
+| medium              | require_approval | require_approval | allow            |
 
 ## Publishing
 
