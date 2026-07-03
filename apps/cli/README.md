@@ -44,11 +44,17 @@ Run:
 npm run cli:run -- "summarise this task" --provider openai --model gpt-4.1-mini
 ```
 
+Interactive (no initial prompt; keeps asking until you exit):
+
+```bash
+npm run cli:run -- --provider openai --model gpt-4.1-mini
+```
+
 ## CLI commands
 
 | Command | Purpose |
 |---|---|
-| `run` | Executes one harness run, shows compact thinking/reasoning status + streamed deltas on stderr, then prints final JSON state to stdout |
+| `run` | Starts interactive mode when no prompt is provided; prints compact thinking/reasoning status, tool/agent calls, and streamed deltas on stderr |
 | `sessions list` | Lists sessions in `--state-dir` |
 | `sessions show <session-id>` | Prints one session JSON |
 | `sessions resume <session-id> <prompt>` | Resumes a session and continues with a new prompt |

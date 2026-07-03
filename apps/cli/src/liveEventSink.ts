@@ -2,7 +2,6 @@ import { type EventSink, type ExecutionEvent, MemoryEventSink } from "@micro-har
 
 /**
  * Mirrors runtime events to an in-memory sink and streams compact progress to stderr.
- * Final state JSON remains on stdout.
  */
 export class LiveEventSink implements EventSink {
   private readonly memory = new MemoryEventSink();
@@ -40,6 +39,22 @@ export class LiveEventSink implements EventSink {
       this.indicatorMode = undefined;
     }
 
+    if (event.type === "tool.allowed") {
+      this.writeCallLine("call", event.payload);
+    }
+    if (event.type === "tool.blocked") {
+      this.writeCallLine("blocked", event.payload);
+    }
+    if (event.type === "tool.approval_requested") {
+      this.writeCallLine("approval requested", event.payload);
+    }
+    if (event.type === "tool.approval_approved") {
+      this.writeCallLine("approval granted", event.payload);
+    }
+    if (event.type === "tool.approval_denied") {
+      this.writeCallLine("approval denied", event.payload);
+    }
+
     if (event.type === "model.thinking_completed" || event.type === "run.completed") {
       this.stopSpinner(!this.streaming);
       this.streaming = false;
@@ -47,6 +62,22 @@ export class LiveEventSink implements EventSink {
     }
 
     await this.memory.push(event);
+  }
+
+  private writeCallLine(status: string, payload: Record<string, unknown>): void {
+    const tool = typeof payload.tool === "string" ? payload.tool : "unknown";
+    const label = isAgentTool(tool) ? "agent" : "tool";
+    const summary = summarizeInput(payload.input);
+    const reason = typeof payload.reason === "string" ? payload.reason : undefined;
+    const parts = [`[${label}] ${status}: ${tool}`];
+    if (summary.length > 0) {
+      parts.push(`input=${summary}`);
+    }
+    if (reason && (status === "blocked" || status.startsWith("approval"))) {
+      parts.push(`reason=${truncate(reason, 140)}`);
+    }
+    this.stopSpinner(false);
+    process.stderr.write(`${parts.join(" ")}\n`);
   }
 
   private startSpinner(): void {
@@ -76,4 +107,28 @@ export class LiveEventSink implements EventSink {
       }
     }
   }
+}
+
+function summarizeInput(input: unknown): string {
+  if (typeof input === "undefined") {
+    return "";
+  }
+  try {
+    return truncate(JSON.stringify(input), 140);
+  } catch {
+    return "<unserializable>";
+  }
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
+}
+
+function isAgentTool(toolName: string): boolean {
+  return (
+    toolName === "spawn_subagent" ||
+    toolName.endsWith("_agent") ||
+    toolName.includes("subagent") ||
+    toolName.includes("agent")
+  );
 }

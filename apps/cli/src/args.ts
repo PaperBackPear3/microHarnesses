@@ -24,8 +24,21 @@ export interface SessionsArgs {
 
 const DEFAULT_PROVIDER = "openai";
 
+const VALUE_FLAGS = new Set([
+  "--agent",
+  "--state-dir",
+  "--prompts-dir",
+  "--iterations",
+  "--snapshot-every",
+  "--plugins",
+  "--provider",
+  "--model",
+  "--session-id",
+  "--goal",
+]);
+
 export function parseRunArgs(args: string[], defaultPromptsDir: string): RunArgs {
-  const prompt = args.find((arg) => !arg.startsWith("--")) ?? "hello micro harness";
+  const prompt = extractPositionalArgs(args)[0] ?? "";
   return parseRunArgsWithPrompt(args, prompt, defaultPromptsDir);
 }
 
@@ -80,4 +93,19 @@ export function parsePositiveInt(raw: string, flagName: string): number {
     throw new Error(`${flagName} must be a positive integer, got "${raw}"`);
   }
   return parsed;
+}
+
+export function extractPositionalArgs(args: string[]): string[] {
+  const positionals: string[] = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (value.startsWith("--")) {
+      if (VALUE_FLAGS.has(value)) {
+        index += 1;
+      }
+      continue;
+    }
+    positionals.push(value);
+  }
+  return positionals;
 }

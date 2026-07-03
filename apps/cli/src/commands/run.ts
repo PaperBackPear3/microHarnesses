@@ -1,9 +1,14 @@
+import readline from "node:readline/promises";
 import { type RunArgs, parseRunArgs, parseRunArgsWithPrompt } from "../args";
-import { buildComposition } from "../composition";
+import { type Composition, buildComposition } from "../composition";
 
 export async function runCommand(args: string[], defaultPromptsDir: string): Promise<void> {
   const runArgs = parseRunArgs(args, defaultPromptsDir);
-  await executeRun(runArgs);
+  if (runArgs.prompt.trim().length === 0) {
+    await runInteractiveLoop(runArgs);
+    return;
+  }
+  await runSinglePrompt(runArgs, runArgs.prompt);
 }
 
 export async function runCommandWithPrompt(
@@ -12,17 +17,55 @@ export async function runCommandWithPrompt(
   defaultPromptsDir: string,
 ): Promise<void> {
   const runArgs = parseRunArgsWithPrompt(args, prompt, defaultPromptsDir);
-  await executeRun(runArgs);
+  await runSinglePrompt(runArgs, prompt);
 }
 
-async function executeRun(runArgs: RunArgs): Promise<void> {
+async function runSinglePrompt(runArgs: RunArgs, prompt: string): Promise<void> {
+  const composition = await prepareComposition(runArgs);
+  await executePrompt(composition, runArgs, prompt, runArgs.sessionId, runArgs.resume);
+}
+
+async function runInteractiveLoop(runArgs: RunArgs): Promise<void> {
+  const composition = await prepareComposition(runArgs);
+  let sessionId = runArgs.sessionId;
+  let resume = runArgs.resume;
+
+  process.stderr.write('Interactive mode. Type "/exit" to quit.\n');
+  while (true) {
+    const prompt = (await askPrompt("you> ")).trim();
+    if (prompt.length === 0) {
+      continue;
+    }
+    if (isExitPrompt(prompt)) {
+      break;
+    }
+    try {
+      sessionId = await executePrompt(composition, runArgs, prompt, sessionId, resume);
+      resume = true;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "unknown run error";
+      process.stderr.write(`[error] ${message}\n`);
+    }
+  }
+}
+
+async function prepareComposition(runArgs: RunArgs): Promise<Composition> {
   const composition = await buildComposition(runArgs);
   const userPlugins = await composition.loadUserPlugins();
   if (userPlugins.length > 0) {
     await composition.pluginHost.register(userPlugins);
   }
+  return composition;
+}
 
-  const state = await composition.runtime.run(runArgs.agentName, runArgs.prompt, {
+async function executePrompt(
+  composition: Composition,
+  runArgs: RunArgs,
+  prompt: string,
+  sessionId: string | undefined,
+  resume: boolean,
+): Promise<string | undefined> {
+  const state = await composition.runtime.run(runArgs.agentName, prompt, {
     maxIterations: runArgs.maxIterations,
     snapshotEvery: runArgs.snapshotEvery,
     profile: {
@@ -31,10 +74,23 @@ async function executeRun(runArgs: RunArgs): Promise<void> {
       reasoningModel: runArgs.model,
     },
     modelOverride: runArgs.model,
-    sessionId: runArgs.sessionId,
-    resume: runArgs.resume,
+    sessionId,
+    resume,
     goal: runArgs.goal,
   });
+  return state.sessionId;
+}
 
-  process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+async function askPrompt(question: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    return await rl.question(question);
+  } finally {
+    rl.close();
+  }
+}
+
+function isExitPrompt(prompt: string): boolean {
+  const lowered = prompt.toLowerCase();
+  return lowered === "/exit" || lowered === "exit" || lowered === "/quit" || lowered === "quit";
 }

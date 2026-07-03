@@ -62,6 +62,12 @@ export OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
 npm run cli:run -- "summarise this task" --provider openai --model gpt-4.1-mini
 ```
 
+Interactive (no initial prompt; loops until you exit):
+
+```bash
+npm run cli:run -- --provider openai --model gpt-4.1-mini
+```
+
 Local Ollama (no API key):
 
 ```bash

@@ -74,6 +74,7 @@ export class ToolExecutionEngine {
         const message = error instanceof Error ? error.message : "Unknown tool";
         await ctx.emitter.emit("tool.blocked", {
           tool: call.name,
+          input: call.input,
           decision: "deny",
           reason: message,
           iteration: ctx.iteration,
@@ -118,6 +119,7 @@ export class ToolExecutionEngine {
               : `Approval required but no handler configured: ${policy.reason}`;
             await ctx.emitter.emit("tool.blocked", {
               tool: call.name,
+              input: call.input,
               decision: "require_approval",
               reason: denialReason,
               iteration: ctx.iteration,
@@ -134,6 +136,7 @@ export class ToolExecutionEngine {
         } else {
           await ctx.emitter.emit("tool.blocked", {
             tool: call.name,
+            input: call.input,
             decision: policy.decision,
             reason: policy.reason,
             iteration: ctx.iteration,
@@ -149,7 +152,11 @@ export class ToolExecutionEngine {
         }
       }
 
-      await ctx.emitter.emit("tool.allowed", { tool: call.name, iteration: ctx.iteration });
+      await ctx.emitter.emit("tool.allowed", {
+        tool: call.name,
+        input: call.input,
+        iteration: ctx.iteration,
+      });
 
       try {
         this.activeToolController = new AbortController();
@@ -185,6 +192,7 @@ export class ToolExecutionEngine {
   ): Promise<boolean> {
     await ctx.emitter.emit("tool.approval_requested", {
       tool: call.name,
+      input: call.input,
       reason,
       iteration: ctx.iteration,
     });
@@ -203,6 +211,7 @@ export class ToolExecutionEngine {
       });
       await ctx.emitter.emit(approved ? "tool.approval_approved" : "tool.approval_denied", {
         tool: call.name,
+        input: call.input,
         iteration: ctx.iteration,
         reason,
       });
@@ -211,6 +220,7 @@ export class ToolExecutionEngine {
       const message = error instanceof Error ? error.message : "approval handler failed";
       await ctx.emitter.emit("tool.approval_denied", {
         tool: call.name,
+        input: call.input,
         iteration: ctx.iteration,
         reason: `handler error: ${message}`,
       });
