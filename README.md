@@ -19,6 +19,12 @@ npm install
 npm run build
 ```
 
+Run tests:
+
+```bash
+npm test
+```
+
 ## Run the reference CLI
 
 Set provider credentials:
@@ -32,7 +38,7 @@ export ANTHROPIC_API_KEY=...
 Then run:
 
 ```bash
-node apps/cli/dist/index.js run "summarize this task" --agent default --provider openai --model gpt-4.1-mini
+npm run cli:run -- "summarize this task" --agent default --provider openai --model gpt-4.1-mini
 ```
 
 Useful flags:

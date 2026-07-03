@@ -44,11 +44,11 @@ async function runCommand(args: string[]): Promise<void> {
   const prompt = args.find((arg) => !arg.startsWith("--")) ?? "hello micro harness";
   const agentName = getArgValue(args, "--agent") ?? "default";
   const stateDir = getArgValue(args, "--state-dir") ?? path.resolve(process.cwd(), ".micro-harness");
-  const promptDir = getArgValue(args, "--prompts-dir") ?? path.resolve(process.cwd(), "apps/cli/prompts");
+  const promptDir = getArgValue(args, "--prompts-dir") ?? path.resolve(__dirname, "../prompts");
   const maxIterations = Number(getArgValue(args, "--iterations") ?? "4");
   const checkpointEvery = Number(getArgValue(args, "--checkpoint-every") ?? "2");
   const pluginsPath = getArgValue(args, "--plugins");
-  const provider = ((getArgValue(args, "--provider") ?? "openai") as ProviderId);
+  const provider = parseProvider(getArgValue(args, "--provider") ?? "openai");
   const model = getArgValue(args, "--model") ?? "gpt-4.1-mini";
 
   const toolRegistry = new ToolRegistry();
@@ -143,6 +143,13 @@ function getArgValue(args: string[], name: string): string | undefined {
     return undefined;
   }
   return args[index + 1];
+}
+
+function parseProvider(raw: string): ProviderId {
+  if (raw === "openai" || raw === "anthropic") {
+    return raw;
+  }
+  throw new Error(`Unsupported provider "${raw}". Use "openai" or "anthropic".`);
 }
 
 void main().catch((error: unknown) => {

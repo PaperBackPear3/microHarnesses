@@ -5,7 +5,9 @@
 Use npm scripts from the root `package.json`:
 
 - Build TypeScript: `npm run build`
-- Run harness (build + run): `npm run run -- "summarize this task" --agent default --provider openai`
+- Run core tests: `npm test`
+- Run a single compiled test file: `node --test packages/core/dist/runtime/runtime.test.js`
+- Run harness (build + run): `npm run cli:run -- "summarize this task" --agent default --provider openai`
 - Start default command (build + run): `npm start`
 - List checkpoints (build + run): `npm run checkpoints:list`
 - Show checkpoint: `node apps/cli/dist/index.js checkpoints show <checkpoint-id>`
@@ -13,9 +15,8 @@ Use npm scripts from the root `package.json`:
 
 Current repo state:
 
-- There is **no test script** yet.
+- Tests exist for `@micro-harness/core` using Node's built-in test runner.
 - There is **no lint script** yet.
-- There is no single-test command yet because no test runner is configured.
 
 ## High-level architecture
 
@@ -43,7 +44,7 @@ This project is now library-first with a reference CLI:
    - Plugins register through runtime-provided API hooks.
 
 3. `packages/core/src/prompts/fsPromptSource.ts` loads prompt packs.
-   - Convention: `<prompts-dir>/<agent>/system.md` required; `developer.md`, `tools.md`, `prompt.meta.json` optional.
+   - Convention: `<prompts-dir>/<agent>/system.md` required; additional markdown sections are configurable (defaults include `developer.md` and `tools.md`), plus optional `prompt.meta.json`.
    - Frontmatter is stripped from markdown; `{{var}}` placeholders are rendered.
 
 4. `packages/core/src/context/manager.ts` owns context trimming and persistence.
@@ -65,7 +66,7 @@ This project is now library-first with a reference CLI:
 
 8. `packages/core/src/plugins/loader.ts` loads plugins dynamically by path.
    - Accepts `default` or `plugin` export.
-   - Requires `name` + `register(api)` shape (see `HarnessPlugin` in `src/core/types.ts`).
+   - Requires `name` + `register(api)` shape (see `HarnessPlugin` in `packages/core/src/types.ts`).
 
 ## Key codebase conventions
 

@@ -1,5 +1,6 @@
 import { ContextManager } from "../context/manager";
-import { PolicyDeniedError, ToolTimeoutError } from "../errors";
+import { randomUUID } from "node:crypto";
+import { ToolTimeoutError } from "../errors";
 import {
   AfterLoopHook,
   AgentSpawner,
@@ -43,6 +44,7 @@ export class HarnessRuntime {
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
   private cancelled = false;
+  private activeToolController?: AbortController;
 
   constructor(deps: RuntimeDeps) {
     this.model = deps.model;
@@ -61,6 +63,7 @@ export class HarnessRuntime {
 
   kill(): void {
     this.cancelled = true;
+    this.activeToolController?.abort("runtime killed");
   }
 
   async registerPlugins(plugins: HarnessPlugin[]): Promise<void> {
@@ -77,7 +80,7 @@ export class HarnessRuntime {
   async run(agentName: string, userPrompt: string, options: RunOptions): Promise<HarnessState> {
     this.cancelled = false;
     const state: HarnessState = {
-      runId: `run-${Date.now()}`,
+      runId: randomUUID(),
       startedAt: new Date().toISOString(),
       turns: []
     };
@@ -137,14 +140,23 @@ export class HarnessRuntime {
 
       totalToolCalls += step.toolCalls.length;
       if (totalToolCalls > this.limits.maxToolCallsPerRun) {
-        throw new PolicyDeniedError("Max tool calls per run exceeded");
+        await this.eventSink.push({
+          type: "run.limit_reached",
+          timestamp: new Date().toISOString(),
+          runId: state.runId,
+          payload: {
+            limit: this.limits.maxToolCallsPerRun,
+            totalToolCalls
+          }
+        });
+        break;
       }
 
-      const toolResults = await this.executeTools(step, state.runId, agentName, iteration);
+      const toolResults = await this.executeTools(step, state.runId, agentName, iteration, bundle.metadata.safetyMode);
       const spawnedAgentResult = step.spawnRequest ? await this.spawner.spawn(step.spawnRequest) : undefined;
 
       state.turns.push({
-        id: `turn-${Date.now()}-${iteration}`,
+        id: randomUUID(),
         iteration,
         userMessage: userPrompt,
         assistantMessage: step.assistantMessage,
@@ -176,14 +188,50 @@ export class HarnessRuntime {
     return state;
   }
 
-  private async executeTools(step: StepPlan, runId: string, agentName: string, iteration: number): Promise<ToolResult[]> {
+  private async executeTools(
+    step: StepPlan,
+    runId: string,
+    agentName: string,
+    iteration: number,
+    safetyMode?: "strict" | "balanced" | "open"
+  ): Promise<ToolResult[]> {
     const results: ToolResult[] = [];
     for (const call of step.toolCalls) {
-      const tool = this.tools.get(call.name);
+      if (this.cancelled) {
+        await this.eventSink.push({
+          type: "tool.killed",
+          timestamp: new Date().toISOString(),
+          runId,
+          payload: { tool: call.name, reason: "runtime killed during tool phase", iteration }
+        });
+        results.push({
+          ok: false,
+          output: {},
+          error: "Tool skipped because runtime was killed"
+        });
+        continue;
+      }
+
+      let tool;
+      try {
+        tool = this.tools.get(call.name);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Unknown tool";
+        await this.eventSink.push({
+          type: "tool.blocked",
+          timestamp: new Date().toISOString(),
+          runId,
+          payload: { tool: call.name, decision: "deny", reason: message, iteration }
+        });
+        results.push({ ok: false, output: {}, error: message });
+        continue;
+      }
+
       const policy = await this.policy.evaluate(tool, call, {
         runId,
         agentName,
-        iteration
+        iteration,
+        safetyMode
       });
 
       if (policy.decision !== "allow") {
@@ -209,24 +257,36 @@ export class HarnessRuntime {
       });
 
       try {
-        const output = await withTimeout(tool.execute(call.input), this.limits.toolTimeoutMs);
+        this.activeToolController = new AbortController();
+        const output = await withTimeout(
+          (signal) => tool.execute(call.input, { signal }),
+          this.limits.toolTimeoutMs,
+          this.activeToolController
+        );
         results.push({ ok: true, output });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "unknown tool error";
         results.push({ ok: false, output: {}, error: message });
+      } finally {
+        this.activeToolController = undefined;
       }
     }
     return results;
   }
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+  runner: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  controller: AbortController
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
+      controller.abort(`tool timeout ${timeoutMs}ms`);
       reject(new ToolTimeoutError(`Tool exceeded timeout of ${timeoutMs}ms`));
     }, timeoutMs);
 
-    promise
+    runner(controller.signal)
       .then((value) => {
         clearTimeout(timeoutId);
         resolve(value);

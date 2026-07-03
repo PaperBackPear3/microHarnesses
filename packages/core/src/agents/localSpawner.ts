@@ -34,7 +34,16 @@ export class LocalProcessSpawner implements AgentSpawner {
 function runWorker(workerScriptPath: string, inputPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [workerScriptPath, inputPath, outputPath], {
-      stdio: "inherit"
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        PATH: process.env.PATH ?? ""
+      }
+    });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      process.stdout.write(chunk);
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      process.stderr.write(chunk);
     });
 
     child.on("error", reject);

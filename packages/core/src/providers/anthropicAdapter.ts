@@ -15,7 +15,10 @@ export class AnthropicAdapter implements ProviderAdapter {
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
     const endpoint = `${auth.baseUrl ?? "https://api.anthropic.com/v1"}/messages`;
-    const systemMessage = request.messages.find((m) => m.role === "system")?.content ?? "";
+    const systemMessage = request.messages
+      .filter((m) => m.role === "system" || m.role === "developer")
+      .map((m) => m.content)
+      .join("\n\n");
     const messages = request.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({

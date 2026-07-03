@@ -1,4 +1,5 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { CompressorFn, HarnessState, Turn } from "../types";
 
@@ -55,7 +56,7 @@ export class ContextManager {
     if (newOverflowCount > 0) {
       const delta = turns.slice(summaryState.compressedTurnCount, overflowCount);
       const summary = await this.compressor(delta);
-      const summaryFile = path.join(this.summaryDir, `summary-${Date.now()}.json`);
+      const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
       await writeFile(
         summaryFile,
         JSON.stringify({ summary, turns: delta.length, from: summaryState.compressedTurnCount }, null, 2),
@@ -68,7 +69,7 @@ export class ContextManager {
   }
 
   async saveCheckpoint(state: HarnessState): Promise<string> {
-    const id = `cp-${Date.now()}`;
+    const id = `cp-${randomUUID()}`;
     const data: CheckpointFile = {
       id,
       createdAt: new Date().toISOString(),

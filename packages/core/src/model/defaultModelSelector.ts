@@ -22,6 +22,6 @@ export class DefaultModelSelector implements ModelSelector {
       return { model: profile.defaultModel, reason: "profile" };
     }
 
-    return { model: "provider-default", reason: "provider-default" };
+    throw new Error("No default model configured in ModelProfile");
   }
 }

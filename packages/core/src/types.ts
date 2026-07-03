@@ -11,10 +11,15 @@ export interface ToolResult {
 
 export interface PromptBundle {
   system: string;
-  developer?: string;
-  tools?: string;
+  instructions: PromptInstruction[];
   task: string;
   metadata: PromptMetadata;
+}
+
+export interface PromptInstruction {
+  role: "system" | "developer" | "tools" | "custom";
+  name: string;
+  content: string;
 }
 
 export interface PromptMetadata {
@@ -87,7 +92,7 @@ export interface ModelSelectionInput {
 
 export interface ModelSelectionDecision {
   model: string;
-  reason: "override" | "prompt-hint" | "profile" | "provider-default";
+  reason: "override" | "prompt-hint" | "profile";
 }
 
 export interface ModelSelector {
@@ -138,7 +143,11 @@ export interface ToolDefinition {
   name: string;
   description: string;
   risk: "low" | "high";
-  execute(input: Record<string, unknown>): Promise<Record<string, unknown>>;
+  execute(input: Record<string, unknown>, context?: ToolExecutionContext): Promise<Record<string, unknown>>;
+}
+
+export interface ToolExecutionContext {
+  signal: AbortSignal;
 }
 
 export interface AgentSpawner {
@@ -156,6 +165,7 @@ export interface ToolPolicyContext {
   iteration: number;
   agentName: string;
   runId: string;
+  safetyMode?: "strict" | "balanced" | "open";
 }
 
 export interface ToolPolicyEngine {
@@ -196,6 +206,7 @@ export type ExecutionEventType =
   | "tool.allowed"
   | "tool.blocked"
   | "tool.killed"
+  | "run.limit_reached"
   | "run.completed";
 
 export interface ExecutionEvent {

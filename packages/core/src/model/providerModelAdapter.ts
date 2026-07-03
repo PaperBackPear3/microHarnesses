@@ -29,10 +29,11 @@ export class ProviderModelAdapter implements ModelAdapter {
   }
 
   async nextStep(input: StepInput): Promise<StepPlan> {
+    const resolvedModel = input.selectedModel ?? this.model;
     const auth = await this.credentialsResolver.resolve(this.providerId);
     const adapter = this.providerRegistry.get(this.providerId);
     const request: CompletionRequest = {
-      model: input.selectedModel ?? this.model,
+      model: resolvedModel,
       messages: buildMessages(input),
       maxTokens: 1000
     };
@@ -47,16 +48,24 @@ export class ProviderModelAdapter implements ModelAdapter {
 }
 
 function buildMessages(input: StepInput): ProviderMessage[] {
-  const messages: ProviderMessage[] = [
-    { role: "system" as const, content: input.bundle.system },
-    { role: "user" as const, content: input.bundle.task }
-  ];
-  if (input.bundle.developer) {
-    messages.push({ role: "developer", content: input.bundle.developer });
+  const systemParts = [input.bundle.system];
+  for (const instruction of input.bundle.instructions) {
+    if (instruction.role === "tools" || instruction.role === "custom") {
+      systemParts.push(`# ${instruction.name}\n${instruction.content}`);
+    }
   }
 
+  const messages: ProviderMessage[] = [{ role: "system", content: systemParts.join("\n\n") }];
+  for (const instruction of input.bundle.instructions) {
+    if (instruction.role === "developer") {
+      messages.push({ role: "developer", content: instruction.content });
+    }
+  }
   for (const turn of input.workingTurns) {
+    messages.push({ role: "user", content: turn.userMessage });
     messages.push({ role: "assistant", content: turn.assistantMessage });
   }
+
+  messages.push({ role: "user", content: input.bundle.task });
   return messages;
 }
