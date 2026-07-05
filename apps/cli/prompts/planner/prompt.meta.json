@@ -1,0 +1,6 @@
+{
+  "name": "planner",
+  "taskTypeHint": "reasoning",
+  "safetyMode": "balanced",
+  "tags": ["cli", "planner"]
+}

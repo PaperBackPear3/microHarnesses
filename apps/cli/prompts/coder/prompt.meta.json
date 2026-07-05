@@ -1,0 +1,6 @@
+{
+  "name": "coder",
+  "taskTypeHint": "default",
+  "safetyMode": "balanced",
+  "tags": ["cli", "coder"]
+}

@@ -1,0 +1,105 @@
+import { parseEffort, type EffortLevel } from "../config/config";
+import { type CliMode, parseMode } from "../modes/modes";
+
+export interface GlobalCliArgs {
+  prompt?: string;
+  json: boolean;
+  provider?: string;
+  model?: string;
+  effort?: EffortLevel;
+  mode?: CliMode;
+  sessionId?: string;
+  stateDir?: string;
+  promptsDir?: string;
+  noSafety: boolean;
+  maxTokens?: number;
+  maxIterations?: number;
+  snapshotEvery?: number;
+}
+
+export interface SessionsArgs {
+  sub: "list" | "show";
+  stateDir?: string;
+  sessionId?: string;
+}
+
+const VALUE_FLAGS = new Set([
+  "-p",
+  "--print",
+  "--provider",
+  "--model",
+  "--effort",
+  "--mode",
+  "--session",
+  "--session-id",
+  "--state-dir",
+  "--prompts-dir",
+  "--max-tokens",
+  "--iterations",
+  "--snapshot-every",
+]);
+
+export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
+  const prompt = getValue(args, "-p") ?? getValue(args, "--print");
+  const effortRaw = getValue(args, "--effort");
+  const modeRaw = getValue(args, "--mode");
+
+  return {
+    prompt,
+    json: hasFlag(args, "--json"),
+    provider: getValue(args, "--provider"),
+    model: getValue(args, "--model"),
+    effort: parseEffort(effortRaw),
+    mode: parseMode(modeRaw),
+    sessionId: getValue(args, "--session") ?? getValue(args, "--session-id"),
+    stateDir: getValue(args, "--state-dir"),
+    promptsDir: getValue(args, "--prompts-dir"),
+    noSafety: hasFlag(args, "--no-safety"),
+    maxTokens: parseOptionalInt(getValue(args, "--max-tokens"), "--max-tokens"),
+    maxIterations: parseOptionalInt(getValue(args, "--iterations"), "--iterations"),
+    snapshotEvery: parseOptionalInt(getValue(args, "--snapshot-every"), "--snapshot-every"),
+  };
+}
+
+export function parseSessionsArgs(args: string[]): SessionsArgs {
+  const subRaw = (args[0] ?? "list").toLowerCase();
+  const sub = subRaw === "show" ? "show" : "list";
+  const sessionId = sub === "show" ? args[1] : undefined;
+  return {
+    sub,
+    sessionId,
+    stateDir: getValue(args, "--state-dir"),
+  };
+}
+
+function getValue(args: string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  if (index < 0) return undefined;
+  return args[index + 1];
+}
+
+function hasFlag(args: string[], flag: string): boolean {
+  return args.includes(flag);
+}
+
+function parseOptionalInt(raw: string | undefined, flag: string): number | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`${flag} must be a positive integer`);
+  }
+  return parsed;
+}
+
+export function extractPositionals(args: string[]): string[] {
+  const output: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg.startsWith("-")) {
+      if (VALUE_FLAGS.has(arg)) i += 1;
+      continue;
+    }
+    output.push(arg);
+  }
+  return output;
+}

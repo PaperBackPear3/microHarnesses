@@ -1,6 +1,0 @@
-{
-  "name": "default",
-  "modelHint": "gpt-4.1-mini",
-  "safetyMode": "balanced",
-  "tags": ["default", "cli"]
-}
