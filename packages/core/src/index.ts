@@ -18,7 +18,7 @@ export * from "./channels/inProcessChannel";
 // Skills
 export * from "./skills/types";
 export * from "./skills/registry";
-export * from "./skills/executionEngine";
+export * from "./skills/asTool";
 export * from "./skills/fsSkillSource";
 
 // Policy

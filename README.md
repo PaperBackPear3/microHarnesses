@@ -43,7 +43,7 @@ npm run lint
 
 ## Plugin capabilities
 
-`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "tool-governance"`
+`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`
 
 ## License
 

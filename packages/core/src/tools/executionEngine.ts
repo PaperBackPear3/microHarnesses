@@ -2,14 +2,24 @@ import type { SafetyMode, ToolPolicyEngine } from "../policy/types";
 import type { RunEmitter } from "../runtime/runEmitter";
 import type { ApprovalHandler, CapabilityScope, RuntimeLimits } from "../runtime/types";
 import { ToolTimeoutError } from "../shared/errors";
-import type { ToolRegistry } from "./registry";
-import type { ToolCall, ToolDefinition, ToolResult } from "./types";
+import type { ToolCall, ToolDefinition, ToolResolver, ToolResult } from "./types";
 
 export interface ToolExecutionEngineDeps {
-  tools: ToolRegistry;
+  tools: ToolResolver;
   policy: ToolPolicyEngine;
   limits: RuntimeLimits;
   approvalHandler?: ApprovalHandler;
+  /**
+   * Label describing what kind of action this engine executes ("Tool" or
+   * "Skill"). Only affects support-history/error phrasing; both kinds share the
+   * same governed pipeline and `tool.*` events.
+   */
+  actionLabel?: string;
+}
+
+/** Shared, mutable call budget so tools and skills draw from one allowance. */
+export interface ToolCallBudget {
+  remaining: number;
 }
 
 export interface ToolExecutionRunContext {
@@ -18,6 +28,10 @@ export interface ToolExecutionRunContext {
   safetyMode?: SafetyMode;
   emitter: RunEmitter;
   capabilityScope?: CapabilityScope;
+  /** Aborted when the run is killed; propagated into every tool execution. */
+  signal?: AbortSignal;
+  /** Shared allowance decremented per executed call. */
+  budget?: ToolCallBudget;
   lineage?: {
     parentSessionId?: string;
     parentRunId?: string;
@@ -27,35 +41,65 @@ export interface ToolExecutionRunContext {
   isCancelled(): boolean;
 }
 
+export interface ToolExecutionOutcome {
+  results: ToolResult[];
+  /** Number of calls actually handed to a tool's `execute`. */
+  executed: number;
+  /** True when at least one call was blocked because the run budget was exhausted. */
+  limitReached: boolean;
+}
+
 /**
- * Executes the tool calls of a single step: policy evaluation, cancellation
- * checks, timeout/abort enforcement, and event/support-history reporting.
- * Tool failures never throw — they become `{ ok: false }` results.
+ * Executes the tool calls of a single step: scope/budget/policy evaluation,
+ * cancellation checks, timeout/abort enforcement, and event/support-history
+ * reporting. Tool failures never throw — they become `{ ok: false }` results.
  */
 export class ToolExecutionEngine {
-  private readonly tools: ToolRegistry;
+  private readonly tools: ToolResolver;
   private readonly policy: ToolPolicyEngine;
   private readonly limits: RuntimeLimits;
   private readonly approvalHandler?: ApprovalHandler;
-  private activeToolController?: AbortController;
+  private readonly actionLabel: string;
 
   constructor(deps: ToolExecutionEngineDeps) {
     this.tools = deps.tools;
     this.policy = deps.policy;
     this.limits = deps.limits;
     this.approvalHandler = deps.approvalHandler;
+    this.actionLabel = deps.actionLabel ?? "Tool";
   }
 
-  abort(reason: string): void {
-    this.activeToolController?.abort(reason);
-  }
-
-  async executeCalls(calls: ToolCall[], ctx: ToolExecutionRunContext): Promise<ToolResult[]> {
+  async executeCalls(
+    calls: ToolCall[],
+    ctx: ToolExecutionRunContext,
+  ): Promise<ToolExecutionOutcome> {
     const results: ToolResult[] = [];
+    let executed = 0;
+    let limitReached = false;
+
     for (const originalCall of calls) {
       const call = normalizeToolCallName(originalCall);
+
+      if (ctx.budget && ctx.budget.remaining <= 0) {
+        limitReached = true;
+        const message = `${this.actionLabel} "${call.name}" skipped: run tool-call limit of ${this.limits.maxToolCallsPerRun} reached`;
+        await ctx.emitter.emit("run.limit_reached", {
+          tool: call.name,
+          limit: this.limits.maxToolCallsPerRun,
+          iteration: ctx.iteration,
+        });
+        await ctx.emitter.support({
+          iteration: ctx.iteration,
+          tool: call.name,
+          category: "limit_reached",
+          reason: message,
+        });
+        results.push({ ok: false, output: {}, error: message });
+        continue;
+      }
+
       if (isOutOfScope(call.name, ctx.capabilityScope)) {
-        const message = `Tool "${call.name}" is out of scope for this agent invocation`;
+        const message = `${this.actionLabel} "${call.name}" is out of scope for this agent invocation`;
         await ctx.emitter.emit("tool.blocked", {
           tool: call.name,
           input: call.input,
@@ -72,6 +116,7 @@ export class ToolExecutionEngine {
         results.push({ ok: false, output: {}, error: message });
         continue;
       }
+
       if (ctx.isCancelled()) {
         await ctx.emitter.emit("tool.killed", {
           tool: call.name,
@@ -87,7 +132,7 @@ export class ToolExecutionEngine {
         results.push({
           ok: false,
           output: {},
-          error: "Tool skipped because runtime was killed",
+          error: `${this.actionLabel} skipped because runtime was killed`,
         });
         continue;
       }
@@ -96,7 +141,7 @@ export class ToolExecutionEngine {
       try {
         tool = this.tools.get(call.name);
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "Unknown tool";
+        const message = error instanceof Error ? error.message : `Unknown ${this.actionLabel}`;
         await ctx.emitter.emit("tool.blocked", {
           tool: call.name,
           input: call.input,
@@ -115,7 +160,7 @@ export class ToolExecutionEngine {
       }
 
       if (call.malformedInput) {
-        const message = `Tool "${call.name}" received malformed arguments from the model`;
+        const message = `${this.actionLabel} "${call.name}" received malformed arguments from the model`;
         await ctx.emitter.support({
           iteration: ctx.iteration,
           tool: call.name,
@@ -137,15 +182,25 @@ export class ToolExecutionEngine {
         depth: ctx.lineage?.depth,
       });
 
+      // Re-check cancellation after the (async) policy evaluation.
+      if (ctx.isCancelled()) {
+        results.push({
+          ok: false,
+          output: {},
+          error: `${this.actionLabel} skipped because runtime was killed`,
+        });
+        continue;
+      }
+
       if (policy.decision !== "allow") {
         if (policy.decision === "require_approval") {
           const approved = await this.requestApproval(tool, call, policy.reason, ctx);
-          if (approved) {
-            // fall through to execution
-          } else {
-            const denialReason = this.approvalHandler
-              ? `Approval denied: ${policy.reason}`
-              : `Approval required but no handler configured: ${policy.reason}`;
+          if (!approved || ctx.isCancelled()) {
+            const denialReason = ctx.isCancelled()
+              ? "Approval abandoned because runtime was killed"
+              : this.approvalHandler
+                ? `Approval denied: ${policy.reason}`
+                : `Approval required but no handler configured: ${policy.reason}`;
             await ctx.emitter.emit("tool.blocked", {
               tool: call.name,
               input: call.input,
@@ -187,12 +242,16 @@ export class ToolExecutionEngine {
         iteration: ctx.iteration,
       });
 
+      if (ctx.budget) {
+        ctx.budget.remaining -= 1;
+      }
+      executed += 1;
+
       try {
-        this.activeToolController = new AbortController();
         const output = await withTimeout(
           (signal) => tool.execute(call.input, { signal }),
           this.limits.toolTimeoutMs,
-          this.activeToolController,
+          ctx.signal,
         );
         results.push({ ok: true, output });
       } catch (error: unknown) {
@@ -206,11 +265,10 @@ export class ToolExecutionEngine {
           code,
         });
         results.push({ ok: false, output: {}, error: message });
-      } finally {
-        this.activeToolController = undefined;
       }
     }
-    return results;
+
+    return { results, executed, limitReached };
   }
 
   private async requestApproval(
@@ -273,26 +331,50 @@ function isOutOfScope(toolName: string, scope?: CapabilityScope): boolean {
   return false;
 }
 
+/**
+ * Runs a tool with a per-call timeout. The tool receives an AbortSignal that
+ * fires on timeout OR when the run-level `externalSignal` aborts (kill). Tools
+ * that ignore the signal cannot be forcibly stopped, but the outer promise
+ * still rejects so the run does not hang.
+ */
 async function withTimeout<T>(
   runner: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
-  controller: AbortController,
+  externalSignal?: AbortSignal,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    const controller = new AbortController();
+    let settled = false;
+
+    const finish = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      externalSignal?.removeEventListener("abort", onExternalAbort);
+      fn();
+    };
+
     const timeoutId = setTimeout(() => {
       controller.abort(`tool timeout ${timeoutMs}ms`);
-      reject(new ToolTimeoutError(`Tool exceeded timeout of ${timeoutMs}ms`));
+      finish(() => reject(new ToolTimeoutError(`Tool exceeded timeout of ${timeoutMs}ms`)));
     }, timeoutMs);
 
+    function onExternalAbort(): void {
+      controller.abort(externalSignal?.reason);
+      finish(() => reject(new Error("Tool aborted because the run was cancelled")));
+    }
+
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        onExternalAbort();
+        return;
+      }
+      externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    }
+
     runner(controller.signal)
-      .then((value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
+      .then((value) => finish(() => resolve(value)))
+      .catch((error) => finish(() => reject(error)));
   });
 }
 

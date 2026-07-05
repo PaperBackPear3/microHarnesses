@@ -59,6 +59,8 @@ export interface CompletionRequest {
   maxTokens?: number;
   temperature?: number;
   tools?: ToolDescriptor[];
+  /** Aborted when the run is killed; adapters should pass it to their HTTP call. */
+  signal?: AbortSignal;
 }
 
 export interface ProviderAdapter {

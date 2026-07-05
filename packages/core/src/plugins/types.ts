@@ -23,9 +23,17 @@ export type PluginCapability =
   | "model-selector"
   | "channels"
   | "skills"
-  | "agents"
-  | "tool-governance";
+  | "agents";
 
+/**
+ * The extension surface handed to a plugin's `register`. Each method is gated
+ * by the plugin's declared {@link PluginCapability capabilities}.
+ *
+ * NOTE: capability guarding is a *hygiene* boundary — it constrains which
+ * PluginApi methods a plugin may call and makes a plugin's surface auditable.
+ * It is NOT a security sandbox: plugin code runs with full process privileges
+ * and registered tools/providers can do anything the host process can.
+ */
 export interface PluginApi {
   registerTool(tool: ToolDefinition): void;
   registerChannel(channel: ChannelDefinition): void;
@@ -35,9 +43,13 @@ export interface PluginApi {
   setCompressor(compressor: CompressorFn): void;
   registerProvider(adapter: ProviderAdapter): void;
   registerCredentialsResolver(providerId: string, resolver: CredentialsResolver): void;
+  /**
+   * Registers a policy rule composed most-restrictive-wins by the
+   * CompositePolicyEngine. Covers both tool gating and tool-governance rules
+   * (rules can inspect `tool.riskProfile` / `tool.governance`).
+   */
   registerPolicyRule(rule: PolicyRule): void;
   setModelSelector(selector: ModelSelector): void;
-  registerToolGovernanceRule(rule: PolicyRule): void;
   /** Unified agent API path (preferred over `subagents`). */
   agents: {
     spawn(options: SubagentRunOptions): Promise<SubagentResult>;

@@ -11,9 +11,8 @@ import type {
   StepInput,
   StepPlan,
 } from "../model/types";
-import type { ToolPolicyContext, ToolPolicyEngine } from "../policy/types";
+import type { ToolPolicyContext, ToolPolicyEngine, ToolPolicyEvaluation } from "../policy/types";
 import type { PromptBundle, PromptSource } from "../prompts/types";
-import { SkillExecutionEngine } from "../skills/executionEngine";
 import { SkillRegistry } from "../skills/registry";
 import { ToolRegistry } from "../tools/registry";
 import type { ToolCall, ToolDefinition } from "../tools/types";
@@ -102,8 +101,10 @@ class FakeEventSink implements EventSink {
 class FakeContextManager {
   setGoal(_goal: string): void {}
   async init(): Promise<void> {}
-  async buildWorkingTurns(state: HarnessState["turns"]): Promise<HarnessState["turns"]> {
-    return state;
+  async buildWorkingTurns(state: HarnessState["turns"]): Promise<{
+    recentTurns: HarnessState["turns"];
+  }> {
+    return { recentTurns: state };
   }
 }
 
@@ -199,7 +200,10 @@ test("runtime emits limit event and exits gracefully when tool call limit is exc
   });
 
   const state = await runtime.run("default", "hello", options);
-  assert.equal(state.turns.length, 0);
+  // The over-budget call is recorded as a blocked result (not silently dropped).
+  assert.equal(state.turns.length, 1);
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, false);
+  assert.match(state.turns[0]?.toolResults[0]?.error ?? "", /limit/i);
   assert.equal(
     events.events.some((event) => event.type === "run.limit_reached"),
     true,
@@ -397,9 +401,12 @@ test("RunOptions.limits overrides runtime default limits per run", async () => {
     maxIterations: 3,
     limits: { maxToolCallsPerRun: 1 },
   });
-  // First iteration produces 1 tool call → totalToolCalls=1 (not > limit 1) → allowed
-  // Second iteration produces another → totalToolCalls=2 → exceeds limit → break
-  assert.equal(state.turns.length, 1);
+  // Iteration 1 executes the single allowed call (budget 1 → 0).
+  // Iteration 2's call is over budget → recorded as a blocked result, then break.
+  assert.equal(state.turns.length, 2);
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
+  assert.equal(state.turns[1]?.toolResults[0]?.ok, false);
+  assert.match(state.turns[1]?.toolResults[0]?.error ?? "", /limit/i);
   assert.equal(
     events.events.some((e) => e.type === "run.limit_reached"),
     true,
@@ -488,10 +495,78 @@ test("runtime executes skillCalls when skill engine is configured", async () => 
     policy: new AllowPolicy(),
     eventSink: events,
     skills,
-    skillExecution: new SkillExecutionEngine({ skills }),
   });
   const state = await runtime.run("default", "hello", options);
   assert.equal(state.turns[0]?.skillResults?.[0]?.ok, true);
+});
+
+class DenyByNamePolicy implements ToolPolicyEngine {
+  constructor(private readonly blocked: string) {}
+  async evaluate(_tool: ToolDefinition, call: ToolCall): Promise<ToolPolicyEvaluation> {
+    if (call.name === this.blocked) {
+      return { decision: "deny", reason: `blocked ${call.name}` };
+    }
+    return { decision: "allow", reason: "ok" };
+  }
+}
+
+test("skills are governed by the policy engine (a denied skill does not run)", async () => {
+  const events = new FakeEventSink();
+  const skills = new SkillRegistry();
+  let ran = false;
+  skills.register({
+    name: "danger_skill",
+    description: "test skill",
+    async execute() {
+      ran = true;
+      return { done: true };
+    },
+  });
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "call skill",
+      toolCalls: [],
+      skillCalls: [{ name: "danger_skill", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new DenyByNamePolicy("danger_skill"),
+    eventSink: events,
+    skills,
+  });
+  const state = await runtime.run("default", "hello", options);
+  assert.equal(ran, false);
+  assert.equal(state.turns[0]?.skillResults?.[0]?.ok, false);
+  assert.equal(
+    events.events.some((e) => e.type === "tool.blocked"),
+    true,
+  );
+});
+
+class ThrowingModel implements ModelAdapter {
+  async nextStep(_input: StepInput): Promise<StepPlan> {
+    throw new Error("model exploded");
+  }
+}
+
+test("run emits run.failed and rethrows when a step throws", async () => {
+  const events = new FakeEventSink();
+  const runtime = new HarnessRuntime({
+    model: new ThrowingModel(),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+  });
+  await assert.rejects(() => runtime.run("default", "hello", options), /model exploded/);
+  const failed = events.events.find((e) => e.type === "run.failed");
+  assert.ok(failed, "run.failed must be emitted");
+  assert.match(String(failed?.payload.reason ?? ""), /model exploded/);
 });
 
 test("handleChannel maps channel request to runtime invoke", async () => {

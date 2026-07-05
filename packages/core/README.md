@@ -154,7 +154,7 @@ Severity × `safetyMode` mapping:
 
 Plugins declare which surfaces they use:
 
-`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "tool-governance"`
+`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`
 
 The host throws `PluginCapabilityError` when a plugin uses an undeclared
 surface.

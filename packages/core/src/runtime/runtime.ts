@@ -8,11 +8,12 @@ import type { ToolPolicyEngine } from "../policy/types";
 import type { PromptSource } from "../prompts/types";
 import type { SessionStore } from "../session/sessionStore";
 import { ValidationError } from "../shared/errors";
-import type { SkillExecutionEngine } from "../skills/executionEngine";
+import { skillsAsToolResolver } from "../skills/asTool";
 import type { SkillRegistry } from "../skills/registry";
 import { deriveToolDescriptors } from "../tools/descriptors";
-import { ToolExecutionEngine } from "../tools/executionEngine";
+import { type ToolCallBudget, ToolExecutionEngine } from "../tools/executionEngine";
 import type { ToolRegistry } from "../tools/registry";
+import type { ToolResult } from "../tools/types";
 import { RunEmitter } from "./runEmitter";
 import { shouldSnapshot } from "./snapshotCadence";
 import type {
@@ -39,13 +40,20 @@ interface RuntimeDeps {
   approvalHandler?: ApprovalHandler;
   kind?: "main" | "subagent";
   skills?: SkillRegistry;
-  skillExecution?: SkillExecutionEngine;
 }
 
 const DEFAULT_LIMITS: RuntimeLimits = {
   toolTimeoutMs: 20_000,
   maxToolCallsPerRun: 20,
 };
+
+/** Per-`run()` state so concurrent runs on one runtime cannot clobber each other. */
+interface RunContext {
+  runId: string;
+  sessionId?: string;
+  cancelled: boolean;
+  controller: AbortController;
+}
 
 export class HarnessRuntime implements Agent {
   readonly id = randomUUID();
@@ -61,12 +69,9 @@ export class HarnessRuntime implements Agent {
   private readonly defaultLimits: RuntimeLimits;
   private readonly approvalHandler?: ApprovalHandler;
   private readonly skills?: SkillRegistry;
-  private readonly skillExecution?: SkillExecutionEngine;
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
-  private cancelled = false;
-  private activeEngine?: ToolExecutionEngine;
-  private currentSessionId?: string;
+  private readonly activeRuns = new Set<RunContext>();
 
   constructor(deps: RuntimeDeps) {
     this.model = deps.model;
@@ -81,12 +86,13 @@ export class HarnessRuntime implements Agent {
     this.approvalHandler = deps.approvalHandler;
     this.kind = deps.kind ?? "main";
     this.skills = deps.skills;
-    this.skillExecution = deps.skillExecution;
   }
 
-  kill(_reason?: string): void {
-    this.cancelled = true;
-    this.activeEngine?.abort("runtime killed");
+  kill(reason?: string): void {
+    for (const run of this.activeRuns) {
+      run.cancelled = true;
+      run.controller.abort(reason ?? "runtime killed");
+    }
   }
 
   addBeforeHook(hook: BeforeLoopHook): void {
@@ -107,41 +113,81 @@ export class HarnessRuntime implements Agent {
 
   async run(agentName: string, userPrompt: string, options: RunOptions): Promise<HarnessState> {
     validateRunOptions(options);
-    this.cancelled = false;
     const runId = randomUUID();
+    const runCtx: RunContext = { runId, cancelled: false, controller: new AbortController() };
+    this.activeRuns.add(runCtx);
+
     const limits: RuntimeLimits = { ...this.defaultLimits, ...options.limits };
     let sessionId = options.sessionId;
     let goal = options.goal ?? userPrompt;
 
-    if (this.sessionStore) {
-      const manifest = await this.sessionStore.initSession({
-        sessionId: options.sessionId,
-        goal,
-        parentSessionId: options.parentSessionId,
-        parentRunId: options.parentRunId,
-        rootSessionId: options.rootSessionId,
-        depth: options.depth,
-        spawnedByTool: options.spawnedByTool,
-      });
-      sessionId = manifest.sessionId;
-      goal = manifest.goal || goal;
-      if (!manifest.goal && goal) {
-        await this.sessionStore.updateGoal(sessionId, goal);
+    let emitter: RunEmitter | undefined;
+    try {
+      if (this.sessionStore) {
+        const manifest = await this.sessionStore.initSession({
+          sessionId: options.sessionId,
+          goal,
+          parentSessionId: options.parentSessionId,
+          parentRunId: options.parentRunId,
+          rootSessionId: options.rootSessionId,
+          depth: options.depth,
+          spawnedByTool: options.spawnedByTool,
+        });
+        sessionId = manifest.sessionId;
+        goal = manifest.goal || goal;
+        if (!manifest.goal && goal) {
+          await this.sessionStore.updateGoal(sessionId, goal);
+        }
       }
-    }
-    this.currentSessionId = sessionId;
+      runCtx.sessionId = sessionId;
 
-    const emitter = new RunEmitter(
-      { eventSink: this.eventSink, sessionStore: this.sessionStore },
-      { runId, sessionId },
-    );
+      emitter = new RunEmitter(
+        { eventSink: this.eventSink, sessionStore: this.sessionStore },
+        { runId, sessionId },
+      );
+
+      const state = await this.runLoop(runCtx, emitter, agentName, userPrompt, options, {
+        limits,
+        goal,
+        sessionId,
+        runId,
+      });
+      await emitter.emit("run.completed", { turns: state.turns.length, sessionId });
+      return state;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await emitter?.emit("run.failed", { sessionId, reason: message });
+      throw error;
+    } finally {
+      this.activeRuns.delete(runCtx);
+    }
+  }
+
+  private async runLoop(
+    runCtx: RunContext,
+    emitter: RunEmitter,
+    agentName: string,
+    userPrompt: string,
+    options: RunOptions,
+    resolved: { limits: RuntimeLimits; goal: string; sessionId?: string; runId: string },
+  ): Promise<HarnessState> {
+    const { limits, goal, sessionId, runId } = resolved;
+
     const engine = new ToolExecutionEngine({
       tools: this.tools,
       policy: this.policy,
       limits,
       approvalHandler: this.approvalHandler,
     });
-    this.activeEngine = engine;
+    const skillEngine = this.skills
+      ? new ToolExecutionEngine({
+          tools: skillsAsToolResolver(this.skills),
+          policy: this.policy,
+          limits,
+          approvalHandler: this.approvalHandler,
+          actionLabel: "Skill",
+        })
+      : undefined;
 
     let state: HarnessState = {
       sessionId,
@@ -153,12 +199,7 @@ export class HarnessRuntime implements Agent {
     if (this.sessionStore && options.resume && sessionId) {
       const restored = await this.sessionStore.loadLatestSnapshot(sessionId);
       if (restored) {
-        state = {
-          ...restored,
-          sessionId,
-          runId,
-          startedAt: new Date().toISOString(),
-        };
+        state = { ...restored, sessionId, runId, startedAt: new Date().toISOString() };
       }
     }
 
@@ -172,11 +213,11 @@ export class HarnessRuntime implements Agent {
     });
 
     const bundle = await this.prompts.load(agentName, userPrompt);
-    const taskType = inferTaskType(userPrompt, bundle.metadata.taskTypeHint);
-    let totalToolCalls = 0;
+    const taskType = bundle.metadata.taskTypeHint;
+    const budget: ToolCallBudget = { remaining: limits.maxToolCallsPerRun };
 
     for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
-      if (this.cancelled) {
+      if (runCtx.cancelled) {
         await emitter.emit("tool.killed", {
           reason: "runtime killed before next iteration",
           iteration,
@@ -188,12 +229,13 @@ export class HarnessRuntime implements Agent {
         await hook(state, iteration);
       }
 
-      const workingTurns = await this.context.buildWorkingTurns(state.turns);
+      const working = await this.context.buildWorkingTurns(state.turns);
       const modelSelection = this.modelSelector.select(
         {
           agentName,
           iteration,
           taskType,
+          userPrompt,
           overrideModel: options.modelOverride,
           promptHintModel: bundle.metadata.modelHint,
         },
@@ -203,7 +245,7 @@ export class HarnessRuntime implements Agent {
         model: modelSelection.model,
         reason: modelSelection.reason,
         iteration,
-        taskType,
+        taskType: taskType ?? "default",
       });
 
       let streamedChars = 0;
@@ -211,17 +253,19 @@ export class HarnessRuntime implements Agent {
       await emitter.emit("model.thinking_started", {
         model: modelSelection.model,
         iteration,
-        taskType,
+        taskType: taskType ?? "default",
       });
       const step = await this.model.nextStep({
         agentName,
         userPrompt,
         bundle,
-        workingTurns,
+        workingTurns: working.recentTurns,
+        summary: working.summary,
         iteration,
         selectedModel: modelSelection.model,
         availableTools: deriveToolDescriptors(this.tools.list()),
         availableSkills: this.skills?.list().map((skill) => skill.name) ?? [],
+        signal: runCtx.controller.signal,
         onAssistantDelta: async (delta) => {
           if (delta.length === 0) return;
           streamedChars += delta.length;
@@ -236,7 +280,7 @@ export class HarnessRuntime implements Agent {
       await emitter.emit("model.thinking_completed", {
         model: modelSelection.model,
         iteration,
-        taskType,
+        taskType: taskType ?? "default",
       });
       if (reasoningChars > 0) {
         await emitter.emit("model.reasoning_stream_completed", {
@@ -255,21 +299,23 @@ export class HarnessRuntime implements Agent {
         });
       }
 
-      totalToolCalls += step.toolCalls.length;
-      if (totalToolCalls > limits.maxToolCallsPerRun) {
-        await emitter.emit("run.limit_reached", {
-          limit: limits.maxToolCallsPerRun,
-          totalToolCalls,
+      // Honor a kill that arrived while the model was thinking, before side effects.
+      if (runCtx.cancelled) {
+        await emitter.emit("tool.killed", {
+          reason: "runtime killed during model step",
+          iteration,
         });
         break;
       }
 
-      const toolResults = await engine.executeCalls(step.toolCalls, {
+      const executionCtx = {
         agentName,
         iteration,
         safetyMode: bundle.metadata.safetyMode,
         emitter,
-        isCancelled: () => this.cancelled,
+        isCancelled: () => runCtx.cancelled,
+        signal: runCtx.controller.signal,
+        budget,
         capabilityScope: options.capabilityScope,
         lineage: {
           parentSessionId: options.parentSessionId,
@@ -277,28 +323,35 @@ export class HarnessRuntime implements Agent {
           rootSessionId: options.rootSessionId,
           depth: options.depth,
         },
-      });
+      };
+
+      const toolOutcome = await engine.executeCalls(step.toolCalls, executionCtx);
       const skillCalls = step.skillCalls ?? [];
-      const skillResults = await Promise.all(
-        skillCalls.map(async (call) => {
-          if (!this.skillExecution) {
-            return {
-              ok: false,
-              output: {},
-              error: `Skill "${call.name}" cannot run because no skill execution engine is configured`,
-            };
-          }
-          return this.skillExecution.execute(call);
-        }),
-      );
+      let skillResults: ToolResult[] = [];
+      let skillLimitReached = false;
+      if (skillCalls.length > 0) {
+        if (skillEngine) {
+          const skillOutcome = await skillEngine.executeCalls(skillCalls, executionCtx);
+          skillResults = skillOutcome.results;
+          skillLimitReached = skillOutcome.limitReached;
+        } else {
+          skillResults = skillCalls.map((call) => ({
+            ok: false,
+            output: {},
+            error: `Skill "${call.name}" cannot run because no skill registry is configured`,
+          }));
+        }
+      }
 
       state.turns.push({
         id: randomUUID(),
         iteration,
-        userMessage: userPrompt,
+        // Only the first iteration carries the user prompt; later loop turns are
+        // internal continuations and leave it empty (see providerModelAdapter).
+        userMessage: iteration === 1 ? userPrompt : "",
         assistantMessage: step.assistantMessage,
         toolCalls: step.toolCalls,
-        toolResults,
+        toolResults: toolOutcome.results,
         ...(skillCalls.length > 0 ? { skillCalls, skillResults } : {}),
       });
 
@@ -310,7 +363,7 @@ export class HarnessRuntime implements Agent {
         await hook(state, iteration);
       }
 
-      if (step.stop) {
+      if (step.stop || toolOutcome.limitReached || skillLimitReached) {
         break;
       }
     }
@@ -318,16 +371,16 @@ export class HarnessRuntime implements Agent {
     if (this.sessionStore && sessionId) {
       await this.sessionStore.saveSnapshot(sessionId, runId, state);
     }
-    await emitter.emit("run.completed", { turns: state.turns.length, sessionId });
-
-    this.activeEngine = undefined;
-    this.currentSessionId = undefined;
     return state;
   }
 
-  /** Currently active session id (set only while `run` is executing). */
+  /** Session id of the most recently started active run, if any. */
   get sessionId(): string | undefined {
-    return this.currentSessionId;
+    let latest: string | undefined;
+    for (const run of this.activeRuns) {
+      latest = run.sessionId;
+    }
+    return latest;
   }
 
   async invoke(request: AgentInvokeRequest): Promise<AgentRunResult> {
@@ -374,21 +427,4 @@ export function validateRunOptions(options: RunOptions): void {
       }
     }
   }
-}
-
-function inferTaskType(
-  prompt: string,
-  hint?: "default" | "reasoning" | "fast",
-): "default" | "reasoning" | "fast" {
-  if (hint === "default" || hint === "reasoning" || hint === "fast") {
-    return hint;
-  }
-  const lowered = prompt.toLowerCase();
-  if (/\b(quick|brief|short|fast)\b/.test(lowered)) {
-    return "fast";
-  }
-  if (/\b(reason|analy[sz]e|deep|step[- ]by[- ]step|complex|trade[- ]off)\b/.test(lowered)) {
-    return "reasoning";
-  }
-  return "default";
 }

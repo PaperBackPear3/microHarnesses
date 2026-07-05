@@ -44,6 +44,7 @@ export class ProviderModelAdapter implements ModelAdapter {
       messages: buildMessages(input, !supportsStructuredTools),
       maxTokens: this.maxTokens,
       tools: input.availableTools,
+      signal: input.signal,
     };
 
     if (adapter.streamComplete) {
@@ -111,6 +112,12 @@ function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): P
       messages.push({ role: "developer", content: instruction.content });
     }
   }
+  if (input.summary && input.summary.summary.trim().length > 0) {
+    messages.push({
+      role: "developer",
+      content: renderSummaryInstruction(input.summary),
+    });
+  }
   if (input.workingTurns.length > 0) {
     messages.push({
       role: "developer",
@@ -121,7 +128,11 @@ function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): P
     });
   }
   for (const turn of input.workingTurns) {
-    messages.push({ role: "user", content: turn.userMessage });
+    // Only turns that carry an actual user/task message emit a `user` message;
+    // internal loop iterations leave it empty to avoid repeating the prompt.
+    if (turn.userMessage.trim().length > 0) {
+      messages.push({ role: "user", content: turn.userMessage });
+    }
     if (turn.assistantMessage.trim().length > 0) {
       messages.push({ role: "assistant", content: turn.assistantMessage });
     }
@@ -133,11 +144,22 @@ function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): P
     }
   }
 
-  const lastUserMessage = input.workingTurns[input.workingTurns.length - 1]?.userMessage;
-  if (lastUserMessage !== input.bundle.task) {
+  const carriedTask = input.workingTurns.some((turn) => turn.userMessage === input.bundle.task);
+  if (!carriedTask) {
     messages.push({ role: "user", content: input.bundle.task });
   }
   return messages;
+}
+
+function renderSummaryInstruction(summary: {
+  summary: string;
+  highlights: string[];
+}): string {
+  const lines = ["## Summary of earlier turns (authoritative prior context)", summary.summary];
+  if (summary.highlights.length > 0) {
+    lines.push("Highlights:", ...summary.highlights.map((h) => `- ${h}`));
+  }
+  return lines.join("\n");
 }
 
 function renderToolCatalogInstruction(tools: ToolDescriptor[]): string {

@@ -67,7 +67,7 @@ interface PluginApi {
 ```
 
 Every `HarnessPlugin` must declare `capabilities: PluginCapability[]`.
-Capabilities: `"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "tool-governance"`.
+Capabilities: `"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`.
 The `PluginHost` throws `PluginCapabilityError` when a plugin uses an
 undeclared surface.
 

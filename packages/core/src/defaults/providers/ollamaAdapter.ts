@@ -43,6 +43,7 @@ export class OllamaAdapter implements ProviderAdapter {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...toOllamaBody(request), stream: true }),
+      signal: request.signal,
     });
 
     if (!response.ok) {
@@ -71,6 +72,7 @@ export class OllamaAdapter implements ProviderAdapter {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...toOllamaBody(request), stream: false }),
+      signal: request.signal,
     });
     if (!response.ok) {
       const errorBody = await response.text();

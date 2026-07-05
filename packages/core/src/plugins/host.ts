@@ -30,10 +30,20 @@ export interface PluginHostDeps {
 /**
  * Owns plugin registration: hands each plugin a PluginApi scoped to its
  * declared capabilities and records which plugin registered what.
+ *
+ * Registration is atomic per plugin: a plugin's contributions are staged while
+ * its `register()` runs and only committed to the shared registries once it
+ * resolves successfully. If `register()` throws, nothing it staged is applied.
+ *
+ * Capability guarding is a hygiene boundary (auditable surface), NOT a security
+ * sandbox — plugin code runs with full host privileges.
  */
 export class PluginHost {
   private readonly deps: PluginHostDeps;
   private readonly registered = new Map<string, PluginCapability[]>();
+  /** Plugin that claimed each single-value global setter, for conflict detection. */
+  private compressorOwner?: string;
+  private modelSelectorOwner?: string;
 
   constructor(deps: PluginHostDeps) {
     this.deps = deps;
@@ -54,12 +64,16 @@ export class PluginHost {
       if (this.registered.has(plugin.name)) {
         throw new PluginLoadError(`Plugin "${plugin.name}" is already registered`);
       }
-      await plugin.register(this.apiFor(plugin));
+      const staged: Array<() => void> = [];
+      await plugin.register(this.apiFor(plugin, staged));
+      for (const commit of staged) {
+        commit();
+      }
       this.registered.set(plugin.name, [...plugin.capabilities]);
     }
   }
 
-  private apiFor(plugin: HarnessPlugin): PluginApi {
+  private apiFor(plugin: HarnessPlugin, staged: Array<() => void>): PluginApi {
     const guard = (capability: PluginCapability): void => {
       if (!plugin.capabilities.includes(capability)) {
         throw new PluginCapabilityError(
@@ -71,7 +85,7 @@ export class PluginHost {
     return {
       registerTool: (tool) => {
         guard("tools");
-        this.deps.tools.register(tool);
+        staged.push(() => this.deps.tools.register(tool));
       },
       registerChannel: (channel) => {
         guard("channels");
@@ -80,7 +94,8 @@ export class PluginHost {
             `Plugin "${plugin.name}" requested channels but no channel registry is configured`,
           );
         }
-        this.deps.channels.register(channel);
+        const channels = this.deps.channels;
+        staged.push(() => channels.register(channel));
       },
       registerSkill: (skill) => {
         guard("skills");
@@ -89,39 +104,48 @@ export class PluginHost {
             `Plugin "${plugin.name}" requested skills but no skill registry is configured`,
           );
         }
-        this.deps.skills.register(skill);
+        const skills = this.deps.skills;
+        staged.push(() => skills.register(skill));
       },
       onBeforeLoop: (hook) => {
         guard("hooks");
-        this.deps.onBeforeLoop(hook);
+        staged.push(() => this.deps.onBeforeLoop(hook));
       },
       onAfterLoop: (hook) => {
         guard("hooks");
-        this.deps.onAfterLoop(hook);
+        staged.push(() => this.deps.onAfterLoop(hook));
       },
       setCompressor: (compressor) => {
         guard("compressor");
-        this.deps.setCompressor(compressor);
+        if (this.compressorOwner && this.compressorOwner !== plugin.name) {
+          throw new PluginLoadError(
+            `Plugin "${plugin.name}" sets the compressor already claimed by "${this.compressorOwner}"`,
+          );
+        }
+        this.compressorOwner = plugin.name;
+        staged.push(() => this.deps.setCompressor(compressor));
       },
       registerProvider: (adapter) => {
         guard("providers");
-        this.deps.providers.register(adapter);
+        staged.push(() => this.deps.providers.register(adapter));
       },
       registerCredentialsResolver: (providerId, resolver) => {
         guard("credentials");
-        this.deps.credentials.register(providerId, resolver);
+        staged.push(() => this.deps.credentials.register(providerId, resolver));
       },
       registerPolicyRule: (rule) => {
         guard("policy");
-        this.deps.policy.addRule(rule);
-      },
-      registerToolGovernanceRule: (rule) => {
-        guard("tool-governance");
-        this.deps.policy.addRule(rule);
+        staged.push(() => this.deps.policy.addRule(rule));
       },
       setModelSelector: (selector) => {
         guard("model-selector");
-        this.deps.setModelSelector(selector);
+        if (this.modelSelectorOwner && this.modelSelectorOwner !== plugin.name) {
+          throw new PluginLoadError(
+            `Plugin "${plugin.name}" sets the model selector already claimed by "${this.modelSelectorOwner}"`,
+          );
+        }
+        this.modelSelectorOwner = plugin.name;
+        staged.push(() => this.deps.setModelSelector(selector));
       },
       agents: {
         spawn: async (options) => {

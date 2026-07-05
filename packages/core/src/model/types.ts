@@ -1,4 +1,4 @@
-import type { Turn } from "../context/types";
+import type { CompressionResult, Turn } from "../context/types";
 import type { PromptBundle } from "../prompts/types";
 import type { SkillCall } from "../skills/types";
 import type { ToolDescriptor } from "../tools/types";
@@ -13,7 +13,10 @@ export interface ModelProfile {
 export interface ModelSelectionInput {
   agentName: string;
   iteration: number;
+  /** Explicit task-type hint from prompt metadata; when absent the selector may infer one. */
   taskType?: "default" | "reasoning" | "fast";
+  /** Raw user prompt, available to selectors that infer task type heuristically. */
+  userPrompt?: string;
   overrideModel?: string;
   promptHintModel?: string;
 }
@@ -43,10 +46,14 @@ export interface StepInput {
   userPrompt: string;
   bundle: PromptBundle;
   workingTurns: Turn[];
+  /** Compressed summary of older, overflowed turns to reinject as prior context. */
+  summary?: CompressionResult;
   iteration: number;
   selectedModel?: string;
   availableTools?: ToolDescriptor[];
   availableSkills?: string[];
+  /** Aborted when the run is killed; adapters should abandon in-flight requests. */
+  signal?: AbortSignal;
   onAssistantDelta?: (delta: string) => void | Promise<void>;
   onReasoningDelta?: (delta: string) => void | Promise<void>;
 }

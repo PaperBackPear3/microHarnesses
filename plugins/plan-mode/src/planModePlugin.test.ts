@@ -22,7 +22,6 @@ function makeApi(tools: Map<string, ToolDefinition>): PluginApi {
     registerCredentialsResolver() {},
     registerPolicyRule() {},
     setModelSelector() {},
-    registerToolGovernanceRule() {},
     agents: {
       async spawn() {
         throw new Error("agents not available in tests");

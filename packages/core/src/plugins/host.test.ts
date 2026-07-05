@@ -142,3 +142,38 @@ test("channels and skills capabilities register definitions", async () => {
   assert.equal(channels.get("in-memory").id, "in-memory");
   assert.equal(skills.get("s").name, "s");
 });
+
+test("registration is atomic: a plugin that throws commits nothing it staged", async () => {
+  const { host, tools } = buildHost();
+  const plugin: HarnessPlugin = {
+    name: "boom",
+    capabilities: ["tools"],
+    register(api: PluginApi) {
+      api.registerTool({
+        name: "t",
+        description: "",
+        risk: "low",
+        async execute() {
+          return {};
+        },
+      });
+      throw new Error("registration failed");
+    },
+  };
+  await assert.rejects(() => host.register([plugin]), /registration failed/);
+  assert.equal(tools.has("t"), false, "staged tool must not be committed");
+  assert.equal(host.plugins().has("boom"), false);
+});
+
+test("host rejects two plugins claiming the model selector", async () => {
+  const { host } = buildHost();
+  const makeSelectorPlugin = (name: string): HarnessPlugin => ({
+    name,
+    capabilities: ["model-selector"],
+    register(api: PluginApi) {
+      api.setModelSelector({ select: () => ({ model: "m", reason: "profile" }) });
+    },
+  });
+  await host.register([makeSelectorPlugin("a")]);
+  await assert.rejects(() => host.register([makeSelectorPlugin("b")]), PluginLoadError);
+});

@@ -15,7 +15,8 @@ export type ExecutionEventType =
   | "tool.approval_approved"
   | "tool.approval_denied"
   | "run.limit_reached"
-  | "run.completed";
+  | "run.completed"
+  | "run.failed";
 
 export interface ExecutionEvent {
   type: ExecutionEventType;

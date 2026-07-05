@@ -78,6 +78,7 @@ export class AnthropicAdapter implements ProviderAdapter {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({ ...toAnthropicBody(request), stream: true }),
+      signal: request.signal,
     });
 
     if (!response.ok) {
@@ -199,6 +200,7 @@ export class AnthropicAdapter implements ProviderAdapter {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify(toAnthropicBody(request)),
+      signal: request.signal,
     });
 
     if (!response.ok) {

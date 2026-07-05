@@ -416,6 +416,41 @@ test("adds session continuity instruction when working turns exist", async () =>
   assert.ok(continuityInstruction);
 });
 
+test("reinjects the compression summary of older turns as prior context", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(
+    makeInput({
+      summary: {
+        summary: "Earlier we chose PostgreSQL.",
+        highlights: ["db=postgres"],
+        supportHistory: [],
+      },
+    }),
+  );
+
+  const summaryMessage = adapter.seenRequest?.messages.find(
+    (message) =>
+      message.role === "developer" && message.content.includes("Summary of earlier turns"),
+  );
+  assert.ok(summaryMessage, "compression summary must be reinjected");
+  assert.match(summaryMessage?.content ?? "", /Earlier we chose PostgreSQL\./);
+  assert.match(summaryMessage?.content ?? "", /db=postgres/);
+});
+
 test("does not append duplicate task message when latest turn already has same user prompt", async () => {
   const adapter = new FakeAdapter("m", {
     assistantMessage: "ok",

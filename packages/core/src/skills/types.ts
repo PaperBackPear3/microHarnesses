@@ -1,3 +1,5 @@
+import type { ToolCall, ToolResult } from "../tools/types";
+
 export interface SkillExecutionContext {
   signal?: AbortSignal;
 }
@@ -5,6 +7,11 @@ export interface SkillExecutionContext {
 export interface SkillDefinition {
   name: string;
   description: string;
+  /**
+   * Coarse risk used by the policy engine when the skill runs through the
+   * governed execution pipeline (same as tools). Defaults to `"low"`.
+   */
+  risk?: "low" | "high";
   tags?: string[];
   capabilities?: string[];
   inputSchema?: Record<string, unknown>;
@@ -14,16 +21,9 @@ export interface SkillDefinition {
   ): Promise<Record<string, unknown>>;
 }
 
-export interface SkillCall {
-  name: string;
-  input: Record<string, unknown>;
-}
-
-export interface SkillResult {
-  ok: boolean;
-  output: Record<string, unknown>;
-  error?: string;
-}
+/** Skills share the tool call/result shape and the governed execution path. */
+export type SkillCall = ToolCall;
+export type SkillResult = ToolResult;
 
 export interface SkillCatalogQuery {
   tag?: string;

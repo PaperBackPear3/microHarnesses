@@ -77,6 +77,16 @@ export interface ToolDescriptor {
   inputSchema: Record<string, unknown>;
 }
 
+/**
+ * Minimal read surface the execution engine needs to resolve a call to an
+ * executable definition. `ToolRegistry` satisfies it, and skills are adapted
+ * to it so they run through the same governed pipeline as tools.
+ */
+export interface ToolResolver {
+  get(name: string): ToolDefinition;
+  list(): ToolDefinition[];
+}
+
 export interface ToolCatalogQuery {
   capability?: string;
   tag?: string;

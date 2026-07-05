@@ -8,7 +8,7 @@ You compose plugins at your application composition root so runtime behavior sta
 
 Each plugin must declare the surfaces it uses:
 
-`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "tool-governance"`
+`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`
 
 `PluginHost` enforces capabilities and throws `PluginCapabilityError` when a plugin touches an undeclared surface.
 

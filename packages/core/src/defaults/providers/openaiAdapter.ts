@@ -50,6 +50,7 @@ export class OpenAIAdapter implements ProviderAdapter {
         stream: true,
         stream_options: { include_usage: true },
       }),
+      signal: request.signal,
     });
 
     if (!response.ok) {
@@ -82,6 +83,7 @@ export class OpenAIAdapter implements ProviderAdapter {
         authorization: `Bearer ${auth.apiKey}`,
       },
       body: JSON.stringify(toOpenAIBody(request)),
+      signal: request.signal,
     });
     if (!response.ok) {
       const errorBody = await response.text();

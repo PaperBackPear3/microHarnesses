@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isNodeError } from "../shared/nodeError";
 import { defaultCompressor } from "./defaultCompressor";
-import type { CompressorFn, Turn } from "./types";
+import type { CompressionResult, CompressorFn, Turn, WorkingContext } from "./types";
 
 export interface ContextManagerOptions {
   stateDir: string;
@@ -17,9 +17,10 @@ interface SummaryState {
 }
 
 /**
- * Owns the working context window: trims turns to `maxWorkingTurns` and
- * compresses overflowed turns exactly once, persisting summaries under
- * `<stateDir>/summaries/`.
+ * Owns the working context window: trims turns to `maxWorkingTurns`, compresses
+ * overflowed turns exactly once (persisting summaries under
+ * `<stateDir>/summaries/`), and returns the latest summary so the runtime can
+ * reinject it into the model context.
  */
 export class ContextManager {
   private readonly summaryDir: string;
@@ -27,6 +28,7 @@ export class ContextManager {
   private readonly maxWorkingTurns: number;
   private compressor: CompressorFn;
   private goal?: string;
+  private latestSummary?: CompressionResult;
 
   constructor(options: ContextManagerOptions) {
     this.summaryDir = path.join(options.stateDir, "summaries");
@@ -46,11 +48,14 @@ export class ContextManager {
 
   async init(): Promise<void> {
     await mkdir(this.summaryDir, { recursive: true });
+    if (!this.latestSummary) {
+      this.latestSummary = await this.loadLatestSummary();
+    }
   }
 
-  async buildWorkingTurns(turns: Turn[]): Promise<Turn[]> {
+  async buildWorkingTurns(turns: Turn[]): Promise<WorkingContext> {
     if (turns.length <= this.maxWorkingTurns) {
-      return turns;
+      return { recentTurns: turns, summary: this.latestSummary };
     }
 
     const overflowCount = turns.length - this.maxWorkingTurns;
@@ -59,6 +64,7 @@ export class ContextManager {
     if (newOverflowCount > 0) {
       const delta = turns.slice(summaryState.compressedTurnCount, overflowCount);
       const compression = await this.compressor(delta, { goal: this.goal });
+      this.latestSummary = compression;
       const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
       await writeFile(
         summaryFile,
@@ -79,7 +85,40 @@ export class ContextManager {
       await this.writeSummaryState({ compressedTurnCount: overflowCount });
     }
 
-    return turns.slice(-this.maxWorkingTurns);
+    return { recentTurns: turns.slice(-this.maxWorkingTurns), summary: this.latestSummary };
+  }
+
+  private async loadLatestSummary(): Promise<CompressionResult | undefined> {
+    let names: string[];
+    try {
+      names = (await readdir(this.summaryDir))
+        .filter((name) => name.startsWith("summary-") && name.endsWith(".json"))
+        .sort();
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return undefined;
+      }
+      throw error;
+    }
+    const latest = names.at(-1);
+    if (!latest) {
+      return undefined;
+    }
+    try {
+      const raw = await readFile(path.join(this.summaryDir, latest), "utf8");
+      const parsed = JSON.parse(raw) as {
+        summary?: string;
+        highlights?: string[];
+        support_history?: string[];
+      };
+      return {
+        summary: parsed.summary ?? "",
+        highlights: parsed.highlights ?? [],
+        supportHistory: parsed.support_history ?? [],
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   private async readSummaryState(): Promise<SummaryState> {
