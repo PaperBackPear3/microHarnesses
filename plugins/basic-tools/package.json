@@ -1,14 +1,14 @@
 {
-  "name": "@micro-harness/plugin-plan-mode",
-  "version": "0.2.0",
-  "description": "Read-only planning and exploration plugin for @micro-harness/core. Ships a plan_agent and an explore_agent tool.",
+  "name": "@micro-harness/plugin-basic-tools",
+  "version": "0.1.0",
+  "description": "Workspace-scoped file, grep, and shell tools for @micro-harness/core.",
   "license": "MIT",
-  "keywords": ["micro-harness", "plugin", "planning", "exploration"],
+  "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell", "grep"],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
     "url": "https://github.com/PaperBackPear3/microHarnesses.git",
-    "directory": "packages/plugin-plan-mode"
+    "directory": "plugins/basic-tools"
   },
   "bugs": {
     "url": "https://github.com/PaperBackPear3/microHarnesses/issues"

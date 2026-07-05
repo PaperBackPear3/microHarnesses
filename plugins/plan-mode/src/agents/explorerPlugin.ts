@@ -1,5 +1,5 @@
-import path from "node:path";
 import { stat } from "node:fs/promises";
+import path from "node:path";
 import type {
   HarnessPlugin,
   PluginApi,
@@ -95,8 +95,10 @@ export class ExplorerPlugin implements HarnessPlugin {
         );
         const files = resolvedTargets.files;
         const results = [];
-        const inventory: Array<{ file: string; matches: Array<{ line: number; snippet: string }> }> =
-          [];
+        const inventory: Array<{
+          file: string;
+          matches: Array<{ line: number; snippet: string }>;
+        }> = [];
         const queryLower = query.toLowerCase();
         const hasQuery = query.length > 0;
 
@@ -123,9 +125,7 @@ export class ExplorerPlugin implements HarnessPlugin {
           if (matches.length === 0 && !filenameMatches) continue;
 
           const effectiveMatches =
-            matches.length > 0
-              ? matches
-              : [{ index: 0, line: `filename match: ${relativePath}` }];
+            matches.length > 0 ? matches : [{ index: 0, line: `filename match: ${relativePath}` }];
 
           results.push({
             file: relativePath,
@@ -161,7 +161,10 @@ export class ExplorerPlugin implements HarnessPlugin {
   }
 }
 
-function firstLineSnippet(raw: string, maxSnippetLength: number): { line: number; snippet: string } {
+function firstLineSnippet(
+  raw: string,
+  maxSnippetLength: number,
+): { line: number; snippet: string } {
   const lines = raw.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].trim();

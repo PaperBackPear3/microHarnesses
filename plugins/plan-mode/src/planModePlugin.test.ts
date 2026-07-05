@@ -13,6 +13,8 @@ function makeApi(tools: Map<string, ToolDefinition>): PluginApi {
     registerTool(tool) {
       tools.set(tool.name, tool);
     },
+    registerChannel() {},
+    registerSkill() {},
     onBeforeLoop() {},
     onAfterLoop() {},
     setCompressor() {},
@@ -20,9 +22,13 @@ function makeApi(tools: Map<string, ToolDefinition>): PluginApi {
     registerCredentialsResolver() {},
     registerPolicyRule() {},
     setModelSelector() {},
-    subagents: {
-      async run() {
-        throw new Error("subagents not available in tests");
+    registerToolGovernanceRule() {},
+    agents: {
+      async spawn() {
+        throw new Error("agents not available in tests");
+      },
+      async invoke() {
+        throw new Error("agents not available in tests");
       },
     },
   };
@@ -136,7 +142,11 @@ test("ExplorerPlugin blocks path traversal", async () => {
 test("ExplorerPlugin accepts root_directory alias for root_path", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-alias-"));
   await mkdir(path.join(root, "src"), { recursive: true });
-  await writeFile(path.join(root, "src", "index.ts"), "const marker = 'root-directory-alias';\n", "utf8");
+  await writeFile(
+    path.join(root, "src", "index.ts"),
+    "const marker = 'root-directory-alias';\n",
+    "utf8",
+  );
 
   try {
     const tools = new Map<string, ToolDefinition>();
@@ -172,7 +182,10 @@ test("ExplorerPlugin matches filenames when content has no query hit", async () 
     };
     assert.equal(result.total_results > 0, true);
     assert.equal(result.fallback, "match");
-    assert.equal(result.results.some((entry) => entry.file === "src/cli-summary.ts"), true);
+    assert.equal(
+      result.results.some((entry) => entry.file === "src/cli-summary.ts"),
+      true,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -260,7 +273,11 @@ test("ExplorerPlugin can explore without query using inventory fallback", async 
 test("ExplorerPlugin supports mixed file and directory targets", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mh-explore-plugin-mixed-targets-"));
   await mkdir(path.join(root, "src"), { recursive: true });
-  await writeFile(path.join(root, "src", "alpha.ts"), "export const alpha = 'mixed-target';\n", "utf8");
+  await writeFile(
+    path.join(root, "src", "alpha.ts"),
+    "export const alpha = 'mixed-target';\n",
+    "utf8",
+  );
   await writeFile(path.join(root, "single.ts"), "export const single = 'mixed-target';\n", "utf8");
 
   try {
@@ -278,15 +295,24 @@ test("ExplorerPlugin supports mixed file and directory targets", async () => {
     };
     assert.equal(result.total_results >= 2, true);
     assert.deepEqual(result.targets, ["src", "single.ts"]);
-    assert.equal(result.report.explored_targets.some((target) => target.requested === "src"), true);
+    assert.equal(
+      result.report.explored_targets.some((target) => target.requested === "src"),
+      true,
+    );
     assert.equal(
       result.report.explored_targets.some(
         (target) => target.requested === "single.ts" && target.kind === "file",
       ),
       true,
     );
-    assert.equal(result.results.some((entry) => entry.file === "src/alpha.ts"), true);
-    assert.equal(result.results.some((entry) => entry.file === "single.ts"), true);
+    assert.equal(
+      result.results.some((entry) => entry.file === "src/alpha.ts"),
+      true,
+    );
+    assert.equal(
+      result.results.some((entry) => entry.file === "single.ts"),
+      true,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
