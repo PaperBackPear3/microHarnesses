@@ -1,25 +1,25 @@
-import type { HarnessState } from "../context/types";
 import type { ModelProfile } from "../model/types";
 import type { SafetyMode } from "../policy/types";
 import type { ToolCall, ToolDefinition } from "../tools/types";
+import type { RunState } from "./state";
 
 export interface RuntimeLimits {
   toolTimeoutMs: number;
-  maxToolCallsPerRun: number;
+  maxActionCallsPerRun: number;
 }
 
 export interface CapabilityScope {
-  allowTools?: string[];
-  denyTools?: string[];
+  allowActions?: string[];
+  denyActions?: string[];
 }
 
-export type BeforeLoopHook = (state: HarnessState, iteration: number) => Promise<void> | void;
-export type AfterLoopHook = (state: HarnessState, iteration: number) => Promise<void> | void;
+export type BeforeLoopHook = (state: RunState, iteration: number) => Promise<void> | void;
+export type AfterLoopHook = (state: RunState, iteration: number) => Promise<void> | void;
 
 export interface ApprovalRequest {
   runId: string;
   iteration: number;
-  agentName: string;
+  promptName: string;
   tool: ToolDefinition;
   call: ToolCall;
   reason: string;
@@ -58,22 +58,27 @@ export interface RunOptions {
 }
 
 export interface AgentInvokeRequest {
-  agentName: string;
   prompt: string;
   execution: RunOptions;
 }
 
 export interface AgentRunResult {
   summary: string;
-  state: HarnessState;
+  state: RunState;
   runId: string;
   sessionId?: string;
 }
 
-export interface Agent {
+/**
+ * Narrow invoke/kill surface shared by the top-level {@link Agent} and its
+ * subagents. The prompt persona is bound when the agent is constructed, so it
+ * is not part of the request.
+ */
+export interface AgentHandle {
   readonly id: string;
   readonly kind: "main" | "subagent";
   readonly sessionId?: string;
+  readonly promptName: string;
   invoke(request: AgentInvokeRequest): Promise<AgentRunResult>;
   kill(reason?: string): void;
 }

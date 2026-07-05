@@ -1,8 +1,7 @@
-import type { HarnessState } from "../context/types";
+import type { RunState } from "../runtime/state";
 import type { RunOptions } from "../runtime/types";
 
 export interface ChannelRequest {
-  agentName: string;
   input: string;
   runOptions: RunOptions;
   sessionId?: string;
@@ -10,7 +9,7 @@ export interface ChannelRequest {
 }
 
 export interface ChannelResponse {
-  state: HarnessState;
+  state: RunState;
   finalMessage: string;
 }
 

@@ -22,11 +22,11 @@ export class FsPromptSource implements PromptSource {
   }
 
   async load(
-    agentName: string,
+    promptName: string,
     task: string,
     variables: Record<string, string> = {},
   ): Promise<PromptBundle> {
-    const base = safeResolve(this.rootDir, agentName);
+    const base = safeResolve(this.rootDir, promptName);
     const systemRaw = await readFile(path.join(base, "system.md"), "utf8");
     const optionalSections = await Promise.all(
       this.sections.map(async (section) => ({
@@ -34,7 +34,7 @@ export class FsPromptSource implements PromptSource {
         raw: await readOptional(path.join(base, `${section}.md`)),
       })),
     );
-    const metadata = await readMetadata(path.join(base, "prompt.meta.json"), agentName);
+    const metadata = await readMetadata(path.join(base, "prompt.meta.json"), promptName);
 
     const system = renderTemplate(stripFrontmatter(systemRaw), variables, this.strictVariables);
     const instructions: PromptInstruction[] = optionalSections
@@ -74,14 +74,14 @@ async function readOptional(filePath: string): Promise<string | undefined> {
   }
 }
 
-async function readMetadata(filePath: string, agentName: string): Promise<PromptMetadata> {
+async function readMetadata(filePath: string, promptName: string): Promise<PromptMetadata> {
   const raw = await readOptional(filePath);
   if (!raw) {
-    return { name: agentName };
+    return { name: promptName };
   }
   const parsed = JSON.parse(raw) as PromptMetadata;
   return {
-    name: parsed.name ?? agentName,
+    name: parsed.name ?? promptName,
     modelHint: parsed.modelHint,
     taskTypeHint:
       parsed.taskTypeHint === "default" ||

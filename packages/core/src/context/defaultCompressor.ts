@@ -1,5 +1,6 @@
+import type { Turn } from "../runtime/state";
 import { truncate } from "../shared/text";
-import type { CompressionResult, Turn } from "./types";
+import type { CompressionResult } from "./types";
 
 /**
  * Built-in compressor: scores turns by recency, impact (tool calls, failures,

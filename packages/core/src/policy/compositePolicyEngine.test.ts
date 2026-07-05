@@ -12,7 +12,7 @@ import type {
 const ctx: ToolPolicyContext = {
   runId: "r",
   iteration: 1,
-  agentName: "a",
+  promptName: "a",
   safetyMode: "balanced",
 };
 

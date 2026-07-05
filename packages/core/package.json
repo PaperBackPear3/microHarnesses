@@ -3,14 +3,7 @@
   "version": "0.3.0",
   "description": "Composable, plugin-first library for building LLM agent harnesses. Provides the agent loop, tool registry, session/context management, policy engine with command-safety rules, provider/credentials registries, and an in-process subagent primitive.",
   "license": "MIT",
-  "keywords": [
-    "llm",
-    "agent",
-    "harness",
-    "tools",
-    "plugins",
-    "ai"
-  ],
+  "keywords": ["llm", "agent", "harness", "tools", "plugins", "ai"],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
@@ -29,11 +22,7 @@
       "default": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "!dist/**/*.test.*",
-    "!dist/**/*.test.d.ts"
-  ],
+  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
   "publishConfig": {
     "access": "public"
   },

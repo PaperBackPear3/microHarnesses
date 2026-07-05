@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { Turn } from "../runtime/state";
 import { isNodeError } from "../shared/nodeError";
 import { defaultCompressor } from "./defaultCompressor";
-import type { CompressionResult, CompressorFn, Turn, WorkingContext } from "./types";
+import type { CompressionResult, CompressorFn, WorkingContext } from "./types";
 
 export interface ContextManagerOptions {
   stateDir: string;

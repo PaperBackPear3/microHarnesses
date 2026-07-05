@@ -1,23 +1,4 @@
-import type { SkillCall, SkillResult } from "../skills/types";
-import type { ToolCall, ToolResult } from "../tools/types";
-
-export interface Turn {
-  id: string;
-  iteration: number;
-  userMessage: string;
-  assistantMessage: string;
-  toolCalls: ToolCall[];
-  toolResults: ToolResult[];
-  skillCalls?: SkillCall[];
-  skillResults?: SkillResult[];
-}
-
-export interface HarnessState {
-  sessionId?: string;
-  runId: string;
-  startedAt: string;
-  turns: Turn[];
-}
+import type { Turn } from "../runtime/state";
 
 export interface CompressionResult {
   summary: string;

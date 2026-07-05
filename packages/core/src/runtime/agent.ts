@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { type ActionCallBudget, ActionExecutionEngine } from "../actions/executionEngine";
 import type { ChannelRequest, ChannelResponse } from "../channels/types";
 import type { ContextManager } from "../context/manager";
-import type { HarnessState } from "../context/types";
 import type { EventSink } from "../events/types";
 import type { ModelAdapter, ModelSelector } from "../model/types";
 import type { ToolPolicyEngine } from "../policy/types";
@@ -11,14 +11,14 @@ import { ValidationError } from "../shared/errors";
 import { skillsAsToolResolver } from "../skills/asTool";
 import type { SkillRegistry } from "../skills/registry";
 import { deriveToolDescriptors } from "../tools/descriptors";
-import { type ToolCallBudget, ToolExecutionEngine } from "../tools/executionEngine";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolResult } from "../tools/types";
 import { RunEmitter } from "./runEmitter";
 import { shouldSnapshot } from "./snapshotCadence";
+import type { RunState } from "./state";
 import type {
   AfterLoopHook,
-  Agent,
+  AgentHandle,
   AgentInvokeRequest,
   AgentRunResult,
   ApprovalHandler,
@@ -27,7 +27,13 @@ import type {
   RuntimeLimits,
 } from "./types";
 
-interface RuntimeDeps {
+/**
+ * Construction options for an {@link Agent}. The prompt persona (`promptName`)
+ * is bound here, not per-run: one Agent instance = one persona.
+ */
+export interface AgentOptions {
+  /** Prompt-pack persona this agent runs (resolved via `PromptSource.load`). */
+  promptName: string;
   model: ModelAdapter;
   modelSelector: ModelSelector;
   prompts: PromptSource;
@@ -44,10 +50,10 @@ interface RuntimeDeps {
 
 const DEFAULT_LIMITS: RuntimeLimits = {
   toolTimeoutMs: 20_000,
-  maxToolCallsPerRun: 20,
+  maxActionCallsPerRun: 20,
 };
 
-/** Per-`run()` state so concurrent runs on one runtime cannot clobber each other. */
+/** Per-`run()` state so concurrent runs on one agent cannot clobber each other. */
 interface RunContext {
   runId: string;
   sessionId?: string;
@@ -55,9 +61,16 @@ interface RunContext {
   controller: AbortController;
 }
 
-export class HarnessRuntime implements Agent {
+/**
+ * The top-level executable agent: binds one prompt persona to a model, tools,
+ * skills, policy, context, and session store, and runs the governed agent loop.
+ * Implements {@link AgentHandle} so it (and its subagents) share a narrow
+ * invoke/kill surface.
+ */
+export class Agent implements AgentHandle {
   readonly id = randomUUID();
   readonly kind: "main" | "subagent";
+  readonly promptName: string;
   private readonly model: ModelAdapter;
   private modelSelector: ModelSelector;
   private readonly prompts: PromptSource;
@@ -73,25 +86,26 @@ export class HarnessRuntime implements Agent {
   private readonly afterHooks: AfterLoopHook[] = [];
   private readonly activeRuns = new Set<RunContext>();
 
-  constructor(deps: RuntimeDeps) {
-    this.model = deps.model;
-    this.modelSelector = deps.modelSelector;
-    this.prompts = deps.prompts;
-    this.tools = deps.tools;
-    this.context = deps.context;
-    this.policy = deps.policy;
-    this.eventSink = deps.eventSink;
-    this.sessionStore = deps.sessionStore;
-    this.defaultLimits = deps.limits ?? DEFAULT_LIMITS;
-    this.approvalHandler = deps.approvalHandler;
-    this.kind = deps.kind ?? "main";
-    this.skills = deps.skills;
+  constructor(options: AgentOptions) {
+    this.promptName = options.promptName;
+    this.model = options.model;
+    this.modelSelector = options.modelSelector;
+    this.prompts = options.prompts;
+    this.tools = options.tools;
+    this.context = options.context;
+    this.policy = options.policy;
+    this.eventSink = options.eventSink;
+    this.sessionStore = options.sessionStore;
+    this.defaultLimits = options.limits ?? DEFAULT_LIMITS;
+    this.approvalHandler = options.approvalHandler;
+    this.kind = options.kind ?? "main";
+    this.skills = options.skills;
   }
 
   kill(reason?: string): void {
     for (const run of this.activeRuns) {
       run.cancelled = true;
-      run.controller.abort(reason ?? "runtime killed");
+      run.controller.abort(reason ?? "agent killed");
     }
   }
 
@@ -111,7 +125,7 @@ export class HarnessRuntime implements Agent {
     this.modelSelector = selector;
   }
 
-  async run(agentName: string, userPrompt: string, options: RunOptions): Promise<HarnessState> {
+  async run(userPrompt: string, options: RunOptions): Promise<RunState> {
     validateRunOptions(options);
     const runId = randomUUID();
     const runCtx: RunContext = { runId, cancelled: false, controller: new AbortController() };
@@ -146,7 +160,7 @@ export class HarnessRuntime implements Agent {
         { runId, sessionId },
       );
 
-      const state = await this.runLoop(runCtx, emitter, agentName, userPrompt, options, {
+      const state = await this.runLoop(runCtx, emitter, userPrompt, options, {
         limits,
         goal,
         sessionId,
@@ -166,21 +180,21 @@ export class HarnessRuntime implements Agent {
   private async runLoop(
     runCtx: RunContext,
     emitter: RunEmitter,
-    agentName: string,
     userPrompt: string,
     options: RunOptions,
     resolved: { limits: RuntimeLimits; goal: string; sessionId?: string; runId: string },
-  ): Promise<HarnessState> {
+  ): Promise<RunState> {
     const { limits, goal, sessionId, runId } = resolved;
+    const promptName = this.promptName;
 
-    const engine = new ToolExecutionEngine({
+    const engine = new ActionExecutionEngine({
       tools: this.tools,
       policy: this.policy,
       limits,
       approvalHandler: this.approvalHandler,
     });
     const skillEngine = this.skills
-      ? new ToolExecutionEngine({
+      ? new ActionExecutionEngine({
           tools: skillsAsToolResolver(this.skills),
           policy: this.policy,
           limits,
@@ -189,7 +203,7 @@ export class HarnessRuntime implements Agent {
         })
       : undefined;
 
-    let state: HarnessState = {
+    let state: RunState = {
       sessionId,
       runId,
       startedAt: new Date().toISOString(),
@@ -206,20 +220,20 @@ export class HarnessRuntime implements Agent {
     await this.context.init();
     this.context.setGoal(goal);
     await emitter.emit("run.started", {
-      agentName,
+      promptName,
       sessionId,
       resume: Boolean(options.resume),
       goal,
     });
 
-    const bundle = await this.prompts.load(agentName, userPrompt);
+    const bundle = await this.prompts.load(promptName, userPrompt);
     const taskType = bundle.metadata.taskTypeHint;
-    const budget: ToolCallBudget = { remaining: limits.maxToolCallsPerRun };
+    const budget: ActionCallBudget = { remaining: limits.maxActionCallsPerRun };
 
     for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
       if (runCtx.cancelled) {
-        await emitter.emit("tool.killed", {
-          reason: "runtime killed before next iteration",
+        await emitter.emit("action.killed", {
+          reason: "agent killed before next iteration",
           iteration,
         });
         break;
@@ -232,7 +246,7 @@ export class HarnessRuntime implements Agent {
       const working = await this.context.buildWorkingTurns(state.turns);
       const modelSelection = this.modelSelector.select(
         {
-          agentName,
+          promptName,
           iteration,
           taskType,
           userPrompt,
@@ -256,7 +270,7 @@ export class HarnessRuntime implements Agent {
         taskType: taskType ?? "default",
       });
       const step = await this.model.nextStep({
-        agentName,
+        promptName,
         userPrompt,
         bundle,
         workingTurns: working.recentTurns,
@@ -301,15 +315,15 @@ export class HarnessRuntime implements Agent {
 
       // Honor a kill that arrived while the model was thinking, before side effects.
       if (runCtx.cancelled) {
-        await emitter.emit("tool.killed", {
-          reason: "runtime killed during model step",
+        await emitter.emit("action.killed", {
+          reason: "agent killed during model step",
           iteration,
         });
         break;
       }
 
       const executionCtx = {
-        agentName,
+        promptName,
         iteration,
         safetyMode: bundle.metadata.safetyMode,
         emitter,
@@ -384,7 +398,7 @@ export class HarnessRuntime implements Agent {
   }
 
   async invoke(request: AgentInvokeRequest): Promise<AgentRunResult> {
-    const state = await this.run(request.agentName, request.prompt, request.execution);
+    const state = await this.run(request.prompt, request.execution);
     return {
       summary: state.turns[state.turns.length - 1]?.assistantMessage ?? "",
       state,
@@ -395,7 +409,6 @@ export class HarnessRuntime implements Agent {
 
   async handleChannel(request: ChannelRequest): Promise<ChannelResponse> {
     const result = await this.invoke({
-      agentName: request.agentName,
       prompt: request.input,
       execution: {
         ...request.runOptions,

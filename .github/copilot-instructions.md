@@ -6,7 +6,7 @@ Use npm scripts from the root `package.json`:
 
 - Build all workspaces: `npm run build`
 - Run all tests (builds first): `npm test`
-- Run a single compiled test file: `node --test packages/core/dist/runtime/runtime.test.js`
+- Run a single compiled test file: `node --test packages/core/dist/runtime/agent.test.js`
 - Lint: `npm run lint` (Biome)
 - Format: `npm run format`
 
@@ -18,14 +18,14 @@ Composable, plugin-first library:
 - `plugins/plan-mode` — read-only planning + exploration tools
 - `plugins/example-tools` — reference `echo` / `time` tools
 
-### Runtime loop (`packages/core/src/runtime/runtime.ts`)
+### Runtime loop (`packages/core/src/runtime/agent.ts`)
 
 Per iteration:
 1. Run before-hooks
 2. Build working turns via `ContextManager.buildWorkingTurns`
 3. Select model via `ModelSelector`
 4. Ask `ModelAdapter.nextStep` for a `StepPlan`
-5. Execute tool calls via `ToolExecutionEngine`, which:
+5. Execute tool calls via `ActionExecutionEngine`, which:
    - Evaluates `ToolPolicyEngine.evaluate`
    - On `require_approval`, awaits `approvalHandler` (missing → blocked)
    - Applies timeout via `withTimeout`, honoring `AbortSignal`
@@ -39,7 +39,8 @@ Per iteration:
 Each domain owns its own `types.ts`:
 
 - `shared/` — errors, isNodeError, safeResolve, truncate
-- `tools/` — types, registry, executionEngine
+- `tools/` — types (incl. ToolResolver), registry, descriptors
+- `actions/` — executionEngine (`ActionExecutionEngine`: governs tools + skills)
 - `policy/` — types, defaultPolicyEngine, compositePolicyEngine, safety/{commandNormalizer,defaultRules,commandSafetyRule}
 - `providers/` — types, registry, credentialsRegistry
 - `model/` — types, defaultModelSelector, providerModelAdapter
@@ -47,7 +48,7 @@ Each domain owns its own `types.ts`:
 - `context/` — types, manager, defaultCompressor
 - `session/` — types, sessionStore
 - `events/` — types, memoryEventSink
-- `runtime/` — types, runtime, runEmitter, snapshotCadence
+- `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), runEmitter, snapshotCadence
 - `subagents/` — types, inProcessSubagentRunner
 - `plugins/` — types, host, loader
 

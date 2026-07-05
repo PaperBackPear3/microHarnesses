@@ -3,12 +3,7 @@
   "version": "0.1.0",
   "description": "Reference tool plugin (echo, time) for @micro-harness/core. Doubles as a plugin-authoring example.",
   "license": "MIT",
-  "keywords": [
-    "micro-harness",
-    "plugin",
-    "example",
-    "tools"
-  ],
+  "keywords": ["micro-harness", "plugin", "example", "tools"],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
@@ -27,11 +22,7 @@
       "default": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "!dist/**/*.test.*",
-    "!dist/**/*.test.d.ts"
-  ],
+  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
   "publishConfig": {
     "access": "public"
   },

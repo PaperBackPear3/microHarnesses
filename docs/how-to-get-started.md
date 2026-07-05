@@ -117,7 +117,7 @@ new FsPromptSource({ rootDir: path.resolve("prompts") });
 and runtime call:
 
 ```ts
-runtime.run("code-review", ...);
+runtime.run(...); // persona "code-review" is bound at construction
 ```
 
 it resolves this folder:
@@ -167,7 +167,7 @@ import {
   DefaultModelSelector,
   DefaultPolicyEngine,
   FsPromptSource,
-  HarnessRuntime,
+  Agent,
   MemoryEventSink,
   ProviderModelAdapter,
   ProviderRegistry,
@@ -201,7 +201,8 @@ async function main(): Promise<void> {
     }),
   });
 
-  const runtime = new HarnessRuntime({
+  const runtime = new Agent({
+    promptName: "code-review",
     model: new ProviderModelAdapter({
       providerRegistry,
       credentialsRegistry,
@@ -230,7 +231,7 @@ async function main(): Promise<void> {
     "Return a concise report with severity, file/line, issue, and fix.",
   ].join("\n");
 
-  const state = await runtime.run("code-review", task, {
+  const state = await runtime.run(task, {
     maxIterations: 6,
     snapshotEvery: 1,
     profile: { defaultModel: "gemma4:latest" },
@@ -285,7 +286,7 @@ registerCoreDefaults({
 Make sure Ollama is running locally, then run:
 
 ```bash
-npm run review -- packages/core/src/runtime/runtime.ts
+npm run review -- packages/core/src/runtime/agent.ts
 ```
 
 If you need a non-default Ollama URL:
@@ -299,7 +300,7 @@ export OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
 1. The app loads prompt files from `prompts/code-review`.
 2. The model (`gemma4:latest` via Ollama) plans a review step.
 3. It can call read-only tools to inspect files.
-4. `HarnessRuntime` appends turns and snapshots session state locally.
+4. `Agent` appends turns and snapshots session state locally.
 5. Final assistant output is printed as the review report.
 
 ---
@@ -315,7 +316,7 @@ import {
   DefaultModelSelector,
   DefaultPolicyEngine,
   FsPromptSource,
-  HarnessRuntime,
+  Agent,
   MemoryEventSink,
   ProviderModelAdapter,
   ProviderRegistry,
@@ -349,7 +350,8 @@ async function main(): Promise<void> {
     }),
   });
 
-  const runtime = new HarnessRuntime({
+  const runtime = new Agent({
+    promptName: "code-review",
     model: new ProviderModelAdapter({
       providerRegistry,
       credentialsRegistry,
@@ -378,7 +380,7 @@ async function main(): Promise<void> {
     "Return a concise report with severity, file/line, issue, and fix.",
   ].join("\n");
 
-  const state = await runtime.run("code-review", task, {
+  const state = await runtime.run(task, {
     maxIterations: 6,
     snapshotEvery: 1,
     profile: { defaultModel: "gemma4:latest" },

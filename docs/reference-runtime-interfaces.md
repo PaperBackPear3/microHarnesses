@@ -56,7 +56,7 @@ Important files:
 
 Prompt pack directory:
 
-`<rootDir>/<agentName>/`
+`<rootDir>/<promptName>/`
 
 Files:
 

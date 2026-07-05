@@ -4,7 +4,7 @@ This page explains the core execution model in `@micro-harneses/core`.
 
 ## Loop lifecycle
 
-For each iteration, `HarnessRuntime` does:
+For each iteration, `Agent` does:
 
 1. Run before-hooks.
 2. Build working turns via `ContextManager`.
@@ -35,9 +35,9 @@ At run start, runtime loads one prompt bundle for the selected `agentName` via `
 
 With `FsPromptSource`, prompt files are loaded from:
 
-- `<rootDir>/<agentName>/system.md` (required)
+- `<rootDir>/<promptName>/system.md` (required)
 - optional section files from `sections` (default: `developer.md`, `tools.md`)
-- optional `<rootDir>/<agentName>/prompt.meta.json`
+- optional `<rootDir>/<promptName>/prompt.meta.json`
 
 Section-to-role mapping:
 

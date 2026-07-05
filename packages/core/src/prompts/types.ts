@@ -22,5 +22,5 @@ export interface PromptMetadata {
 }
 
 export interface PromptSource {
-  load(agentName: string, task: string, variables?: Record<string, string>): Promise<PromptBundle>;
+  load(promptName: string, task: string, variables?: Record<string, string>): Promise<PromptBundle>;
 }

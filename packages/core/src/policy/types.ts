@@ -11,7 +11,7 @@ export interface ToolPolicyEvaluation {
 
 export interface ToolPolicyContext {
   iteration: number;
-  agentName: string;
+  promptName: string;
   runId: string;
   safetyMode?: SafetyMode;
   parentSessionId?: string;

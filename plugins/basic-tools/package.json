@@ -3,13 +3,7 @@
   "version": "0.1.0",
   "description": "Workspace-scoped filesystem mutation and shell tools for @micro-harness/core.",
   "license": "MIT",
-  "keywords": [
-    "micro-harness",
-    "plugin",
-    "tools",
-    "filesystem",
-    "shell"
-  ],
+  "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell"],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
@@ -28,11 +22,7 @@
       "default": "./dist/index.js"
     }
   },
-  "files": [
-    "dist",
-    "!dist/**/*.test.*",
-    "!dist/**/*.test.d.ts"
-  ],
+  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
   "publishConfig": {
     "access": "public"
   },

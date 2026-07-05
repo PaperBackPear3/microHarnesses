@@ -3,7 +3,7 @@ import type { ToolDefinition } from "../../tools/types";
 
 export interface SpawnSubagentToolOptions {
   toolName?: string;
-  defaultAgentName?: string;
+  defaultPromptName?: string;
   maxIterations?: number;
 }
 
@@ -14,7 +14,7 @@ export function createSpawnSubagentTool(
   options: SpawnSubagentToolOptions = {},
 ): ToolDefinition {
   const toolName = options.toolName ?? SPAWN_TOOL_NAME;
-  const defaultAgentName = options.defaultAgentName;
+  const defaultPromptName = options.defaultPromptName;
   const maxIterations = options.maxIterations ?? 8;
 
   return {
@@ -28,7 +28,7 @@ export function createSpawnSubagentTool(
       type: "object",
       properties: {
         prompt: { type: "string" },
-        agentName: { type: "string" },
+        promptName: { type: "string" },
         allowedTools: { type: "array", items: { type: "string" } },
         maxIterations: { type: "number" },
         goal: { type: "string" },
@@ -42,9 +42,9 @@ export function createSpawnSubagentTool(
         throw new Error(`${toolName}: "prompt" is required`);
       }
       const requestedAgent =
-        typeof input.agentName === "string" && input.agentName.trim().length > 0
-          ? input.agentName
-          : defaultAgentName;
+        typeof input.promptName === "string" && input.promptName.trim().length > 0
+          ? input.promptName
+          : defaultPromptName;
       const requestedTools = Array.isArray(input.allowedTools)
         ? input.allowedTools.filter(
             (item): item is string => typeof item === "string" && item !== toolName,
@@ -58,7 +58,7 @@ export function createSpawnSubagentTool(
 
       const result = await runner.run({
         prompt,
-        agentName: requestedAgent,
+        promptName: requestedAgent,
         allowedTools: requestedTools,
         maxIterations: requestedMaxIterations,
         goal,

@@ -6,7 +6,7 @@ This guide is for teams building apps on top of `@micro-harneses/core`.
 
 | You are | Start with | Add when needed |
 |---|---|---|
-| App team building one agent workflow | `HarnessRuntime` + `FsPromptSource` + read-only tools | `SessionStore`, `CompositePolicyEngine`, approval handler |
+| App team building one agent workflow | `Agent` + `FsPromptSource` + read-only tools | `SessionStore`, `CompositePolicyEngine`, approval handler |
 | Platform team supporting many agents | `PluginHost` + capability-declared plugins | custom policy rules, custom provider plugins, governance rules |
 | Security-sensitive deployment | `CompositePolicyEngine` + `createCommandSafetyRule()` | strict safety mode, approval UX, audited high-risk tools |
 | Local/offline-first workflow | built-in `ollama` provider registration + local models | custom provider adapters for internal gateways |

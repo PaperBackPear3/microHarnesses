@@ -4,7 +4,7 @@ import { ConfigError } from "../shared/errors";
 import { DefaultModelSelector } from "./defaultModelSelector";
 import type { ModelProfile } from "./types";
 
-const base = { agentName: "a", iteration: 1 };
+const base = { promptName: "a", iteration: 1 };
 
 test("override wins over everything", () => {
   const selector = new DefaultModelSelector();

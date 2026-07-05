@@ -11,7 +11,7 @@ If you want a faster, task-focused setup, start with
 
 Create a `hello-harness` app that:
 
-- runs one prompt through `HarnessRuntime`
+- runs one prompt through `Agent`
 - registers plugin tools
 - persists local state
 - prints the final assistant message
@@ -34,7 +34,7 @@ import {
   ContextManager,
   DefaultModelSelector,
   DefaultPolicyEngine,
-  HarnessRuntime,
+  Agent,
   MemoryEventSink,
   ToolRegistry,
   type ModelAdapter,
@@ -46,7 +46,7 @@ import {
 import { echoTool, timeTool } from "@micro-harneses/plugin-example-tools";
 
 class DemoPromptSource implements PromptSource {
-  async load(_agentName: string, task: string): Promise<PromptBundle> {
+  async load(_promptName: string, task: string): Promise<PromptBundle> {
     return {
       system: "You are a concise assistant.",
       instructions: [],
@@ -82,7 +82,8 @@ const tools = new ToolRegistry();
 tools.register(echoTool);
 tools.register(timeTool);
 
-const runtime = new HarnessRuntime({
+const runtime = new Agent({
+  promptName: "default",
   model: new DemoModel(),
   modelSelector: new DefaultModelSelector(),
   prompts: new DemoPromptSource(),
@@ -96,7 +97,7 @@ const runtime = new HarnessRuntime({
   eventSink: new MemoryEventSink(),
 });
 
-const state = await runtime.run("default", "hello microHarnesses", {
+const state = await runtime.run("hello microHarnesses", {
   maxIterations: 4,
   snapshotEvery: 1,
   profile: { defaultModel: "demo-model" },

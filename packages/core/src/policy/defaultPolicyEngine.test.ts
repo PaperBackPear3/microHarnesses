@@ -7,7 +7,7 @@ import type { ToolPolicyContext } from "./types";
 const ctx = (mode?: "strict" | "balanced" | "open"): ToolPolicyContext => ({
   runId: "r",
   iteration: 1,
-  agentName: "a",
+  promptName: "a",
   safetyMode: mode,
 });
 

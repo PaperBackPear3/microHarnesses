@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { HarnessState } from "../context/types";
 import type { ExecutionEvent } from "../events/types";
+import type { RunState } from "../runtime/state";
 import { isNodeError } from "../shared/nodeError";
 import type { InitSessionOptions, SessionManifest } from "./types";
 
@@ -11,7 +11,7 @@ interface SnapshotFile {
   createdAt: string;
   seq: number;
   runId: string;
-  state: HarnessState;
+  state: RunState;
 }
 
 export class SessionStore {
@@ -85,7 +85,7 @@ export class SessionStore {
     await this.writeManifest(manifest);
   }
 
-  async saveSnapshot(sessionId: string, runId: string, state: HarnessState): Promise<string> {
+  async saveSnapshot(sessionId: string, runId: string, state: RunState): Promise<string> {
     const manifest = await this.readManifest(sessionId);
     const snapshotId = `snap-${randomUUID()}`;
     const snapshotSeq = (manifest.lastSnapshotSeq ?? 0) + 1;
@@ -112,7 +112,7 @@ export class SessionStore {
     return snapshotId;
   }
 
-  async loadLatestSnapshot(sessionId: string): Promise<HarnessState | undefined> {
+  async loadLatestSnapshot(sessionId: string): Promise<RunState | undefined> {
     const manifest = await this.readManifest(sessionId);
     if (!manifest.latestSnapshotPath) {
       return undefined;
@@ -126,7 +126,7 @@ export class SessionStore {
       return undefined;
     }
     const seenTurnIds = new Set<string>();
-    const mergedTurns: HarnessState["turns"] = [];
+    const mergedTurns: RunState["turns"] = [];
     for (const snapshot of snapshots) {
       for (const turn of snapshot.state.turns) {
         if (seenTurnIds.has(turn.id)) {

@@ -7,8 +7,10 @@ export * from "./shared/text";
 // Tools
 export * from "./tools/types";
 export * from "./tools/registry";
-export * from "./tools/executionEngine";
 export * from "./tools/descriptors";
+
+// Actions (governed execution of tools + skills)
+export * from "./actions/executionEngine";
 
 // Channels
 export * from "./channels/types";
@@ -58,7 +60,8 @@ export * from "./events/memoryEventSink";
 
 // Runtime
 export * from "./runtime/types";
-export * from "./runtime/runtime";
+export * from "./runtime/state";
+export * from "./runtime/agent";
 export * from "./runtime/runEmitter";
 export * from "./runtime/snapshotCadence";
 

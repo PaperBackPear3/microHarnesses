@@ -1,14 +1,14 @@
-import type { HarnessState } from "../context/types";
-import type { Agent, AgentInvokeRequest, RunOptions } from "../runtime/types";
+import type { RunState } from "../runtime/state";
+import type { AgentHandle, AgentInvokeRequest, RunOptions } from "../runtime/types";
 
 export interface SubagentRunOptions {
   prompt: string;
-  /** Prompt-pack agent to run; defaults to the parent's agent. */
-  agentName?: string;
+  /** Prompt-pack persona the child agent runs; defaults to the parent's persona. */
+  promptName?: string;
   maxIterations?: number;
   /** Tools the child may use; defaults to all parent tools except spawn tools. */
   allowedTools?: string[];
-  /** Abort signal propagated to the child runtime (kills it on abort). */
+  /** Abort signal propagated to the child agent (kills it on abort). */
   signal?: AbortSignal;
   /** Optional goal string for the child session. */
   goal?: string;
@@ -17,7 +17,7 @@ export interface SubagentRunOptions {
 export interface SubagentResult {
   /** Final assistant message of the child run — the only context returned to the parent. */
   summary: string;
-  state: HarnessState;
+  state: RunState;
 }
 
 export interface SubagentRunner {
@@ -25,25 +25,25 @@ export interface SubagentRunner {
 }
 
 /**
- * Composition-root callback that builds a child runtime for a subagent run.
- * The parent runtime is passed in so the factory can pull the parent session
- * id (`parentRuntime.sessionId`) into the child manifest.
+ * Composition-root callback that builds a child agent for a subagent run.
+ * The parent agent is passed in so the factory can pull the parent session
+ * id (`parent.sessionId`) into the child manifest. The child agent binds its
+ * prompt persona at construction, so the built agent carries no separate name.
  */
 export interface SubagentRuntimeFactory {
   build(
     request: SubagentRunOptions,
-    parentRuntime: Agent,
+    parent: AgentHandle,
   ): SubagentBuiltRuntime | Promise<SubagentBuiltRuntime>;
 }
 
 export interface SubagentBuiltRuntime {
-  runtime: Agent;
+  agent: AgentHandle;
   runOptions: RunOptions;
-  agentName: string;
   prompt: string;
 }
 
 export interface SubagentBuiltAgentInvoke {
-  agent: Agent;
+  agent: AgentHandle;
   request: AgentInvokeRequest;
 }

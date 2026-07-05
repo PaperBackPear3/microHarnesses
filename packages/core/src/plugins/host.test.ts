@@ -123,7 +123,6 @@ test("channels and skills capabilities register definitions", async () => {
         description: "test",
         async handle(_request, context) {
           return context.invoke({
-            agentName: "a",
             input: "p",
             runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
           });

@@ -1,17 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { HarnessState } from "../context/types";
-import type { Agent, AgentInvokeRequest, AgentRunResult } from "../runtime/types";
+import type { RunState } from "../runtime/state";
+import type { AgentHandle, AgentInvokeRequest, AgentRunResult } from "../runtime/types";
 import { InProcessSubagentRunner } from "./inProcessSubagentRunner";
 import type { SubagentRuntimeFactory } from "./types";
 
-class FakeChildRuntime implements Agent {
+class FakeChildAgent implements AgentHandle {
   readonly id = "child";
   readonly kind = "subagent" as const;
+  readonly promptName = "child-agent";
   killed = false;
   seenRequest?: AgentInvokeRequest;
   constructor(
-    private readonly state: HarnessState,
+    private readonly state: RunState,
     private readonly delayMs: number = 0,
   ) {}
   async invoke(request: AgentInvokeRequest): Promise<AgentRunResult> {
@@ -37,15 +38,16 @@ class FakeChildRuntime implements Agent {
 const parent = {
   id: "parent",
   kind: "main",
+  promptName: "main",
   sessionId: "parent-session",
   async invoke() {
     throw new Error("not used");
   },
   kill() {},
-} as Agent;
+} as AgentHandle;
 
 test("returns final assistantMessage as summary", async () => {
-  const child = new FakeChildRuntime({
+  const child = new FakeChildAgent({
     sessionId: "child",
     runId: "r",
     startedAt: "t",
@@ -70,25 +72,23 @@ test("returns final assistantMessage as summary", async () => {
   });
   const factory: SubagentRuntimeFactory = {
     build: () => ({
-      runtime: child,
+      agent: child,
       runOptions: { maxIterations: 2, snapshotEvery: 1, profile: { defaultModel: "m" } },
-      agentName: "child-agent",
       prompt: "do the thing",
     }),
   };
   const runner = new InProcessSubagentRunner(factory, parent);
   const result = await runner.run({ prompt: "do the thing" });
   assert.equal(result.summary, "last summary");
-  assert.equal(child.seenRequest?.agentName, "child-agent");
+  assert.equal(child.seenRequest?.prompt, "do the thing");
 });
 
 test("empty turns produces empty summary", async () => {
-  const child = new FakeChildRuntime({ sessionId: "c", runId: "r", startedAt: "t", turns: [] });
+  const child = new FakeChildAgent({ sessionId: "c", runId: "r", startedAt: "t", turns: [] });
   const factory: SubagentRuntimeFactory = {
     build: () => ({
-      runtime: child,
+      agent: child,
       runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
-      agentName: "a",
       prompt: "p",
     }),
   };
@@ -97,13 +97,12 @@ test("empty turns produces empty summary", async () => {
   assert.equal(result.summary, "");
 });
 
-test("abort signal kills the child runtime", async () => {
-  const child = new FakeChildRuntime({ sessionId: "c", runId: "r", startedAt: "t", turns: [] }, 30);
+test("abort signal kills the child agent", async () => {
+  const child = new FakeChildAgent({ sessionId: "c", runId: "r", startedAt: "t", turns: [] }, 30);
   const factory: SubagentRuntimeFactory = {
     build: () => ({
-      runtime: child,
+      agent: child,
       runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
-      agentName: "a",
       prompt: "p",
     }),
   };
@@ -115,16 +114,15 @@ test("abort signal kills the child runtime", async () => {
   assert.equal(child.killed, true);
 });
 
-test("factory receives the parent runtime", async () => {
-  let capturedParent: Agent | undefined;
-  const child = new FakeChildRuntime({ sessionId: "c", runId: "r", startedAt: "t", turns: [] });
+test("factory receives the parent agent", async () => {
+  let capturedParent: AgentHandle | undefined;
+  const child = new FakeChildAgent({ sessionId: "c", runId: "r", startedAt: "t", turns: [] });
   const factory: SubagentRuntimeFactory = {
     build: (_options, p) => {
       capturedParent = p;
       return {
-        runtime: child,
+        agent: child,
         runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
-        agentName: "a",
         prompt: "p",
       };
     },

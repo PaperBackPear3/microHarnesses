@@ -4,12 +4,12 @@ Package-first reusable runtime library building block for `microHarnesses`. Zero
 
 ## What's inside
 
-- **Agent loop** — `HarnessRuntime` iterates model → tools → hooks
-- **Tool registry & execution engine** — `ToolRegistry`, `ToolExecutionEngine` with per-tool policy check, timeout, and abort
+- **Agent loop** — `Agent` iterates model → tools → hooks
+- **Tool registry & execution engine** — `ToolRegistry`, `ActionExecutionEngine` with per-tool policy check, timeout, and abort
 - **Sessions & context** — `SessionStore` (append-only events + periodic snapshots + support history), `ContextManager` (trim + compress overflowed turns)
 - **Policy engine** — `DefaultPolicyEngine` + `CompositePolicyEngine` with `PolicyRule` composition (most-restrictive-wins)
 - **Command-safety rule** — `createCommandSafetyRule()` screens tool inputs annotated with `{ field, kind: "shell_command" | "file_path" }`; heuristic fallback for tools matching `/bash|shell|exec|cmd/i`
-- **Approval seam** — `RuntimeDeps.approvalHandler` + `tool.approval_requested / approved / denied` events
+- **Approval seam** — `AgentOptions.approvalHandler` + `action.approval_requested / approved / denied` events
 - **Provider & credentials registries** — `ProviderRegistry`, `CredentialsRegistry`, `ProviderModelAdapter`
 - **Prompt source** — `FsPromptSource` (Markdown-based prompt packs)
 - **Plugin host** — `PluginHost` with capability enforcement; `PluginLoader` for dynamic loading
@@ -26,7 +26,8 @@ npm install @micro-harneses/core
 The runtime accepts these dependencies at construction:
 
 ```ts
-new HarnessRuntime({
+new Agent({
+  promptName,         // prompt-pack persona this agent runs
   model,              // ModelAdapter
   modelSelector,      // ModelSelector
   prompts,            // PromptSource
@@ -48,7 +49,7 @@ engine wholesale.
 
 `FsPromptSource` loads prompts from:
 
-`<rootDir>/<agentName>/`
+`<rootDir>/<promptName>/`
 
 Required file:
 

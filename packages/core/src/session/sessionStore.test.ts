@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { Turn } from "../context/types";
+import type { Turn } from "../runtime/state";
 import { SessionStore } from "./sessionStore";
 
 test("SessionStore persists manifest, events, and snapshots", async () => {

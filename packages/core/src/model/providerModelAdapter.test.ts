@@ -68,7 +68,7 @@ class FakeCreds implements CredentialsResolver {
 
 function makeInput(overrides: Partial<StepInput> = {}): StepInput {
   return {
-    agentName: "a",
+    promptName: "a",
     userPrompt: "hello",
     bundle: {
       system: "sys",

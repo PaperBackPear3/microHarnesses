@@ -1,5 +1,6 @@
-import type { CompressionResult, Turn } from "../context/types";
+import type { CompressionResult } from "../context/types";
 import type { PromptBundle } from "../prompts/types";
+import type { Turn } from "../runtime/state";
 import type { SkillCall } from "../skills/types";
 import type { ToolDescriptor } from "../tools/types";
 import type { ToolCall } from "../tools/types";
@@ -11,7 +12,7 @@ export interface ModelProfile {
 }
 
 export interface ModelSelectionInput {
-  agentName: string;
+  promptName: string;
   iteration: number;
   /** Explicit task-type hint from prompt metadata; when absent the selector may infer one. */
   taskType?: "default" | "reasoning" | "fast";
@@ -42,7 +43,7 @@ export interface StepPlan {
 }
 
 export interface StepInput {
-  agentName: string;
+  promptName: string;
   userPrompt: string;
   bundle: PromptBundle;
   workingTurns: Turn[];
