@@ -1,11 +1,22 @@
 # @micro-harness/cli
 
-Reference CLI for running `@micro-harness/core` with the plugins wired in
-`apps/cli/src/composition.ts`.
+Private reference app that demonstrates how to compose the published
+`@micro-harness/*` packages into a runnable CLI.
 
-This app is private to the monorepo (not published as a standalone package).
+This CLI is not the core product and is not published as a standalone package.
+Architectural ownership lives in the packages (`packages/core`,
+`packages/providers`, and plugin packages). This app is the monorepo composition
+example wired in `apps/cli/src/composition.ts`.
 
-## Installed plugins (auto-registered)
+## Package-first architecture and scope
+
+- Runtime engine and loop: `packages/core`
+- Provider integrations: `packages/providers`
+- Tooling and behavior extensions: plugin packages (for example
+  `@micro-harness/plugin-plan-mode`, `@micro-harness/plugin-subagents`)
+- This app (`apps/cli`) demonstrates one reference composition of those packages.
+
+## Installed plugins in this reference app (auto-registered)
 
 These are enabled by default on every `run`:
 
@@ -21,7 +32,7 @@ These are enabled by default on every `run`:
 - `maxExploreFiles: 30`
 - `maxDepth: 6`
 
-## Quick start
+## Running the reference app locally
 
 From the repository root:
 
@@ -50,7 +61,7 @@ Interactive (no initial prompt; keeps asking until you exit):
 npm run cli:run -- --provider openai --model gpt-4.1-mini
 ```
 
-## CLI commands
+## Commands exposed by this app
 
 | Command | Purpose |
 |---|---|
@@ -67,7 +78,7 @@ node apps/cli/dist/index.js sessions show <session-id>
 node apps/cli/dist/index.js sessions resume <session-id> "continue from last state"
 ```
 
-## Run flags
+## Runtime flags
 
 | Flag | Default | Notes |
 |---|---|---|
@@ -87,7 +98,7 @@ node apps/cli/dist/index.js sessions resume <session-id> "continue from last sta
 
 Interactive slash commands: `/info` (show current session/runtime info), `/exit`, `/quit`.
 
-## Usage examples with installed plugins
+## Example runs with installed plugins
 
 ### 1) Built-in provider + basic run
 

@@ -2,6 +2,8 @@
 
 Exposes an in-process `spawn_subagent` tool to the model, built on
 [`@micro-harness/core`](../core)'s `InProcessSubagentRunner`.
+Reusable package-first plugin for embedding subagents in your own runtime.
+The repository's `apps/cli` demonstrates a reference composition.
 
 Subagents run in the same Node process (no forking). Each spawned child gets
 a filtered `ToolRegistry` (`spawn_subagent` is excluded by default to bound

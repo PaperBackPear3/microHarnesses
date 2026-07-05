@@ -4,6 +4,7 @@ Reference tool plugin for [`@micro-harness/core`](../core). Doubles as a
 plugin-authoring example — read the source
 ([`src/exampleToolsPlugin.ts`](src/exampleToolsPlugin.ts)) as a template for
 writing your own.
+This package is a reusable library building block; `apps/cli` only showcases a reference composition.
 
 ## Ships
 

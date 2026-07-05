@@ -1,6 +1,7 @@
 # @micro-harness/core
 
-Core library for `microHarnesses`. Zero runtime dependencies.
+Package-first reusable runtime library building block for `microHarnesses`. Zero runtime dependencies.
+The repository's `apps/cli` wires this package as a reference composition, not the primary target.
 
 ## What's inside
 

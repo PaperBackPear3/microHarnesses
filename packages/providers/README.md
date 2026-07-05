@@ -1,6 +1,8 @@
 # @micro-harness/providers
 
 Built-in provider plugins for [`@micro-harness/core`](../core).
+Reusable package-first building blocks for composing your own harness runtime.
+The repository's `apps/cli` consumes these plugins as a reference composition.
 
 Each provider is a `HarnessPlugin` that registers a `ProviderAdapter` and an
 env-based `CredentialsResolver` under the provider's id.

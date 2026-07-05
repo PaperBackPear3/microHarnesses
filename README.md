@@ -1,10 +1,17 @@
 # microHarnesses
 
-Composable, plugin-first library for building LLM agent harnesses. You compose
-a minimal core with the plugins you actually need — providers, tools, planning,
-subagents — and swap any implementation with your own.
+microHarnesses is a package-first ecosystem for building LLM agent harnesses.
+The primary product is the reusable library set — especially
+`@micro-harness/core` plus provider and plugin packages — so you can compose
+your own runtime and swap implementations as needed.
+
+`apps/cli` is included as a private reference application that demonstrates how
+to compose the packages in a real app. It is a consumer of the ecosystem, not
+the main product.
 
 ## Packages
+
+The core package and plugin/provider packages are the main surface area:
 
 | Package                                                                | Purpose                                                                                                                                                                                               |
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -14,7 +21,7 @@ subagents — and swap any implementation with your own.
 | [`@micro-harness/plugin-subagents`](packages/plugin-subagents)         | `spawn_subagent` tool built on core's `InProcessSubagentRunner`.                                                                                                                                      |
 | [`@micro-harness/plugin-basic-tools`](packages/plugin-basic-tools)     | Workspace-scoped utility tools: file IO, grep search, and shell execution.                                                                                                                            |
 | [`@micro-harness/plugin-example-tools`](packages/plugin-example-tools) | Reference tool plugin (`echo`, `time`). Doubles as a plugin-authoring example.                                                                                                                        |
-| `apps/cli` (private)                                                   | Reference CLI that wires everything together. See [`apps/cli/README.md`](apps/cli/README.md) and `apps/cli/src/composition.ts`.                                                                       |
+| `apps/cli` (private reference app)                                     | Secondary, private composition root that consumes the packages and demonstrates one wiring pattern. See [`apps/cli/README.md`](apps/cli/README.md) and `apps/cli/src/composition.ts`.                |
 
 ## Design principles
 
@@ -42,7 +49,7 @@ npm test        # builds first, then runs tests (Node's built-in test runner)
 npm run lint    # Biome check
 ```
 
-## Reference CLI
+## Reference CLI (example package consumer)
 
 ### Credentials
 
@@ -74,7 +81,7 @@ ollama pull llama3.2:3b
 npm run cli:run -- "summarise this task" --provider ollama --model llama3.2:3b
 ```
 
-The CLI auto-registers the following plugins (see [`apps/cli/src/composition.ts`](apps/cli/src/composition.ts)):
+The CLI auto-registers package-provided plugins (see [`apps/cli/src/composition.ts`](apps/cli/src/composition.ts)):
 
 - `builtInProviderPlugins()` — OpenAI, Anthropic, Ollama
 - `basicToolsPlugin` — `fs_list`, `fs_read`, `fs_write`, `fs_append`, `fs_mkdir`, `fs_move`, `fs_remove`, `grep_search`, `shell_exec`
@@ -122,9 +129,10 @@ node apps/cli/dist/index.js sessions resume <session-id> "continue from last sta
 
 ## Composability story
 
-The CLI is a thin composition root. Its job is to build the dependency graph
-your app needs. Read [`apps/cli/src/composition.ts`](apps/cli/src/composition.ts)
-to see the full pattern; the key seams are:
+Composability lives in the packages, and the CLI simply demonstrates one
+composition. The core + plugins expose seams you can wire in your own app. Read
+[`apps/cli/src/composition.ts`](apps/cli/src/composition.ts) as an example
+consumer; key seams are:
 
 - `new ToolRegistry()` — every tool is registered here (by plugins or the app)
 - `new ProviderRegistry()` + `new CredentialsRegistry()` — providers register

@@ -1,6 +1,8 @@
 # @micro-harness/plugin-plan-mode
 
 Read-only planning and file exploration plugin for [`@micro-harness/core`](../core).
+Reusable package-first plugin for library compositions.
+The repository's `apps/cli` is only a reference composition that can include it.
 
 Ships three composable tools — **no file writes, no process execution, no network calls**:
 
