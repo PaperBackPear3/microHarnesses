@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
 
+# Required for npm trusted publishing (OIDC). No NPM_TOKEN is used.
+# Configure a trusted publisher for each package on npmjs.com:
+#   Package > Settings > Trusted Publisher > GitHub Actions
+#   Repository: PaperBackPear3/microHarnesses
+#   Workflow filename: release.yml
 permissions:
   contents: read
   id-token: write
@@ -18,13 +23,14 @@ jobs:
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
+      # Trusted publishing (OIDC) requires npm >= 11.5.1.
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm test
       - run: |
           for pkg in packages/core plugins/plan-mode plugins/example-tools plugins/basic-tools; do
             echo "Publishing $pkg"
-            (cd "$pkg" && npm publish --provenance --access public)
+            # Provenance is generated automatically under trusted publishing.
+            (cd "$pkg" && npm publish --access public)
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
