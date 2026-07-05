@@ -23,7 +23,7 @@ The agent reviews a target file/path and returns findings.
 
 You will create:
 
-1. A TypeScript app that composes `@micro-harness/core`.
+1. A TypeScript app that composes `@micro-harneses/core`.
 2. A prompt pack (`prompts/code-review/*`) used by `FsPromptSource`.
 3. A runtime wired to Ollama via `ProviderModelAdapter`.
 4. Read-only code exploration tools so the model can inspect code safely.
@@ -52,7 +52,7 @@ ollama list
 mkdir local-code-review-agent
 cd local-code-review-agent
 npm init -y
-npm install @micro-harness/core
+npm install @micro-harneses/core
 npm install -D typescript @types/node
 npx tsc --init
 ```
@@ -176,7 +176,7 @@ import {
   ToolRegistry,
   createCoreDefaultTools,
   registerCoreDefaults,
-} from "@micro-harness/core";
+} from "@micro-harneses/core";
 
 async function main(): Promise<void> {
   const targetPath = process.argv[2] ?? "src/index.ts";
@@ -324,7 +324,7 @@ import {
   ToolRegistry,
   createCoreDefaultTools,
   registerCoreDefaults,
-} from "@micro-harness/core";
+} from "@micro-harneses/core";
 
 async function main(): Promise<void> {
   const targetPath = process.argv[2] ?? "src/index.ts";

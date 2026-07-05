@@ -1,7 +1,7 @@
-# @micro-harness/cli
+# @micro-harneses/cli
 
 Private reference app that demonstrates how to compose the published
-`@micro-harness/*` packages into a runnable CLI.
+`@micro-harneses/*` packages into a runnable CLI.
 
 This CLI is not the core product and is not published as a standalone package.
 Architectural ownership lives in the packages (`packages/core`,
@@ -13,7 +13,7 @@ example wired in `apps/cli/src/composition.ts`.
 - Runtime engine and loop: `packages/core`
 - Provider integrations: `packages/providers`
 - Tooling and behavior extensions: plugin packages (for example
-  `@micro-harness/plugin-plan-mode`, `@micro-harness/plugin-subagents`)
+  `@micro-harneses/plugin-plan-mode`, `@micro-harneses/plugin-subagents`)
 - This app (`apps/cli`) demonstrates one reference composition of those packages.
 
 ## Installed plugins in this reference app (auto-registered)
@@ -22,7 +22,7 @@ These are enabled by default on every `run`:
 
 | Plugin | What it adds |
 |---|---|
-| `builtInProviderPlugins()` from `@micro-harness/providers` | Providers: `openai`, `anthropic`, `ollama` |
+| `builtInProviderPlugins()` from `@micro-harneses/providers` | Providers: `openai`, `anthropic`, `ollama` |
 | `basicToolsPlugin` | Tools: `fs_write`, `fs_append`, `fs_mkdir`, `fs_move`, `fs_remove`, `shell_exec` |
 | `subagentsPlugin` | Tool: `spawn_subagent` |
 | `PlanModePlugin` | Tools: `plan_agent`, `explore_agent`, `plan_mode_info` |

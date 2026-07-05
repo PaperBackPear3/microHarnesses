@@ -1,6 +1,6 @@
-# @micro-harness/plugin-example-tools
+# @micro-harneses/plugin-example-tools
 
-Reference tool plugin for [`@micro-harness/core`](../core). Doubles as a
+Reference tool plugin for [`@micro-harneses/core`](../core). Doubles as a
 plugin-authoring example — read the source
 ([`src/exampleToolsPlugin.ts`](src/exampleToolsPlugin.ts)) as a template for
 writing your own.
@@ -15,13 +15,13 @@ writing your own.
 ## Install
 
 ```bash
-npm install @micro-harness/core @micro-harness/plugin-example-tools
+npm install @micro-harneses/core @micro-harneses/plugin-example-tools
 ```
 
 ## Usage
 
 ```ts
-import { exampleToolsPlugin } from "@micro-harness/plugin-example-tools";
+import { exampleToolsPlugin } from "@micro-harneses/plugin-example-tools";
 
 await pluginHost.register([exampleToolsPlugin]);
 ```
@@ -29,7 +29,7 @@ await pluginHost.register([exampleToolsPlugin]);
 Or grab the raw tools:
 
 ```ts
-import { echoTool, timeTool } from "@micro-harness/plugin-example-tools";
+import { echoTool, timeTool } from "@micro-harneses/plugin-example-tools";
 
 toolRegistry.register(echoTool);
 toolRegistry.register(timeTool);

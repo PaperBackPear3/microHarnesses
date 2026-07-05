@@ -22,7 +22,7 @@ Create a `hello-harness` app that:
 mkdir hello-harness
 cd hello-harness
 npm init -y
-npm install @micro-harness/core @micro-harness/plugin-example-tools
+npm install @micro-harneses/core @micro-harneses/plugin-example-tools
 npm install -D typescript @types/node
 npx tsc --init
 ```
@@ -42,8 +42,8 @@ import {
   type PromptSource,
   type StepInput,
   type StepPlan,
-} from "@micro-harness/core";
-import { echoTool, timeTool } from "@micro-harness/plugin-example-tools";
+} from "@micro-harneses/core";
+import { echoTool, timeTool } from "@micro-harneses/plugin-example-tools";
 
 class DemoPromptSource implements PromptSource {
   async load(_agentName: string, task: string): Promise<PromptBundle> {
@@ -137,6 +137,6 @@ Done. I echoed your prompt using a plugin tool.
 Next improvements:
 
 - Replace `DemoModel` with `ProviderModelAdapter` + provider registries.
-- Add `PluginHost` and register `@micro-harness/plugin-basic-tools` and `@micro-harness/plugin-plan-mode`.
+- Add `PluginHost` and register `@micro-harneses/plugin-basic-tools` and `@micro-harneses/plugin-plan-mode`.
 - Add `SessionStore` for durable runs and snapshots.
 - Add approval handling and command safety rules for high-risk tools.

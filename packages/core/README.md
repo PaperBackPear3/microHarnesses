@@ -1,4 +1,4 @@
-# @micro-harness/core
+# @micro-harneses/core
 
 Package-first reusable runtime library building block for `microHarnesses`. Zero runtime dependencies.
 
@@ -18,7 +18,7 @@ Package-first reusable runtime library building block for `microHarnesses`. Zero
 ## Install
 
 ```bash
-npm install @micro-harness/core
+npm install @micro-harneses/core
 ```
 
 ## Seams
@@ -102,7 +102,7 @@ import {
   ToolRegistry,
   ProviderRegistry,
   CredentialsRegistry,
-} from "@micro-harness/core";
+} from "@micro-harneses/core";
 
 registerCoreDefaults({
   providerRegistry,

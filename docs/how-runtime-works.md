@@ -1,6 +1,6 @@
 # How the runtime works
 
-This page explains the core execution model in `@micro-harness/core`.
+This page explains the core execution model in `@micro-harneses/core`.
 
 ## Loop lifecycle
 

@@ -20,10 +20,10 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 
 | Package | Purpose |
 | --- | --- |
-| [`@micro-harness/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, session/context system, plugin host, subagent primitive. |
-| [`@micro-harness/plugin-basic-tools`](plugins/basic-tools) | Workspace-scoped file mutation tools and shell execution tool. |
-| [`@micro-harness/plugin-plan-mode`](plugins/plan-mode) | Read-only planning and code exploration tools. |
-| [`@micro-harness/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |
+| [`@micro-harneses/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, session/context system, plugin host, subagent primitive. |
+| [`@micro-harneses/plugin-basic-tools`](plugins/basic-tools) | Workspace-scoped file mutation tools and shell execution tool. |
+| [`@micro-harneses/plugin-plan-mode`](plugins/plan-mode) | Read-only planning and code exploration tools. |
+| [`@micro-harneses/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |
 
 ## Design principles
 

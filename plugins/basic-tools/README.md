@@ -1,6 +1,6 @@
-# @micro-harness/plugin-basic-tools
+# @micro-harneses/plugin-basic-tools
 
-Workspace-scoped filesystem mutation and shell execution plugin for [`@micro-harness/core`](../../packages/core).
+Workspace-scoped filesystem mutation and shell execution plugin for [`@micro-harneses/core`](../../packages/core).
 
 ## Ships
 
@@ -16,13 +16,13 @@ Workspace-scoped filesystem mutation and shell execution plugin for [`@micro-har
 ## Install
 
 ```bash
-npm install @micro-harness/core @micro-harness/plugin-basic-tools
+npm install @micro-harneses/core @micro-harneses/plugin-basic-tools
 ```
 
 ## Usage
 
 ```ts
-import { BasicToolsPlugin } from "@micro-harness/plugin-basic-tools";
+import { BasicToolsPlugin } from "@micro-harneses/plugin-basic-tools";
 
 await pluginHost.register([
   new BasicToolsPlugin({

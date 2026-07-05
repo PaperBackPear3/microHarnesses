@@ -2,7 +2,7 @@
 
 This page documents package functionality and the concepts each package is responsible for.
 
-## `@micro-harness/core`
+## `@micro-harneses/core`
 
 **Role**: reusable runtime library.
 
@@ -25,7 +25,7 @@ This page documents package functionality and the concepts each package is respo
 
 ---
 
-## `@micro-harness/plugin-basic-tools`
+## `@micro-harneses/plugin-basic-tools`
 
 **Role**: workspace-scoped mutation and shell tools.
 
@@ -46,7 +46,7 @@ This page documents package functionality and the concepts each package is respo
 
 ---
 
-## `@micro-harness/plugin-plan-mode`
+## `@micro-harneses/plugin-plan-mode`
 
 **Role**: read-only planning and exploration.
 
@@ -64,7 +64,7 @@ This page documents package functionality and the concepts each package is respo
 
 ---
 
-## `@micro-harness/plugin-example-tools`
+## `@micro-harneses/plugin-example-tools`
 
 **Role**: minimal reference plugin for authors.
 

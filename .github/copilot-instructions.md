@@ -14,7 +14,7 @@ Use npm scripts from the root `package.json`:
 
 Composable, plugin-first library:
 
-- `packages/core` — `@micro-harness/core` (agent loop, tools, sessions/context, policy, subagent primitive; zero runtime deps)
+- `packages/core` — `@micro-harneses/core` (agent loop, tools, sessions/context, policy, subagent primitive; zero runtime deps)
 - `plugins/plan-mode` — read-only planning + exploration tools
 - `plugins/example-tools` — reference `echo` / `time` tools
 
