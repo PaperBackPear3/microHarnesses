@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 # Required for npm trusted publishing (OIDC). No NPM_TOKEN is used.
 # Configure a trusted publisher for each package on npmjs.com:
@@ -18,11 +18,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
-          registry-url: "https://registry.npmjs.org"
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
       # Trusted publishing (OIDC) requires npm >= 11.5.1.
       - run: npm install -g npm@latest
       - run: npm ci
