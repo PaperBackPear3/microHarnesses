@@ -1,9 +1,14 @@
 {
-  "name": "@micro-harness/plugin-example-tools",
+  "name": "@micro-harneses/plugin-example-tools",
   "version": "0.1.0",
   "description": "Reference tool plugin (echo, time) for @micro-harness/core. Doubles as a plugin-authoring example.",
   "license": "MIT",
-  "keywords": ["micro-harness", "plugin", "example", "tools"],
+  "keywords": [
+    "micro-harness",
+    "plugin",
+    "example",
+    "tools"
+  ],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
@@ -22,14 +27,22 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
-  "publishConfig": { "access": "public" },
-  "engines": { "node": ">=20" },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.test.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harness/core": "^0.3.0"
+    "@micro-harneses/core": "^0.3.0"
   }
 }
