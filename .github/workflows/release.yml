@@ -22,7 +22,7 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: |
-          for pkg in packages/core packages/providers packages/plugin-plan-mode packages/plugin-subagents packages/plugin-example-tools; do
+          for pkg in packages/core plugins/plan-mode plugins/example-tools plugins/basic-tools; do
             echo "Publishing $pkg"
             (cd "$pkg" && npm publish --provenance --access public)
           done

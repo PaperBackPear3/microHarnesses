@@ -129,13 +129,6 @@
             </div>
           </li>
           <li>
-            <strong>Running the CLI</strong>
-            <div class="docs-links">
-              <a href="./how-to-run-cli.md" data-doc="how-to-run-cli.md">Open</a>
-              <a href="./how-to-run-cli.md" download>Download .md</a>
-            </div>
-          </li>
-          <li>
             <strong>Composing plugins</strong>
             <div class="docs-links">
               <a href="./how-to-compose-plugins.md" data-doc="how-to-compose-plugins.md">Open</a>
@@ -154,9 +147,7 @@
         </div>
 
         <div id="doc-container">
-          <p id="doc-intro">The product surface is the package ecosystem: <code>@micro-harness/core</code> for the engine, plus provider and plugin packages for capabilities.
-
-The CLI in <code>apps/cli</code> is a private reference app that consumes those packages. Use it as an example composition, not as the main architecture target.</p>
+          <p id="doc-intro">The product surface is the package ecosystem: <code>@micro-harness/core</code> for the engine, plus plugin packages for optional capabilities.</p>
 
         <h2>How the library is structured</h2>
         <div class="grid">
@@ -166,19 +157,9 @@ The CLI in <code>apps/cli</code> is a private reference app that consumes those 
             host.
           </div>
           <div class="card">
-            <strong>@micro-harness/providers</strong>
-            Provider adapters and credentials resolvers (OpenAI, Anthropic,
-            Ollama).
-          </div>
-          <div class="card">
             <strong>Plugin packages</strong>
             Add focused capabilities like planning mode, subagents, and utility
             tools without bloating core.
-          </div>
-          <div class="card">
-            <strong>apps/cli (reference app)</strong>
-            Demonstrates one package composition. Secondary to the reusable
-            package APIs.
           </div>
         </div>
 

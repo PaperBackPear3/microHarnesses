@@ -1,5 +1,6 @@
 import type { Turn } from "../context/types";
 import type { PromptBundle } from "../prompts/types";
+import type { SkillCall } from "../skills/types";
 import type { ToolDescriptor } from "../tools/types";
 import type { ToolCall } from "../tools/types";
 
@@ -29,6 +30,7 @@ export interface ModelSelector {
 export interface StepPlan {
   assistantMessage: string;
   toolCalls: ToolCall[];
+  skillCalls?: SkillCall[];
   stop: boolean;
   usage?: {
     inputTokens?: number;
@@ -44,6 +46,7 @@ export interface StepInput {
   iteration: number;
   selectedModel?: string;
   availableTools?: ToolDescriptor[];
+  availableSkills?: string[];
   onAssistantDelta?: (delta: string) => void | Promise<void>;
   onReasoningDelta?: (delta: string) => void | Promise<void>;
 }

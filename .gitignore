@@ -1,7 +1,7 @@
 node_modules/
 dist/
 packages/*/dist/
-apps/*/dist/
+plugins/*/dist/
 *.tsbuildinfo
 
 .micro-harness/

@@ -1,6 +1,5 @@
-import type { HarnessRuntime } from "../runtime/runtime";
+import type { Agent } from "../runtime/types";
 import type {
-  SubagentBuiltRuntime,
   SubagentResult,
   SubagentRunOptions,
   SubagentRunner,
@@ -19,30 +18,33 @@ import type {
  */
 export class InProcessSubagentRunner implements SubagentRunner {
   private readonly factory: SubagentRuntimeFactory;
-  private readonly parentRuntime: HarnessRuntime;
+  private readonly parentRuntime: Agent;
 
-  constructor(factory: SubagentRuntimeFactory, parentRuntime: HarnessRuntime) {
+  constructor(factory: SubagentRuntimeFactory, parentRuntime: Agent) {
     this.factory = factory;
     this.parentRuntime = parentRuntime;
   }
 
   async run(options: SubagentRunOptions): Promise<SubagentResult> {
-    const built: SubagentBuiltRuntime = await this.factory.build(options, this.parentRuntime);
+    const built = await this.factory.build(options, this.parentRuntime);
 
     let abortHandler: (() => void) | undefined;
     if (options.signal) {
       if (options.signal.aborted) {
-        built.runtime.kill();
+        built.runtime.kill("aborted before subagent invoke");
       } else {
-        abortHandler = () => built.runtime.kill();
+        abortHandler = () => built.runtime.kill("aborted by parent signal");
         options.signal.addEventListener("abort", abortHandler, { once: true });
       }
     }
 
     try {
-      const state = await built.runtime.run(built.agentName, built.prompt, built.runOptions);
-      const summary = state.turns[state.turns.length - 1]?.assistantMessage ?? "";
-      return { summary, state };
+      const result = await built.runtime.invoke({
+        agentName: built.agentName,
+        prompt: built.prompt,
+        execution: built.runOptions,
+      });
+      return { summary: result.summary, state: result.state };
     } finally {
       if (abortHandler && options.signal) {
         options.signal.removeEventListener("abort", abortHandler);

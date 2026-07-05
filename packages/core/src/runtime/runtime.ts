@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ChannelRequest, ChannelResponse } from "../channels/types";
 import type { ContextManager } from "../context/manager";
 import type { HarnessState } from "../context/types";
 import type { EventSink } from "../events/types";
@@ -7,6 +8,8 @@ import type { ToolPolicyEngine } from "../policy/types";
 import type { PromptSource } from "../prompts/types";
 import type { SessionStore } from "../session/sessionStore";
 import { ValidationError } from "../shared/errors";
+import type { SkillExecutionEngine } from "../skills/executionEngine";
+import type { SkillRegistry } from "../skills/registry";
 import { deriveToolDescriptors } from "../tools/descriptors";
 import { ToolExecutionEngine } from "../tools/executionEngine";
 import type { ToolRegistry } from "../tools/registry";
@@ -14,6 +17,9 @@ import { RunEmitter } from "./runEmitter";
 import { shouldSnapshot } from "./snapshotCadence";
 import type {
   AfterLoopHook,
+  Agent,
+  AgentInvokeRequest,
+  AgentRunResult,
   ApprovalHandler,
   BeforeLoopHook,
   RunOptions,
@@ -31,6 +37,9 @@ interface RuntimeDeps {
   sessionStore?: SessionStore;
   limits?: RuntimeLimits;
   approvalHandler?: ApprovalHandler;
+  kind?: "main" | "subagent";
+  skills?: SkillRegistry;
+  skillExecution?: SkillExecutionEngine;
 }
 
 const DEFAULT_LIMITS: RuntimeLimits = {
@@ -38,7 +47,9 @@ const DEFAULT_LIMITS: RuntimeLimits = {
   maxToolCallsPerRun: 20,
 };
 
-export class HarnessRuntime {
+export class HarnessRuntime implements Agent {
+  readonly id = randomUUID();
+  readonly kind: "main" | "subagent";
   private readonly model: ModelAdapter;
   private modelSelector: ModelSelector;
   private readonly prompts: PromptSource;
@@ -49,6 +60,8 @@ export class HarnessRuntime {
   private readonly sessionStore?: SessionStore;
   private readonly defaultLimits: RuntimeLimits;
   private readonly approvalHandler?: ApprovalHandler;
+  private readonly skills?: SkillRegistry;
+  private readonly skillExecution?: SkillExecutionEngine;
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
   private cancelled = false;
@@ -66,9 +79,12 @@ export class HarnessRuntime {
     this.sessionStore = deps.sessionStore;
     this.defaultLimits = deps.limits ?? DEFAULT_LIMITS;
     this.approvalHandler = deps.approvalHandler;
+    this.kind = deps.kind ?? "main";
+    this.skills = deps.skills;
+    this.skillExecution = deps.skillExecution;
   }
 
-  kill(): void {
+  kill(_reason?: string): void {
     this.cancelled = true;
     this.activeEngine?.abort("runtime killed");
   }
@@ -98,11 +114,15 @@ export class HarnessRuntime {
     let goal = options.goal ?? userPrompt;
 
     if (this.sessionStore) {
-      const manifest = await this.sessionStore.initSession(
-        options.sessionId,
+      const manifest = await this.sessionStore.initSession({
+        sessionId: options.sessionId,
         goal,
-        options.parentSessionId,
-      );
+        parentSessionId: options.parentSessionId,
+        parentRunId: options.parentRunId,
+        rootSessionId: options.rootSessionId,
+        depth: options.depth,
+        spawnedByTool: options.spawnedByTool,
+      });
       sessionId = manifest.sessionId;
       goal = manifest.goal || goal;
       if (!manifest.goal && goal) {
@@ -201,6 +221,7 @@ export class HarnessRuntime {
         iteration,
         selectedModel: modelSelection.model,
         availableTools: deriveToolDescriptors(this.tools.list()),
+        availableSkills: this.skills?.list().map((skill) => skill.name) ?? [],
         onAssistantDelta: async (delta) => {
           if (delta.length === 0) return;
           streamedChars += delta.length;
@@ -249,7 +270,27 @@ export class HarnessRuntime {
         safetyMode: bundle.metadata.safetyMode,
         emitter,
         isCancelled: () => this.cancelled,
+        capabilityScope: options.capabilityScope,
+        lineage: {
+          parentSessionId: options.parentSessionId,
+          parentRunId: options.parentRunId,
+          rootSessionId: options.rootSessionId,
+          depth: options.depth,
+        },
       });
+      const skillCalls = step.skillCalls ?? [];
+      const skillResults = await Promise.all(
+        skillCalls.map(async (call) => {
+          if (!this.skillExecution) {
+            return {
+              ok: false,
+              output: {},
+              error: `Skill "${call.name}" cannot run because no skill execution engine is configured`,
+            };
+          }
+          return this.skillExecution.execute(call);
+        }),
+      );
 
       state.turns.push({
         id: randomUUID(),
@@ -258,6 +299,7 @@ export class HarnessRuntime {
         assistantMessage: step.assistantMessage,
         toolCalls: step.toolCalls,
         toolResults,
+        ...(skillCalls.length > 0 ? { skillCalls, skillResults } : {}),
       });
 
       if (this.sessionStore && sessionId && shouldSnapshot(iteration, options.snapshotEvery)) {
@@ -286,6 +328,31 @@ export class HarnessRuntime {
   /** Currently active session id (set only while `run` is executing). */
   get sessionId(): string | undefined {
     return this.currentSessionId;
+  }
+
+  async invoke(request: AgentInvokeRequest): Promise<AgentRunResult> {
+    const state = await this.run(request.agentName, request.prompt, request.execution);
+    return {
+      summary: state.turns[state.turns.length - 1]?.assistantMessage ?? "",
+      state,
+      runId: state.runId,
+      sessionId: state.sessionId,
+    };
+  }
+
+  async handleChannel(request: ChannelRequest): Promise<ChannelResponse> {
+    const result = await this.invoke({
+      agentName: request.agentName,
+      prompt: request.input,
+      execution: {
+        ...request.runOptions,
+        ...(request.sessionId ? { sessionId: request.sessionId } : {}),
+      },
+    });
+    return {
+      state: result.state,
+      finalMessage: result.summary,
+    };
   }
 }
 

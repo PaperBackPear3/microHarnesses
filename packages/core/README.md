@@ -1,7 +1,6 @@
 # @micro-harness/core
 
 Package-first reusable runtime library building block for `microHarnesses`. Zero runtime dependencies.
-The repository's `apps/cli` wires this package as a reference composition, not the primary target.
 
 ## What's inside
 
@@ -66,7 +65,7 @@ Severity × `safetyMode` mapping:
 
 Plugins declare which surfaces they use:
 
-`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "subagents"`
+`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "tool-governance"`
 
 The host throws `PluginCapabilityError` when a plugin uses an undeclared
 surface.

@@ -13,6 +13,8 @@ import type {
 } from "../model/types";
 import type { ToolPolicyContext, ToolPolicyEngine } from "../policy/types";
 import type { PromptBundle, PromptSource } from "../prompts/types";
+import { SkillExecutionEngine } from "../skills/executionEngine";
+import { SkillRegistry } from "../skills/registry";
 import { ToolRegistry } from "../tools/registry";
 import type { ToolCall, ToolDefinition } from "../tools/types";
 import { HarnessRuntime } from "./runtime";
@@ -402,4 +404,114 @@ test("RunOptions.limits overrides runtime default limits per run", async () => {
     events.events.some((e) => e.type === "run.limit_reached"),
     true,
   );
+});
+
+test("invoke adapter returns AgentRunResult with summary", async () => {
+  const events = new FakeEventSink();
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "done",
+      toolCalls: [],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+  });
+
+  const result = await runtime.invoke({
+    agentName: "default",
+    prompt: "hello",
+    execution: options,
+  });
+  assert.equal(result.summary, "done");
+  assert.equal(result.runId.length > 0, true);
+});
+
+test("capabilityScope denyTools blocks tool execution", async () => {
+  const events = new FakeEventSink();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "echo",
+    description: "echo",
+    risk: "low",
+    async execute() {
+      return { ok: true };
+    },
+  });
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "call echo",
+      toolCalls: [{ name: "echo", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+  });
+
+  const state = await runtime.run("default", "hello", {
+    ...options,
+    capabilityScope: { denyTools: ["echo"] },
+  });
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, false);
+  assert.match(state.turns[0]?.toolResults[0]?.error ?? "", /out of scope/i);
+});
+
+test("runtime executes skillCalls when skill engine is configured", async () => {
+  const events = new FakeEventSink();
+  const skills = new SkillRegistry();
+  skills.register({
+    name: "summarize",
+    description: "test skill",
+    async execute() {
+      return { summary: "ok" };
+    },
+  });
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "call skill",
+      toolCalls: [],
+      skillCalls: [{ name: "summarize", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: events,
+    skills,
+    skillExecution: new SkillExecutionEngine({ skills }),
+  });
+  const state = await runtime.run("default", "hello", options);
+  assert.equal(state.turns[0]?.skillResults?.[0]?.ok, true);
+});
+
+test("handleChannel maps channel request to runtime invoke", async () => {
+  const runtime = new HarnessRuntime({
+    model: new FakeModel({
+      assistantMessage: "channel result",
+      toolCalls: [],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    eventSink: new FakeEventSink(),
+  });
+  const response = await runtime.handleChannel({
+    agentName: "default",
+    input: "hello",
+    runOptions: options,
+  });
+  assert.equal(response.finalMessage, "channel result");
 });

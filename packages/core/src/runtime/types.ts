@@ -8,6 +8,11 @@ export interface RuntimeLimits {
   maxToolCallsPerRun: number;
 }
 
+export interface CapabilityScope {
+  allowTools?: string[];
+  denyTools?: string[];
+}
+
 export type BeforeLoopHook = (state: HarnessState, iteration: number) => Promise<void> | void;
 export type AfterLoopHook = (state: HarnessState, iteration: number) => Promise<void> | void;
 
@@ -19,6 +24,10 @@ export interface ApprovalRequest {
   call: ToolCall;
   reason: string;
   safetyMode?: SafetyMode;
+  parentSessionId?: string;
+  parentRunId?: string;
+  rootSessionId?: string;
+  depth?: number;
 }
 
 /**
@@ -41,4 +50,30 @@ export interface RunOptions {
   limits?: Partial<RuntimeLimits>;
   /** When this run is a spawned subagent, records the parent session id. */
   parentSessionId?: string;
+  parentRunId?: string;
+  rootSessionId?: string;
+  depth?: number;
+  spawnedByTool?: string;
+  capabilityScope?: CapabilityScope;
+}
+
+export interface AgentInvokeRequest {
+  agentName: string;
+  prompt: string;
+  execution: RunOptions;
+}
+
+export interface AgentRunResult {
+  summary: string;
+  state: HarnessState;
+  runId: string;
+  sessionId?: string;
+}
+
+export interface Agent {
+  readonly id: string;
+  readonly kind: "main" | "subagent";
+  readonly sessionId?: string;
+  invoke(request: AgentInvokeRequest): Promise<AgentRunResult>;
+  kill(reason?: string): void;
 }

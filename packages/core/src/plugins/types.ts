@@ -1,8 +1,15 @@
+import type { ChannelDefinition } from "../channels/types";
 import type { CompressorFn } from "../context/types";
 import type { ModelSelector } from "../model/types";
 import type { PolicyRule } from "../policy/types";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
-import type { AfterLoopHook, BeforeLoopHook } from "../runtime/types";
+import type {
+  AfterLoopHook,
+  AgentInvokeRequest,
+  AgentRunResult,
+  BeforeLoopHook,
+} from "../runtime/types";
+import type { SkillDefinition } from "../skills/types";
 import type { SubagentResult, SubagentRunOptions } from "../subagents/types";
 import type { ToolDefinition } from "../tools/types";
 
@@ -14,10 +21,15 @@ export type PluginCapability =
   | "credentials"
   | "policy"
   | "model-selector"
-  | "subagents";
+  | "channels"
+  | "skills"
+  | "agents"
+  | "tool-governance";
 
 export interface PluginApi {
   registerTool(tool: ToolDefinition): void;
+  registerChannel(channel: ChannelDefinition): void;
+  registerSkill(skill: SkillDefinition): void;
   onBeforeLoop(hook: BeforeLoopHook): void;
   onAfterLoop(hook: AfterLoopHook): void;
   setCompressor(compressor: CompressorFn): void;
@@ -25,9 +37,11 @@ export interface PluginApi {
   registerCredentialsResolver(providerId: string, resolver: CredentialsResolver): void;
   registerPolicyRule(rule: PolicyRule): void;
   setModelSelector(selector: ModelSelector): void;
-  /** Delegate work to a child agent loop. Requires the "subagents" capability. */
-  subagents: {
-    run(options: SubagentRunOptions): Promise<SubagentResult>;
+  registerToolGovernanceRule(rule: PolicyRule): void;
+  /** Unified agent API path (preferred over `subagents`). */
+  agents: {
+    spawn(options: SubagentRunOptions): Promise<SubagentResult>;
+    invoke(request: AgentInvokeRequest): Promise<AgentRunResult>;
   };
 }
 

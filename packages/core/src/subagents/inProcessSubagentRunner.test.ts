@@ -1,28 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { HarnessState } from "../context/types";
-import type { HarnessRuntime } from "../runtime/runtime";
-import type { RunOptions } from "../runtime/types";
+import type { Agent, AgentInvokeRequest, AgentRunResult } from "../runtime/types";
 import { InProcessSubagentRunner } from "./inProcessSubagentRunner";
 import type { SubagentRuntimeFactory } from "./types";
 
-class FakeChildRuntime {
+class FakeChildRuntime implements Agent {
+  readonly id = "child";
+  readonly kind = "subagent" as const;
   killed = false;
-  seenAgent?: string;
-  seenPrompt?: string;
-  seenOptions?: RunOptions;
+  seenRequest?: AgentInvokeRequest;
   constructor(
     private readonly state: HarnessState,
     private readonly delayMs: number = 0,
   ) {}
-  async run(agent: string, prompt: string, options: RunOptions): Promise<HarnessState> {
-    this.seenAgent = agent;
-    this.seenPrompt = prompt;
-    this.seenOptions = options;
+  async invoke(request: AgentInvokeRequest): Promise<AgentRunResult> {
+    this.seenRequest = request;
     if (this.delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     }
-    return this.state;
+    return {
+      summary: this.state.turns[this.state.turns.length - 1]?.assistantMessage ?? "",
+      state: this.state,
+      runId: this.state.runId,
+      sessionId: this.state.sessionId,
+    };
   }
   kill(): void {
     this.killed = true;
@@ -32,7 +34,15 @@ class FakeChildRuntime {
   }
 }
 
-const parent = { sessionId: "parent-session" } as unknown as HarnessRuntime;
+const parent = {
+  id: "parent",
+  kind: "main",
+  sessionId: "parent-session",
+  async invoke() {
+    throw new Error("not used");
+  },
+  kill() {},
+} as Agent;
 
 test("returns final assistantMessage as summary", async () => {
   const child = new FakeChildRuntime({
@@ -60,7 +70,7 @@ test("returns final assistantMessage as summary", async () => {
   });
   const factory: SubagentRuntimeFactory = {
     build: () => ({
-      runtime: child as unknown as HarnessRuntime,
+      runtime: child,
       runOptions: { maxIterations: 2, snapshotEvery: 1, profile: { defaultModel: "m" } },
       agentName: "child-agent",
       prompt: "do the thing",
@@ -69,14 +79,14 @@ test("returns final assistantMessage as summary", async () => {
   const runner = new InProcessSubagentRunner(factory, parent);
   const result = await runner.run({ prompt: "do the thing" });
   assert.equal(result.summary, "last summary");
-  assert.equal(child.seenAgent, "child-agent");
+  assert.equal(child.seenRequest?.agentName, "child-agent");
 });
 
 test("empty turns produces empty summary", async () => {
   const child = new FakeChildRuntime({ sessionId: "c", runId: "r", startedAt: "t", turns: [] });
   const factory: SubagentRuntimeFactory = {
     build: () => ({
-      runtime: child as unknown as HarnessRuntime,
+      runtime: child,
       runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
       agentName: "a",
       prompt: "p",
@@ -91,7 +101,7 @@ test("abort signal kills the child runtime", async () => {
   const child = new FakeChildRuntime({ sessionId: "c", runId: "r", startedAt: "t", turns: [] }, 30);
   const factory: SubagentRuntimeFactory = {
     build: () => ({
-      runtime: child as unknown as HarnessRuntime,
+      runtime: child,
       runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
       agentName: "a",
       prompt: "p",
@@ -106,13 +116,13 @@ test("abort signal kills the child runtime", async () => {
 });
 
 test("factory receives the parent runtime", async () => {
-  let capturedParent: HarnessRuntime | undefined;
+  let capturedParent: Agent | undefined;
   const child = new FakeChildRuntime({ sessionId: "c", runId: "r", startedAt: "t", turns: [] });
   const factory: SubagentRuntimeFactory = {
     build: (_options, p) => {
       capturedParent = p;
       return {
-        runtime: child as unknown as HarnessRuntime,
+        runtime: child,
         runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
         agentName: "a",
         prompt: "p",

@@ -16,6 +16,16 @@ export interface ToolDefinition {
   description: string;
   risk: "low" | "high";
   /**
+   * Optional richer risk/governance metadata. `risk` remains the canonical
+   * coarse value used by default policy for backwards compatibility.
+   */
+  riskProfile?: ToolRiskProfile;
+  /** Optional tool ownership/governance metadata. */
+  governance?: ToolGovernance;
+  /** Optional capabilities/tags used for discovery/catalog filtering. */
+  capabilities?: string[];
+  tags?: string[];
+  /**
    * Optional structured schema used for provider-native tool/function calling.
    * When omitted, core derives a permissive object schema.
    */
@@ -31,6 +41,18 @@ export interface ToolDefinition {
     input: Record<string, unknown>,
     context?: ToolExecutionContext,
   ): Promise<Record<string, unknown>>;
+}
+
+export interface ToolRiskProfile {
+  level: "low" | "medium" | "high" | "critical";
+  domains?: string[];
+  notes?: string;
+}
+
+export interface ToolGovernance {
+  owner?: string;
+  version?: string;
+  audit?: "none" | "basic" | "strict";
 }
 
 export type ToolInputAnnotationKind = "shell_command" | "file_path" | "url" | "text";
@@ -53,4 +75,19 @@ export interface ToolDescriptor {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+}
+
+export interface ToolCatalogQuery {
+  capability?: string;
+  tag?: string;
+  owner?: string;
+}
+
+export interface ToolCatalogEntry {
+  name: string;
+  description: string;
+  risk: ToolDefinition["risk"];
+  capabilities: string[];
+  tags: string[];
+  governance?: ToolGovernance;
 }

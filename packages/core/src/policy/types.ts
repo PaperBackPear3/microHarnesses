@@ -14,6 +14,10 @@ export interface ToolPolicyContext {
   agentName: string;
   runId: string;
   safetyMode?: SafetyMode;
+  parentSessionId?: string;
+  parentRunId?: string;
+  rootSessionId?: string;
+  depth?: number;
 }
 
 export interface ToolPolicyEngine {

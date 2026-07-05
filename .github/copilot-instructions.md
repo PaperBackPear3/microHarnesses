@@ -9,22 +9,14 @@ Use npm scripts from the root `package.json`:
 - Run a single compiled test file: `node --test packages/core/dist/runtime/runtime.test.js`
 - Lint: `npm run lint` (Biome)
 - Format: `npm run format`
-- Run CLI: `npm run cli:run -- "summarize this task" --provider openai`
-- Run CLI locally via Ollama: `npm run cli:run -- "small local task" --provider ollama --model llama3.2:3b`
-- List sessions: `node apps/cli/dist/index.js sessions list`
-- Show session: `node apps/cli/dist/index.js sessions show <session-id>`
-- Resume session: `node apps/cli/dist/index.js sessions resume <session-id> "continue task"`
 
 ## High-level architecture
 
-Composable, plugin-first library with a reference CLI:
+Composable, plugin-first library:
 
 - `packages/core` — `@micro-harness/core` (agent loop, tools, sessions/context, policy, subagent primitive; zero runtime deps)
-- `packages/providers` — `@micro-harness/providers` (OpenAI, Anthropic, Ollama; each a `HarnessPlugin`)
-- `packages/plugin-plan-mode` — read-only planning + exploration tools
-- `packages/plugin-subagents` — `spawn_subagent` tool
-- `packages/plugin-example-tools` — reference `echo` / `time` tools
-- `apps/cli` — private reference CLI. Composition root lives in `apps/cli/src/composition.ts`.
+- `plugins/plan-mode` — read-only planning + exploration tools
+- `plugins/example-tools` — reference `echo` / `time` tools
 
 ### Runtime loop (`packages/core/src/runtime/runtime.ts`)
 
@@ -70,12 +62,12 @@ interface PluginApi {
   registerCredentialsResolver(providerId, resolver);
   registerPolicyRule(rule);       // composed by CompositePolicyEngine (most-restrictive-wins)
   setModelSelector(selector);
-  subagents: { run(opts): Promise<SubagentResult> };
+  agents: { spawn(opts): Promise<SubagentResult>; invoke(req): Promise<AgentRunResult> };
 }
 ```
 
 Every `HarnessPlugin` must declare `capabilities: PluginCapability[]`.
-Capabilities: `"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "subagents"`.
+Capabilities: `"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "tool-governance"`.
 The `PluginHost` throws `PluginCapabilityError` when a plugin uses an
 undeclared surface.
 
@@ -91,17 +83,15 @@ helper strips backslash / quote splices before matching.
 ### Subagents
 
 `InProcessSubagentRunner` (built from a `SubagentRuntimeFactory` in
-composition) runs children in-process. The CLI's factory
-(`apps/cli/src/composition.ts`) shows the reference pattern: filtered
+composition) runs children in-process. A typical factory uses filtered
 `ToolRegistry`, fresh `ContextManager`, nested session
 (`sessions/<parent>/subagents/<child>/`), `AbortSignal` propagation.
-`spawn_subagent` (from `@micro-harness/plugin-subagents`) exposes the
-runner to models.
+`spawn_subagent` can be exposed to models by registering the core default tool.
 
 ## Key conventions
 
 - Keep contracts in per-domain `types.ts`; new subsystems reuse existing interfaces before adding new shapes.
-- Treat `packages/core` as runtime library code; keep app-specific behavior in `apps/cli`.
+- Treat `packages/core` as runtime library code; keep app-specific behavior outside core.
 - Add harness features via plugins whenever possible.
 - Errors are explicit: unknown tools, invalid plugins, and mis-declared capabilities throw typed errors (`UnknownToolError`, `PluginLoadError`, `PluginCapabilityError`, …); tool execution failures are recorded as `{ ok: false, error }` in turn results.
 - Safety defaults: `DefaultPolicyEngine` denies high-risk tools; `CommandSafetyRule` adds command-shape screening in strict/balanced modes.

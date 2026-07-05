@@ -1,6 +1,5 @@
 import type { HarnessState } from "../context/types";
-import type { HarnessRuntime } from "../runtime/runtime";
-import type { RunOptions } from "../runtime/types";
+import type { Agent, AgentInvokeRequest, RunOptions } from "../runtime/types";
 
 export interface SubagentRunOptions {
   prompt: string;
@@ -33,13 +32,18 @@ export interface SubagentRunner {
 export interface SubagentRuntimeFactory {
   build(
     request: SubagentRunOptions,
-    parentRuntime: HarnessRuntime,
+    parentRuntime: Agent,
   ): SubagentBuiltRuntime | Promise<SubagentBuiltRuntime>;
 }
 
 export interface SubagentBuiltRuntime {
-  runtime: HarnessRuntime;
+  runtime: Agent;
   runOptions: RunOptions;
   agentName: string;
   prompt: string;
+}
+
+export interface SubagentBuiltAgentInvoke {
+  agent: Agent;
+  request: AgentInvokeRequest;
 }

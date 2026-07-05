@@ -77,3 +77,31 @@ export class ConfigError extends HarnessError {
     this.name = "ConfigError";
   }
 }
+
+export class UnknownChannelError extends HarnessError {
+  constructor(message: string) {
+    super("UNKNOWN_CHANNEL", message);
+    this.name = "UnknownChannelError";
+  }
+}
+
+export class DuplicateChannelError extends HarnessError {
+  constructor(message: string) {
+    super("DUPLICATE_CHANNEL", message);
+    this.name = "DuplicateChannelError";
+  }
+}
+
+export class UnknownSkillError extends HarnessError {
+  constructor(message: string) {
+    super("UNKNOWN_SKILL", message);
+    this.name = "UnknownSkillError";
+  }
+}
+
+export class DuplicateSkillError extends HarnessError {
+  constructor(message: string) {
+    super("DUPLICATE_SKILL", message);
+    this.name = "DuplicateSkillError";
+  }
+}

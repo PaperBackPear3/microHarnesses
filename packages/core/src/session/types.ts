@@ -6,9 +6,24 @@ export interface SessionManifest {
   latestRunId?: string;
   latestSnapshotId?: string;
   latestSnapshotPath?: string;
+  lastSnapshotSeq?: number;
   eventLogPath: string;
   supportHistoryPath: string;
   lastEventSeq: number;
   /** When set, this session is a child spawned by another session. */
   parentSessionId?: string;
+  parentRunId?: string;
+  rootSessionId?: string;
+  depth?: number;
+  spawnedByTool?: string;
+}
+
+export interface InitSessionOptions {
+  sessionId?: string;
+  goal?: string;
+  parentSessionId?: string;
+  parentRunId?: string;
+  rootSessionId?: string;
+  depth?: number;
+  spawnedByTool?: string;
 }

@@ -11,7 +11,7 @@ test("SessionStore persists manifest, events, and snapshots", async () => {
   const store = new SessionStore(stateDir);
 
   try {
-    const manifest = await store.initSession(undefined, "ship feature");
+    const manifest = await store.initSession({ goal: "ship feature" });
     assert.equal(manifest.goal, "ship feature");
 
     await store.appendEvent(manifest.sessionId, {
@@ -44,7 +44,7 @@ test("loadLatestSnapshot reconstructs turns across snapshot resets", async () =>
   const store = new SessionStore(stateDir);
 
   try {
-    const manifest = await store.initSession(undefined, "resume history");
+    const manifest = await store.initSession({ goal: "resume history" });
 
     const turnA = makeTurn("turn-a", "first", "answer-1");
     const turnB = makeTurn("turn-b", "second", "answer-2");

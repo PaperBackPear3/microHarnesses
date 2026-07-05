@@ -1,6 +1,6 @@
 import type { SafetyMode, ToolPolicyEngine } from "../policy/types";
 import type { RunEmitter } from "../runtime/runEmitter";
-import type { ApprovalHandler, RuntimeLimits } from "../runtime/types";
+import type { ApprovalHandler, CapabilityScope, RuntimeLimits } from "../runtime/types";
 import { ToolTimeoutError } from "../shared/errors";
 import type { ToolRegistry } from "./registry";
 import type { ToolCall, ToolDefinition, ToolResult } from "./types";
@@ -17,6 +17,13 @@ export interface ToolExecutionRunContext {
   iteration: number;
   safetyMode?: SafetyMode;
   emitter: RunEmitter;
+  capabilityScope?: CapabilityScope;
+  lineage?: {
+    parentSessionId?: string;
+    parentRunId?: string;
+    rootSessionId?: string;
+    depth?: number;
+  };
   isCancelled(): boolean;
 }
 
@@ -47,6 +54,24 @@ export class ToolExecutionEngine {
     const results: ToolResult[] = [];
     for (const originalCall of calls) {
       const call = normalizeToolCallName(originalCall);
+      if (isOutOfScope(call.name, ctx.capabilityScope)) {
+        const message = `Tool "${call.name}" is out of scope for this agent invocation`;
+        await ctx.emitter.emit("tool.blocked", {
+          tool: call.name,
+          input: call.input,
+          decision: "deny",
+          reason: message,
+          iteration: ctx.iteration,
+        });
+        await ctx.emitter.support({
+          iteration: ctx.iteration,
+          tool: call.name,
+          category: "out_of_scope",
+          reason: message,
+        });
+        results.push({ ok: false, output: {}, error: message });
+        continue;
+      }
       if (ctx.isCancelled()) {
         await ctx.emitter.emit("tool.killed", {
           tool: call.name,
@@ -106,6 +131,10 @@ export class ToolExecutionEngine {
         agentName: ctx.agentName,
         iteration: ctx.iteration,
         safetyMode: ctx.safetyMode,
+        parentSessionId: ctx.lineage?.parentSessionId,
+        parentRunId: ctx.lineage?.parentRunId,
+        rootSessionId: ctx.lineage?.rootSessionId,
+        depth: ctx.lineage?.depth,
       });
 
       if (policy.decision !== "allow") {
@@ -208,6 +237,10 @@ export class ToolExecutionEngine {
         call,
         reason,
         safetyMode: ctx.safetyMode,
+        parentSessionId: ctx.lineage?.parentSessionId,
+        parentRunId: ctx.lineage?.parentRunId,
+        rootSessionId: ctx.lineage?.rootSessionId,
+        depth: ctx.lineage?.depth,
       });
       await ctx.emitter.emit(approved ? "tool.approval_approved" : "tool.approval_denied", {
         tool: call.name,
@@ -227,6 +260,17 @@ export class ToolExecutionEngine {
       return false;
     }
   }
+}
+
+function isOutOfScope(toolName: string, scope?: CapabilityScope): boolean {
+  if (!scope) return false;
+  if (scope.allowTools && scope.allowTools.length > 0 && !scope.allowTools.includes(toolName)) {
+    return true;
+  }
+  if (scope.denyTools?.includes(toolName)) {
+    return true;
+  }
+  return false;
 }
 
 async function withTimeout<T>(

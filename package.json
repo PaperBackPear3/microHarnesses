@@ -15,14 +15,12 @@
   "engines": {
     "node": ">=20"
   },
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": ["packages/*", "plugins/*"],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present",
     "lint": "biome check .",
-    "format": "biome format --write .",
-    "start": "npm run build --silent && node apps/cli/dist/index.js",
-    "cli:run": "npm run build --silent && node apps/cli/dist/index.js run"
+    "format": "biome format --write ."
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

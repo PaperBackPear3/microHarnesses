@@ -10,6 +10,17 @@ export * from "./tools/registry";
 export * from "./tools/executionEngine";
 export * from "./tools/descriptors";
 
+// Channels
+export * from "./channels/types";
+export * from "./channels/registry";
+export * from "./channels/inProcessChannel";
+
+// Skills
+export * from "./skills/types";
+export * from "./skills/registry";
+export * from "./skills/executionEngine";
+export * from "./skills/fsSkillSource";
+
 // Policy
 export * from "./policy/types";
 export * from "./policy/defaultPolicyEngine";
@@ -59,3 +70,6 @@ export * from "./plugins/host";
 // Subagents
 export * from "./subagents/types";
 export * from "./subagents/inProcessSubagentRunner";
+
+// Defaults
+export * from "./defaults";

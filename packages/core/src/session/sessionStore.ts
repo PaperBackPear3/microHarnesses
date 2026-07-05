@@ -4,11 +4,12 @@ import path from "node:path";
 import type { HarnessState } from "../context/types";
 import type { ExecutionEvent } from "../events/types";
 import { isNodeError } from "../shared/nodeError";
-import type { SessionManifest } from "./types";
+import type { InitSessionOptions, SessionManifest } from "./types";
 
 interface SnapshotFile {
   id: string;
   createdAt: string;
+  seq: number;
   runId: string;
   state: HarnessState;
 }
@@ -20,13 +21,9 @@ export class SessionStore {
     this.rootDir = path.join(stateDir, "sessions");
   }
 
-  async initSession(
-    sessionId?: string,
-    goal?: string,
-    parentSessionId?: string,
-  ): Promise<SessionManifest> {
+  async initSession(options: InitSessionOptions = {}): Promise<SessionManifest> {
     await mkdir(this.rootDir, { recursive: true });
-    const effectiveSessionId = sessionId ?? `s-${randomUUID()}`;
+    const effectiveSessionId = options.sessionId ?? `s-${randomUUID()}`;
     const sessionDir = this.sessionDir(effectiveSessionId);
     const manifestPath = path.join(sessionDir, "manifest.json");
 
@@ -38,13 +35,17 @@ export class SessionStore {
 
     const manifest: SessionManifest = {
       sessionId: effectiveSessionId,
-      goal: goal ?? "",
+      goal: options.goal ?? "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       eventLogPath: "events.jsonl",
       supportHistoryPath: "support-history.jsonl",
       lastEventSeq: 0,
-      ...(parentSessionId ? { parentSessionId } : {}),
+      ...(options.parentSessionId ? { parentSessionId: options.parentSessionId } : {}),
+      ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
+      ...(options.rootSessionId ? { rootSessionId: options.rootSessionId } : {}),
+      ...(typeof options.depth === "number" ? { depth: options.depth } : {}),
+      ...(options.spawnedByTool ? { spawnedByTool: options.spawnedByTool } : {}),
     };
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
     return manifest;
@@ -87,11 +88,13 @@ export class SessionStore {
   async saveSnapshot(sessionId: string, runId: string, state: HarnessState): Promise<string> {
     const manifest = await this.readManifest(sessionId);
     const snapshotId = `snap-${randomUUID()}`;
+    const snapshotSeq = (manifest.lastSnapshotSeq ?? 0) + 1;
     const snapshotRelPath = path.join("snapshots", `${snapshotId}.json`);
     const snapshotPath = path.join(this.sessionDir(sessionId), snapshotRelPath);
     const payload: SnapshotFile = {
       id: snapshotId,
       createdAt: new Date().toISOString(),
+      seq: snapshotSeq,
       runId,
       state,
     };
@@ -102,6 +105,7 @@ export class SessionStore {
       latestRunId: runId,
       latestSnapshotId: snapshotId,
       latestSnapshotPath: snapshotRelPath,
+      lastSnapshotSeq: snapshotSeq,
       updatedAt: new Date().toISOString(),
     };
     await this.writeManifest(updated);
@@ -206,7 +210,14 @@ export class SessionStore {
           return JSON.parse(raw) as SnapshotFile;
         }),
     );
-    snapshots.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    snapshots.sort((a, b) => {
+      const seqA = a.seq ?? 0;
+      const seqB = b.seq ?? 0;
+      if (seqA !== seqB) {
+        return seqA - seqB;
+      }
+      return a.createdAt.localeCompare(b.createdAt);
+    });
     return snapshots;
   }
 }
