@@ -2,7 +2,7 @@
 
 microHarnesses is a package-first TypeScript ecosystem for building AI agent runtimes.
 
-Instead of shipping one monolithic framework, microHarnesses gives you composable runtime primitives in `@micro-harneses/core`, then lets you add behavior through plugins.
+Instead of shipping one monolithic framework, microHarnesses gives you composable runtime primitives in `@micro-harnesses/core`, then lets you add behavior through plugins.
 
 ## Project goals
 

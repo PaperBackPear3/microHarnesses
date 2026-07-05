@@ -1,5 +1,5 @@
 {
-  "name": "@micro-harneses/core",
+  "name": "@micro-harnesses/core",
   "version": "0.3.0",
   "description": "Composable, plugin-first library for building LLM agent harnesses. Provides the agent loop, tool registry, session/context management, policy engine with command-safety rules, provider/credentials registries, and an in-process subagent primitive.",
   "license": "MIT",

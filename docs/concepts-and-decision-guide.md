@@ -1,6 +1,6 @@
 # Concepts and decision guide
 
-This guide is for teams building apps on top of `@micro-harneses/core`.
+This guide is for teams building apps on top of `@micro-harnesses/core`.
 
 ## Who should use what
 

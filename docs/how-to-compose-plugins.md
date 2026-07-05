@@ -29,9 +29,9 @@ import {
   ToolRegistry,
   ProviderRegistry,
   CredentialsRegistry,
-} from "@micro-harneses/core";
-import { basicToolsPlugin } from "@micro-harneses/plugin-basic-tools";
-import { PlanModePlugin } from "@micro-harneses/plugin-plan-mode";
+} from "@micro-harnesses/core";
+import { basicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
+import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 
 const tools = new ToolRegistry();
 const providers = new ProviderRegistry();
@@ -63,7 +63,7 @@ await pluginHost.register([
 ## Minimal custom plugin
 
 ```ts
-import type { HarnessPlugin, PluginApi } from "@micro-harneses/core";
+import type { HarnessPlugin, PluginApi } from "@micro-harnesses/core";
 
 export const myPlugin: HarnessPlugin = {
   name: "my-plugin",

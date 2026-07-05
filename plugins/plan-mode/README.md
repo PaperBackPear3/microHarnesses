@@ -1,6 +1,6 @@
-# @micro-harneses/plugin-plan-mode
+# @micro-harnesses/plugin-plan-mode
 
-Read-only planning and file exploration plugin for [`@micro-harneses/core`](../core).
+Read-only planning and file exploration plugin for [`@micro-harnesses/core`](../core).
 Reusable package-first plugin for library compositions.
 
 Ships three composable tools — **no file writes, no process execution, no network calls**:
@@ -14,13 +14,13 @@ Ships three composable tools — **no file writes, no process execution, no netw
 ## Install
 
 ```bash
-npm install @micro-harneses/core @micro-harneses/plugin-plan-mode
+npm install @micro-harnesses/core @micro-harnesses/plugin-plan-mode
 ```
 
 ## Usage
 
 ```ts
-import { PlanModePlugin } from "@micro-harneses/plugin-plan-mode";
+import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 
 await pluginHost.register([new PlanModePlugin({ rootDir: process.cwd() })]);
 ```
@@ -28,7 +28,7 @@ await pluginHost.register([new PlanModePlugin({ rootDir: process.cwd() })]);
 Or register only the planner (no filesystem access):
 
 ```ts
-import { PlannerPlugin } from "@micro-harneses/plugin-plan-mode";
+import { PlannerPlugin } from "@micro-harnesses/plugin-plan-mode";
 await pluginHost.register([new PlannerPlugin()]);
 ```
 

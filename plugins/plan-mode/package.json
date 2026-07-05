@@ -1,5 +1,5 @@
 {
-  "name": "@micro-harneses/plugin-plan-mode",
+  "name": "@micro-harnesses/plugin-plan-mode",
   "version": "0.2.0",
   "description": "Read-only planning and exploration plugin for @micro-harness/core. Ships a plan_agent and an explore_agent tool.",
   "license": "MIT",
@@ -34,6 +34,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harneses/core": "^0.3.0"
+    "@micro-harnesses/core": "^0.3.0"
   }
 }
