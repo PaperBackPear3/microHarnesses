@@ -44,6 +44,37 @@ Every field is an interface — swap any implementation. Most users compose
 `CompositePolicyEngine` + `PolicyRule`s rather than replacing the policy
 engine wholesale.
 
+## Core defaults: capabilities-first composition
+
+Core exposes provider/tool management primitives and optional built-ins.
+You choose what to register:
+
+```ts
+import {
+  createCoreDefaultTools,
+  registerCoreDefaults,
+  ToolRegistry,
+  ProviderRegistry,
+  CredentialsRegistry,
+} from "@micro-harness/core";
+
+registerCoreDefaults({
+  providerRegistry,
+  credentialsRegistry,
+  toolRegistry,
+  // built-in providers enabled by default (OpenAI/Anthropic/Ollama)
+  includeBuiltInProviders: true,
+  // explicit tool set owned by the composition root
+  tools: createCoreDefaultTools({
+    workspaceTools: { rootDir: process.cwd() },
+    subagents: subagentRunner,
+  }),
+});
+```
+
+Custom providers are registered by passing `{ adapter, credentials }` entries
+to `providers`. Custom tools are registered by passing `tools`.
+
 ## Command-safety rule
 
 The included rule is **best-effort screening, not a sandbox**. The starter

@@ -1,179 +1,23 @@
-import {
-  appendFile,
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { appendFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { type ToolDefinition, isNodeError } from "@micro-harness/core";
 import type { BasicToolsResolvedOptions } from "../options";
 import {
   parseOptionalBoolean,
-  parseOptionalInteger,
-  parseOptionalString,
   parseRequiredString,
   parseRequiredText,
   relativeToRoot,
   resolveWorkspacePath,
 } from "../utils";
 
-interface QueueItem {
-  absolutePath: string;
-  depth: number;
-}
-
 export function createFilesystemTools(options: BasicToolsResolvedOptions): ToolDefinition[] {
   return [
-    createFsListTool(options),
-    createFsReadTool(options),
     createFsWriteTool(options),
     createFsAppendTool(options),
     createFsMkdirTool(options),
     createFsMoveTool(options),
     createFsRemoveTool(options),
   ];
-}
-
-function createFsListTool(options: BasicToolsResolvedOptions): ToolDefinition {
-  return {
-    name: "fs_list",
-    description: "List files/directories under a workspace path (optional recursive traversal).",
-    risk: "low",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Workspace-relative path to list (default: .)." },
-        recursive: { type: "boolean", description: "Whether to traverse recursively." },
-        max_depth: { type: "number", description: "Maximum recursion depth when recursive=true." },
-        max_entries: { type: "number", description: "Maximum entries returned." },
-      },
-      additionalProperties: false,
-    },
-    inputAnnotations: [{ field: "path", kind: "file_path" }],
-    async execute(input) {
-      const requestedPath = parseOptionalString(input, "path", ".");
-      const recursive = parseOptionalBoolean(input, "recursive", false);
-      const maxEntries = parseOptionalInteger(
-        input,
-        "max_entries",
-        Math.min(200, options.maxListEntries),
-        1,
-        options.maxListEntries,
-      );
-      const maxDepth = recursive
-        ? parseOptionalInteger(input, "max_depth", 3, 0, options.maxTraversalDepth)
-        : 0;
-
-      const root = resolveWorkspacePath(options.rootDir, requestedPath);
-      const rootInfo = await stat(root);
-      if (!rootInfo.isDirectory()) {
-        throw new Error(`fs_list: path must be a directory: ${requestedPath}`);
-      }
-
-      const entries: Array<{
-        path: string;
-        type: "file" | "directory" | "other";
-        sizeBytes?: number;
-      }> = [];
-
-      const queue: QueueItem[] = [{ absolutePath: root, depth: 0 }];
-      while (queue.length > 0 && entries.length < maxEntries) {
-        const current = queue.shift() as QueueItem;
-        const dirEntries = await readdir(current.absolutePath, { withFileTypes: true });
-        for (const entry of dirEntries) {
-          const absolutePath = path.join(current.absolutePath, entry.name);
-          const relativePath = relativeToRoot(options.rootDir, absolutePath);
-          if (entry.isDirectory()) {
-            entries.push({ path: relativePath, type: "directory" });
-            if (recursive && current.depth < maxDepth) {
-              queue.push({ absolutePath, depth: current.depth + 1 });
-            }
-          } else if (entry.isFile()) {
-            const info = await stat(absolutePath);
-            entries.push({ path: relativePath, type: "file", sizeBytes: info.size });
-          } else {
-            entries.push({ path: relativePath, type: "other" });
-          }
-          if (entries.length >= maxEntries) {
-            break;
-          }
-        }
-      }
-
-      return {
-        root: relativeToRoot(options.rootDir, root),
-        recursive,
-        maxDepth,
-        total: entries.length,
-        truncated: entries.length >= maxEntries,
-        entries,
-      };
-    },
-  };
-}
-
-function createFsReadTool(options: BasicToolsResolvedOptions): ToolDefinition {
-  return {
-    name: "fs_read",
-    description: "Read text from a workspace file, optionally slicing by line range.",
-    risk: "low",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Workspace-relative file path." },
-        start_line: { type: "number", description: "1-based start line (inclusive)." },
-        end_line: { type: "number", description: "1-based end line (inclusive)." },
-        max_chars: { type: "number", description: "Maximum returned characters." },
-      },
-      required: ["path"],
-      additionalProperties: false,
-    },
-    inputAnnotations: [{ field: "path", kind: "file_path" }],
-    async execute(input) {
-      const requestedPath = parseRequiredString(input, "path", "fs_read");
-      const absolutePath = resolveWorkspacePath(options.rootDir, requestedPath);
-      const info = await stat(absolutePath);
-      if (!info.isFile()) {
-        throw new Error(`fs_read: path must be a file: ${requestedPath}`);
-      }
-      const raw = await readFile(absolutePath, "utf8");
-      const lines = raw.split(/\r?\n/);
-      const totalLines = lines.length;
-      const startLine = parseOptionalInteger(input, "start_line", 1, 1, Math.max(1, totalLines));
-      const endLine = parseOptionalInteger(
-        input,
-        "end_line",
-        totalLines,
-        startLine,
-        Math.max(startLine, totalLines),
-      );
-      if (endLine < startLine) {
-        throw new Error(`fs_read: end_line (${endLine}) must be >= start_line (${startLine})`);
-      }
-      const selected = lines.slice(startLine - 1, endLine);
-      const maxChars = parseOptionalInteger(
-        input,
-        "max_chars",
-        options.maxReadChars,
-        1,
-        options.maxReadChars,
-      );
-      const content = selected.join("\n");
-      const truncated = content.length > maxChars;
-      return {
-        path: relativeToRoot(options.rootDir, absolutePath),
-        startLine,
-        endLine,
-        totalLines,
-        truncated,
-        content: truncated ? content.slice(0, maxChars) : content,
-      };
-    },
-  };
 }
 
 function createFsWriteTool(options: BasicToolsResolvedOptions): ToolDefinition {
@@ -186,7 +30,10 @@ function createFsWriteTool(options: BasicToolsResolvedOptions): ToolDefinition {
       properties: {
         path: { type: "string", description: "Workspace-relative file path." },
         content: { type: "string", description: "Text content to write." },
-        create_parents: { type: "boolean", description: "Create parent directories if missing." },
+        create_parents: {
+          type: "boolean",
+          description: "Create parent directories if missing.",
+        },
       },
       required: ["path", "content"],
       additionalProperties: false,
@@ -219,7 +66,10 @@ function createFsAppendTool(options: BasicToolsResolvedOptions): ToolDefinition 
       properties: {
         path: { type: "string", description: "Workspace-relative file path." },
         content: { type: "string", description: "Text content to append." },
-        create_parents: { type: "boolean", description: "Create parent directories if missing." },
+        create_parents: {
+          type: "boolean",
+          description: "Create parent directories if missing.",
+        },
       },
       required: ["path", "content"],
       additionalProperties: false,
@@ -250,8 +100,14 @@ function createFsMkdirTool(options: BasicToolsResolvedOptions): ToolDefinition {
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Workspace-relative directory path." },
-        recursive: { type: "boolean", description: "Whether to create intermediate directories." },
+        path: {
+          type: "string",
+          description: "Workspace-relative directory path.",
+        },
+        recursive: {
+          type: "boolean",
+          description: "Whether to create intermediate directories.",
+        },
       },
       required: ["path"],
       additionalProperties: false,
@@ -262,7 +118,11 @@ function createFsMkdirTool(options: BasicToolsResolvedOptions): ToolDefinition {
       const recursive = parseOptionalBoolean(input, "recursive", true);
       const absolutePath = resolveWorkspacePath(options.rootDir, requestedPath);
       await mkdir(absolutePath, { recursive });
-      return { path: relativeToRoot(options.rootDir, absolutePath), recursive, created: true };
+      return {
+        path: relativeToRoot(options.rootDir, absolutePath),
+        recursive,
+        created: true,
+      };
     },
   };
 }
@@ -275,10 +135,22 @@ function createFsMoveTool(options: BasicToolsResolvedOptions): ToolDefinition {
     inputSchema: {
       type: "object",
       properties: {
-        src_path: { type: "string", description: "Workspace-relative source path." },
-        dst_path: { type: "string", description: "Workspace-relative destination path." },
-        overwrite: { type: "boolean", description: "Whether to replace destination if it exists." },
-        create_parents: { type: "boolean", description: "Create destination parent directories." },
+        src_path: {
+          type: "string",
+          description: "Workspace-relative source path.",
+        },
+        dst_path: {
+          type: "string",
+          description: "Workspace-relative destination path.",
+        },
+        overwrite: {
+          type: "boolean",
+          description: "Whether to replace destination if it exists.",
+        },
+        create_parents: {
+          type: "boolean",
+          description: "Create destination parent directories.",
+        },
       },
       required: ["src_path", "dst_path"],
       additionalProperties: false,
@@ -330,8 +202,14 @@ function createFsRemoveTool(options: BasicToolsResolvedOptions): ToolDefinition 
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "Workspace-relative path to remove." },
-        recursive: { type: "boolean", description: "Required for directories." },
+        path: {
+          type: "string",
+          description: "Workspace-relative path to remove.",
+        },
+        recursive: {
+          type: "boolean",
+          description: "Required for directories.",
+        },
         force: { type: "boolean", description: "Ignore non-existing targets." },
       },
       required: ["path"],

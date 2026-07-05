@@ -77,14 +77,31 @@ export function builtInProviderPlugins(): HarnessPlugin[] {
   ];
 }
 
+export interface ProviderRegistration {
+  adapter: ProviderAdapter;
+  credentials?: CredentialsResolver;
+}
+
+export function registerProviders(
+  providers: ProviderRegistry,
+  credentials: CredentialsRegistry,
+  registrations: ProviderRegistration[],
+): void {
+  for (const registration of registrations) {
+    providers.register(registration.adapter);
+    if (registration.credentials) {
+      credentials.register(registration.adapter.providerId, registration.credentials);
+    }
+  }
+}
+
 export function registerBuiltInProviders(
   providers: ProviderRegistry,
   credentials: CredentialsRegistry,
 ): void {
-  providers.register(new OpenAIAdapter());
-  credentials.register("openai", new OpenAIEnvCredentials());
-  providers.register(new AnthropicAdapter());
-  credentials.register("anthropic", new AnthropicEnvCredentials());
-  providers.register(new OllamaAdapter());
-  credentials.register("ollama", new OllamaEnvCredentials());
+  registerProviders(providers, credentials, [
+    { adapter: new OpenAIAdapter(), credentials: new OpenAIEnvCredentials() },
+    { adapter: new AnthropicAdapter(), credentials: new AnthropicEnvCredentials() },
+    { adapter: new OllamaAdapter(), credentials: new OllamaEnvCredentials() },
+  ]);
 }

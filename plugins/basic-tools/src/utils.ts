@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { safeResolve, truncate } from "@micro-harness/core";
+import { safeResolve } from "@micro-harness/core";
 
 export function resolveWorkspacePath(rootDir: string, requestedPath: string): string {
   return safeResolve(rootDir, requestedPath);
@@ -9,17 +8,6 @@ export function resolveWorkspacePath(rootDir: string, requestedPath: string): st
 export function relativeToRoot(rootDir: string, absolutePath: string): string {
   const relative = path.relative(rootDir, absolutePath);
   return relative.length === 0 ? "." : relative;
-}
-
-export async function readTextFileCapped(
-  filePath: string,
-  maxChars: number,
-): Promise<{ text: string; truncated: boolean }> {
-  const raw = await readFile(filePath, "utf8");
-  if (raw.length <= maxChars) {
-    return { text: raw, truncated: false };
-  }
-  return { text: raw.slice(0, maxChars), truncated: true };
 }
 
 export function parseRequiredString(
@@ -83,8 +71,4 @@ export function parseOptionalInteger(
   }
   const parsed = Math.floor(value);
   return Math.min(max, Math.max(min, parsed));
-}
-
-export function safeSnippet(line: string, maxChars: number): string {
-  return truncate(line, maxChars);
 }

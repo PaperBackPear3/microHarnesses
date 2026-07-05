@@ -6,18 +6,13 @@ import test from "node:test";
 import { resolveOptions } from "../options";
 import { createFilesystemTools } from "./filesystemTools";
 
-test("fs_read supports line ranges", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "mh-basic-tools-fs-read-"));
+test("filesystem toolset excludes read-only tools now owned by core defaults", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-basic-tools-fs-dedup-"));
   try {
-    const filePath = path.join(root, "note.txt");
-    await writeFile(filePath, "one\ntwo\nthree\nfour\n", "utf8");
     const tools = createFilesystemTools(resolveOptions({ rootDir: root }));
-    const fsRead = tools.find((tool) => tool.name === "fs_read");
-    assert.ok(fsRead);
-    const output = await fsRead.execute({ path: "note.txt", start_line: 2, end_line: 3 });
-    assert.equal(output.content, "two\nthree");
-    assert.equal(output.startLine, 2);
-    assert.equal(output.endLine, 3);
+    const names = tools.map((tool) => tool.name);
+    assert.equal(names.includes("fs_list"), false);
+    assert.equal(names.includes("fs_read"), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -41,13 +36,13 @@ test("fs_write and fs_append update file content", async () => {
   }
 });
 
-test("fs_read rejects paths outside root", async () => {
+test("fs_write rejects paths outside root", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "mh-basic-tools-fs-safe-"));
   try {
     const tools = createFilesystemTools(resolveOptions({ rootDir: root }));
-    const fsRead = tools.find((tool) => tool.name === "fs_read");
-    assert.ok(fsRead);
-    await assert.rejects(() => fsRead.execute({ path: "../outside.txt" }));
+    const fsWrite = tools.find((tool) => tool.name === "fs_write");
+    assert.ok(fsWrite);
+    await assert.rejects(() => fsWrite.execute({ path: "../outside.txt", content: "x" }));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

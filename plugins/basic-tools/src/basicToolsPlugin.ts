@@ -1,7 +1,6 @@
 import type { HarnessPlugin, PluginApi, PluginCapability } from "@micro-harness/core";
 import { type BasicToolsPluginOptions, resolveOptions } from "./options";
 import { createFilesystemTools } from "./tools/filesystemTools";
-import { createGrepTool } from "./tools/grepTool";
 import { createShellTool } from "./tools/shellTool";
 
 const CAPABILITIES: PluginCapability[] = ["tools"];
@@ -19,7 +18,6 @@ export class BasicToolsPlugin implements HarnessPlugin {
     for (const tool of createFilesystemTools(this.options)) {
       api.registerTool(tool);
     }
-    api.registerTool(createGrepTool(this.options));
     api.registerTool(createShellTool(this.options));
   }
 }

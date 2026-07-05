@@ -1,9 +1,9 @@
 {
   "name": "@micro-harness/plugin-basic-tools",
   "version": "0.1.0",
-  "description": "Workspace-scoped file, grep, and shell tools for @micro-harness/core.",
+  "description": "Workspace-scoped filesystem mutation and shell tools for @micro-harness/core.",
   "license": "MIT",
-  "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell", "grep"],
+  "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell"],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
