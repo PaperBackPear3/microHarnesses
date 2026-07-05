@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import type { PluginApi, ToolDefinition } from "@micro-harness/core";
+import type { PluginApi, ToolDefinition } from "@micro-harnesses/core";
 import { ExplorerPlugin } from "./agents/explorerPlugin";
 import { PlannerPlugin } from "./agents/plannerPlugin";
 import { PlanModePlugin } from "./planModePlugin";

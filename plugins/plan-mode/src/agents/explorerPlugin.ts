@@ -5,7 +5,7 @@ import type {
   PluginApi,
   PluginCapability,
   ToolDefinition,
-} from "@micro-harness/core";
+} from "@micro-harnesses/core";
 import { clampNumber, listFiles, readTextFileSafely, safeResolve, truncate } from "../utils";
 
 export interface ExplorerPluginOptions {

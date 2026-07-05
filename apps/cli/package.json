@@ -2,7 +2,7 @@
   "name": "@micro-harness/cli",
   "version": "0.3.0",
   "private": true,
-  "description": "Reference CLI built on @micro-harness/core.",
+  "description": "Reference CLI built on @micro-harnesses/core.",
   "main": "dist/index.js",
   "bin": {
     "micro-harness": "dist/index.js"
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@micro-harness/plugin-basic-tools": "file:../../packages/plugin-basic-tools",
-    "@micro-harness/core": "file:../../packages/core",
+    "@micro-harnesses/core": "file:../../packages/core",
     "@micro-harness/plugin-example-tools": "file:../../packages/plugin-example-tools",
     "@micro-harness/plugin-plan-mode": "file:../../packages/plugin-plan-mode",
     "@micro-harness/plugin-subagents": "file:../../packages/plugin-subagents",

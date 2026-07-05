@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import readline from "node:readline/promises";
+import { basicToolsPlugin } from "@micro-harness/plugin-basic-tools";
+import { PlanModePlugin } from "@micro-harness/plugin-plan-mode";
+import { subagentsPlugin } from "@micro-harness/plugin-subagents";
+import { builtInProviderPlugins } from "@micro-harness/providers";
 import {
   type ApprovalHandler,
   type ApprovalRequest,
@@ -17,18 +21,14 @@ import {
   PluginLoader,
   ProviderModelAdapter,
   ProviderRegistry,
-  registerCoreDefaults,
   SessionStore,
   type SubagentBuiltRuntime,
   type SubagentRunOptions,
   type SubagentRuntimeFactory,
   ToolRegistry,
   createCommandSafetyRule,
-} from "@micro-harness/core";
-import { basicToolsPlugin } from "@micro-harness/plugin-basic-tools";
-import { PlanModePlugin } from "@micro-harness/plugin-plan-mode";
-import { subagentsPlugin } from "@micro-harness/plugin-subagents";
-import { builtInProviderPlugins } from "@micro-harness/providers";
+  registerCoreDefaults,
+} from "@micro-harnesses/core";
 import type { RunArgs } from "./args";
 import { LiveEventSink } from "./liveEventSink";
 

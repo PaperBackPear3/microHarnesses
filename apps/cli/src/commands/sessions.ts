@@ -1,4 +1,4 @@
-import { SessionStore } from "@micro-harness/core";
+import { SessionStore } from "@micro-harnesses/core";
 import { parseSessionsArgs } from "../args";
 import { runCommandWithPrompt } from "./run";
 

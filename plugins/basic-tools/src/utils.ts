@@ -1,5 +1,5 @@
 import path from "node:path";
-import { safeResolve } from "@micro-harness/core";
+import { safeResolve } from "@micro-harnesses/core";
 
 export function resolveWorkspacePath(rootDir: string, requestedPath: string): string {
   return safeResolve(rootDir, requestedPath);

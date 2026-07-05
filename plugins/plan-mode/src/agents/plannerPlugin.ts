@@ -3,7 +3,7 @@ import type {
   PluginApi,
   PluginCapability,
   ToolDefinition,
-} from "@micro-harness/core";
+} from "@micro-harnesses/core";
 import STEPS from "../steps.json";
 import { clampNumber, normalizeStringList } from "../utils";
 

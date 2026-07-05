@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ToolDefinition, ToolExecutionContext } from "@micro-harness/core";
+import type { ToolDefinition, ToolExecutionContext } from "@micro-harnesses/core";
 import type { BasicToolsResolvedOptions } from "../options";
 import {
   parseOptionalInteger,

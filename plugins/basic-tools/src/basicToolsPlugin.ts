@@ -1,4 +1,4 @@
-import type { HarnessPlugin, PluginApi, PluginCapability } from "@micro-harness/core";
+import type { HarnessPlugin, PluginApi, PluginCapability } from "@micro-harnesses/core";
 import { type BasicToolsPluginOptions, resolveOptions } from "./options";
 import { createFilesystemTools } from "./tools/filesystemTools";
 import { createShellTool } from "./tools/shellTool";

@@ -3,7 +3,7 @@ import type {
   PluginApi,
   PluginCapability,
   ToolDefinition,
-} from "@micro-harness/core";
+} from "@micro-harnesses/core";
 import { ExplorerPlugin, type ExplorerPluginOptions } from "./agents/explorerPlugin";
 import { PlannerPlugin } from "./agents/plannerPlugin";
 

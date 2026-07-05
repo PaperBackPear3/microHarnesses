@@ -1,6 +1,6 @@
 import { appendFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { type ToolDefinition, isNodeError } from "@micro-harness/core";
+import { type ToolDefinition, isNodeError } from "@micro-harnesses/core";
 import type { BasicToolsResolvedOptions } from "../options";
 import {
   parseOptionalBoolean,

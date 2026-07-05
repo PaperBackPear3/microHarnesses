@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-export { safeResolve, truncate } from "@micro-harness/core";
+export { safeResolve, truncate } from "@micro-harnesses/core";
 
 /** Recursively lists files under root up to maxDepth, capped at maxFiles entries. */
 export async function listFiles(

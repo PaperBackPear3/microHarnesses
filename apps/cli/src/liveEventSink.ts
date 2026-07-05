@@ -1,4 +1,4 @@
-import type { EventSink, ExecutionEvent } from "@micro-harness/core";
+import type { EventSink, ExecutionEvent } from "@micro-harnesses/core";
 
 /**
  * Streams compact runtime progress to stderr.

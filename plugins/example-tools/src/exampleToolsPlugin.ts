@@ -1,4 +1,4 @@
-import type { HarnessPlugin, PluginApi, PluginCapability } from "@micro-harness/core";
+import type { HarnessPlugin, PluginApi, PluginCapability } from "@micro-harnesses/core";
 import { echoTool, timeTool } from "./tools";
 
 const CAPABILITIES: PluginCapability[] = ["tools"];
