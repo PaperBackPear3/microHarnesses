@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { type ActionCallBudget, ActionExecutionEngine } from "../actions/executionEngine";
 import type { ChannelRequest, ChannelResponse } from "../channels/types";
 import type { ContextManager } from "../context/manager";
-import type { EventSink } from "../events/types";
 import type { ModelAdapter, ModelSelector } from "../model/types";
+import { NoopObservabilityProvider } from "../observability/noop";
+import type { ObservabilityProvider, Span } from "../observability/types";
 import type { ToolPolicyEngine } from "../policy/types";
 import type { PromptSource } from "../prompts/types";
 import type { SessionStore } from "../session/sessionStore";
@@ -13,7 +14,7 @@ import type { SkillRegistry } from "../skills/registry";
 import { deriveToolDescriptors } from "../tools/descriptors";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolResult } from "../tools/types";
-import { RunEmitter } from "./runEmitter";
+import { RunObserver } from "./runObserver";
 import { shouldSnapshot } from "./snapshotCadence";
 import type { RunState } from "./state";
 import type {
@@ -40,7 +41,8 @@ export interface AgentOptions {
   tools: ToolRegistry;
   context: ContextManager;
   policy: ToolPolicyEngine;
-  eventSink: EventSink;
+  /** Observability provider (traces + metrics + logs + stream). */
+  observability?: ObservabilityProvider;
   sessionStore?: SessionStore;
   limits?: RuntimeLimits;
   approvalHandler?: ApprovalHandler;
@@ -77,7 +79,7 @@ export class Agent implements AgentHandle {
   private readonly tools: ToolRegistry;
   private readonly context: ContextManager;
   private readonly policy: ToolPolicyEngine;
-  private readonly eventSink: EventSink;
+  private readonly observability: ObservabilityProvider;
   private readonly sessionStore?: SessionStore;
   private readonly defaultLimits: RuntimeLimits;
   private readonly approvalHandler?: ApprovalHandler;
@@ -94,7 +96,7 @@ export class Agent implements AgentHandle {
     this.tools = options.tools;
     this.context = options.context;
     this.policy = options.policy;
-    this.eventSink = options.eventSink;
+    this.observability = options.observability ?? new NoopObservabilityProvider();
     this.sessionStore = options.sessionStore;
     this.defaultLimits = options.limits ?? DEFAULT_LIMITS;
     this.approvalHandler = options.approvalHandler;
@@ -135,7 +137,8 @@ export class Agent implements AgentHandle {
     let sessionId = options.sessionId;
     let goal = options.goal ?? userPrompt;
 
-    let emitter: RunEmitter | undefined;
+    let observer: RunObserver | undefined;
+    const startedAt = Date.now();
     try {
       if (this.sessionStore) {
         const manifest = await this.sessionStore.initSession({
@@ -155,22 +158,49 @@ export class Agent implements AgentHandle {
       }
       runCtx.sessionId = sessionId;
 
-      emitter = new RunEmitter(
-        { eventSink: this.eventSink, sessionStore: this.sessionStore },
-        { runId, sessionId },
+      observer = new RunObserver(
+        this.observability,
+        {
+          runId,
+          sessionId,
+          rootSessionId: options.rootSessionId,
+          depth: options.depth,
+          parentTrace: options.parentTrace,
+        },
+        {
+          "prompt.name": this.promptName,
+          kind: this.kind,
+          ...(options.spawnedByTool ? { spawned_by: options.spawnedByTool } : {}),
+        },
       );
 
-      const state = await this.runLoop(runCtx, emitter, userPrompt, options, {
+      const state = await this.runLoop(runCtx, observer, userPrompt, options, {
         limits,
         goal,
         sessionId,
         runId,
       });
-      await emitter.emit("run.completed", { turns: state.turns.length, sessionId });
+
+      observer.countRun("ok");
+      observer.recordRunDuration(Date.now() - startedAt, "ok");
+      observer.runSpan.setAttribute("run.turns", state.turns.length);
+      observer.runSpan.setStatus({ code: "ok" });
+      await observer.stream("run.completed", { turns: state.turns.length, sessionId });
+      observer.runSpan.end();
+      await this.observability.forceFlush();
       return state;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await emitter?.emit("run.failed", { sessionId, reason: message });
+      if (observer) {
+        observer.countRun("error");
+        observer.countError("run_failed");
+        observer.recordRunDuration(Date.now() - startedAt, "error");
+        observer.log("error", message, { category: "run_failed", sessionId: sessionId ?? "" });
+        observer.runSpan.recordException(error, "run_failed");
+        await observer.stream("run.failed", { sessionId, reason: message });
+        observer.runSpan.end();
+        await this.observability.forceFlush();
+      }
       throw error;
     } finally {
       this.activeRuns.delete(runCtx);
@@ -179,7 +209,7 @@ export class Agent implements AgentHandle {
 
   private async runLoop(
     runCtx: RunContext,
-    emitter: RunEmitter,
+    observer: RunObserver,
     userPrompt: string,
     options: RunOptions,
     resolved: { limits: RuntimeLimits; goal: string; sessionId?: string; runId: string },
@@ -219,7 +249,7 @@ export class Agent implements AgentHandle {
 
     await this.context.init();
     this.context.setGoal(goal);
-    await emitter.emit("run.started", {
+    await observer.stream("run.started", {
       promptName,
       sessionId,
       resume: Boolean(options.resume),
@@ -232,44 +262,143 @@ export class Agent implements AgentHandle {
 
     for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
       if (runCtx.cancelled) {
-        await emitter.emit("action.killed", {
-          reason: "agent killed before next iteration",
+        observer.countError("killed");
+        observer.log("warn", "agent killed before next iteration", {
+          category: "killed",
           iteration,
         });
         break;
       }
 
-      for (const hook of this.beforeHooks) {
-        await hook(state, iteration);
-      }
-
-      const working = await this.context.buildWorkingTurns(state.turns);
-      const modelSelection = this.modelSelector.select(
-        {
-          promptName,
+      observer.countIteration({ prompt: promptName });
+      const iterationSpan = observer.startIteration(iteration, { "prompt.name": promptName });
+      try {
+        const stop = await this.runIteration({
           iteration,
+          iterationSpan,
+          observer,
+          runCtx,
+          options,
+          bundle,
           taskType,
           userPrompt,
-          overrideModel: options.modelOverride,
-          promptHintModel: bundle.metadata.modelHint,
-        },
-        options.profile,
-      );
-      await emitter.emit("model.selected", {
-        model: modelSelection.model,
-        reason: modelSelection.reason,
-        iteration,
-        taskType: taskType ?? "default",
-      });
+          promptName,
+          engine,
+          skillEngine,
+          budget,
+          state,
+          sessionId,
+          runId,
+        });
+        iterationSpan.setStatus({ code: "ok" });
+        if (stop) break;
+      } catch (error) {
+        iterationSpan.recordException(error);
+        throw error;
+      } finally {
+        iterationSpan.end();
+      }
+    }
 
-      let streamedChars = 0;
-      let reasoningChars = 0;
-      await emitter.emit("model.thinking_started", {
-        model: modelSelection.model,
-        iteration,
-        taskType: taskType ?? "default",
+    if (this.sessionStore && sessionId) {
+      await this.sessionStore.saveSnapshot(sessionId, runId, state);
+    }
+    return state;
+  }
+
+  private async runIteration(args: {
+    iteration: number;
+    iterationSpan: Span;
+    observer: RunObserver;
+    runCtx: RunContext;
+    options: RunOptions;
+    bundle: Awaited<ReturnType<PromptSource["load"]>>;
+    taskType?: "default" | "reasoning" | "fast";
+    userPrompt: string;
+    promptName: string;
+    engine: ActionExecutionEngine;
+    skillEngine?: ActionExecutionEngine;
+    budget: ActionCallBudget;
+    state: RunState;
+    sessionId?: string;
+    runId: string;
+  }): Promise<boolean> {
+    const {
+      iteration,
+      iterationSpan,
+      observer,
+      runCtx,
+      options,
+      bundle,
+      taskType,
+      userPrompt,
+      promptName,
+      engine,
+      skillEngine,
+      budget,
+      state,
+      sessionId,
+      runId,
+    } = args;
+
+    for (const hook of this.beforeHooks) {
+      await hook(state, iteration);
+    }
+
+    const contextSpan = observer.startContext(iterationSpan);
+    const working = await this.context.buildWorkingTurns(state.turns);
+    if (working.stats) {
+      observer.recordContext(working.stats);
+      contextSpan.setAttributes({
+        "context.turns.total": working.stats.totalTurns,
+        "context.turns.working": working.stats.workingTurns,
+        "context.turns.overflow": working.stats.overflowTurns,
+        "context.window.used_tokens": working.stats.usedTokens,
+        "context.window.max_tokens": working.stats.maxTokens,
+        "context.window.utilization": working.stats.utilization,
+        "context.compressed": working.stats.compressed,
       });
-      const step = await this.model.nextStep({
+      await observer.stream("context.window", { ...working.stats, iteration }, contextSpan);
+    }
+    contextSpan.end();
+
+    const modelSelection = this.modelSelector.select(
+      {
+        promptName,
+        iteration,
+        taskType,
+        userPrompt,
+        overrideModel: options.modelOverride,
+        promptHintModel: bundle.metadata.modelHint,
+      },
+      options.profile,
+    );
+    iterationSpan.setAttribute("model.selected", modelSelection.model);
+    await observer.stream("model.selected", {
+      model: modelSelection.model,
+      reason: modelSelection.reason,
+      iteration,
+      taskType: taskType ?? "default",
+    });
+
+    const modelSpan = observer.startModel(iterationSpan, {
+      "model.name": modelSelection.model,
+      "model.reason": modelSelection.reason,
+      "task.type": taskType ?? "default",
+      iteration,
+    });
+    let streamedChars = 0;
+    let reasoningChars = 0;
+    const modelStartedAt = Date.now();
+    await observer.stream(
+      "model.thinking_started",
+      { model: modelSelection.model, iteration, taskType: taskType ?? "default" },
+      modelSpan,
+    );
+
+    let step: Awaited<ReturnType<ModelAdapter["nextStep"]>>;
+    try {
+      step = await this.model.nextStep({
         promptName,
         userPrompt,
         bundle,
@@ -283,109 +412,137 @@ export class Agent implements AgentHandle {
         onAssistantDelta: async (delta) => {
           if (delta.length === 0) return;
           streamedChars += delta.length;
-          await emitter.emit("model.delta", { iteration, delta });
+          modelSpan.addEvent("model.output_delta", observer.content({ delta }));
+          await observer.stream("model.output_delta", { iteration, delta }, modelSpan);
         },
         onReasoningDelta: async (delta) => {
           if (delta.length === 0) return;
           reasoningChars += delta.length;
-          await emitter.emit("model.reasoning_delta", { iteration, delta });
+          modelSpan.addEvent("model.reasoning_delta", observer.content({ delta }));
+          await observer.stream("model.reasoning_delta", { iteration, delta }, modelSpan);
         },
       });
-      await emitter.emit("model.thinking_completed", {
-        model: modelSelection.model,
-        iteration,
-        taskType: taskType ?? "default",
+    } catch (error) {
+      observer.countModelCall(modelSelection.model, "error");
+      observer.countError("model_error");
+      observer.recordModelDuration(Date.now() - modelStartedAt, modelSelection.model);
+      modelSpan.recordException(error, "model_error");
+      modelSpan.end();
+      throw error;
+    }
+
+    const modelDurationMs = Date.now() - modelStartedAt;
+    observer.countModelCall(modelSelection.model, "ok");
+    observer.recordModelDuration(modelDurationMs, modelSelection.model);
+    observer.countReasoningChars(reasoningChars);
+    observer.countStreamChars(streamedChars);
+    await observer.stream(
+      "model.thinking_completed",
+      { model: modelSelection.model, iteration, taskType: taskType ?? "default" },
+      modelSpan,
+    );
+    if (reasoningChars > 0) {
+      await observer.stream(
+        "model.reasoning_completed",
+        { iteration, chars: reasoningChars },
+        modelSpan,
+      );
+    }
+    if (streamedChars > 0) {
+      await observer.stream(
+        "model.output_completed",
+        { iteration, chars: streamedChars },
+        modelSpan,
+      );
+    }
+    if (step.usage) {
+      observer.countModelTokens(
+        modelSelection.model,
+        step.usage.inputTokens,
+        step.usage.outputTokens,
+      );
+      modelSpan.setAttributes({
+        ...(typeof step.usage.inputTokens === "number"
+          ? { "model.tokens.input": step.usage.inputTokens }
+          : {}),
+        ...(typeof step.usage.outputTokens === "number"
+          ? { "model.tokens.output": step.usage.outputTokens }
+          : {}),
       });
-      if (reasoningChars > 0) {
-        await emitter.emit("model.reasoning_stream_completed", {
-          iteration,
-          chars: reasoningChars,
-        });
-      }
-      if (streamedChars > 0) {
-        await emitter.emit("model.stream_completed", { iteration, chars: streamedChars });
-      }
-      if (step.usage) {
-        await emitter.emit("model.completed", {
-          model: modelSelection.model,
-          iteration,
-          usage: step.usage,
-        });
-      }
+      await observer.stream(
+        "model.usage",
+        { model: modelSelection.model, iteration, usage: step.usage },
+        modelSpan,
+      );
+    }
+    modelSpan.setAttributes(observer.content({ "model.output": step.assistantMessage }));
+    modelSpan.setStatus({ code: "ok" });
+    modelSpan.end();
 
-      // Honor a kill that arrived while the model was thinking, before side effects.
-      if (runCtx.cancelled) {
-        await emitter.emit("action.killed", {
-          reason: "agent killed during model step",
-          iteration,
-        });
-        break;
-      }
+    // Honor a kill that arrived while the model was thinking, before side effects.
+    if (runCtx.cancelled) {
+      observer.countError("killed");
+      observer.log("warn", "agent killed during model step", { category: "killed", iteration });
+      return true;
+    }
 
-      const executionCtx = {
-        promptName,
-        iteration,
-        safetyMode: bundle.metadata.safetyMode,
-        emitter,
-        isCancelled: () => runCtx.cancelled,
-        signal: runCtx.controller.signal,
-        budget,
-        capabilityScope: options.capabilityScope,
-        lineage: {
-          parentSessionId: options.parentSessionId,
-          parentRunId: options.parentRunId,
-          rootSessionId: options.rootSessionId,
-          depth: options.depth,
-        },
-      };
+    const executionCtx = {
+      promptName,
+      iteration,
+      safetyMode: bundle.metadata.safetyMode,
+      observer,
+      parentSpan: iterationSpan,
+      isCancelled: () => runCtx.cancelled,
+      signal: runCtx.controller.signal,
+      budget,
+      capabilityScope: options.capabilityScope,
+      lineage: {
+        parentSessionId: options.parentSessionId,
+        parentRunId: options.parentRunId,
+        rootSessionId: options.rootSessionId,
+        depth: options.depth,
+      },
+    };
 
-      const toolOutcome = await engine.executeCalls(step.toolCalls, executionCtx);
-      const skillCalls = step.skillCalls ?? [];
-      let skillResults: ToolResult[] = [];
-      let skillLimitReached = false;
-      if (skillCalls.length > 0) {
-        if (skillEngine) {
-          const skillOutcome = await skillEngine.executeCalls(skillCalls, executionCtx);
-          skillResults = skillOutcome.results;
-          skillLimitReached = skillOutcome.limitReached;
-        } else {
-          skillResults = skillCalls.map((call) => ({
-            ok: false,
-            output: {},
-            error: `Skill "${call.name}" cannot run because no skill registry is configured`,
-          }));
-        }
-      }
-
-      state.turns.push({
-        id: randomUUID(),
-        iteration,
-        // Only the first iteration carries the user prompt; later loop turns are
-        // internal continuations and leave it empty (see providerModelAdapter).
-        userMessage: iteration === 1 ? userPrompt : "",
-        assistantMessage: step.assistantMessage,
-        toolCalls: step.toolCalls,
-        toolResults: toolOutcome.results,
-        ...(skillCalls.length > 0 ? { skillCalls, skillResults } : {}),
-      });
-
-      if (this.sessionStore && sessionId && shouldSnapshot(iteration, options.snapshotEvery)) {
-        await this.sessionStore.saveSnapshot(sessionId, runId, state);
-      }
-
-      for (const hook of this.afterHooks) {
-        await hook(state, iteration);
-      }
-
-      if (step.stop || toolOutcome.limitReached || skillLimitReached) {
-        break;
+    const toolOutcome = await engine.executeCalls(step.toolCalls, executionCtx);
+    const skillCalls = step.skillCalls ?? [];
+    let skillResults: ToolResult[] = [];
+    let skillLimitReached = false;
+    if (skillCalls.length > 0) {
+      if (skillEngine) {
+        const skillOutcome = await skillEngine.executeCalls(skillCalls, executionCtx);
+        skillResults = skillOutcome.results;
+        skillLimitReached = skillOutcome.limitReached;
+      } else {
+        skillResults = skillCalls.map((call) => ({
+          ok: false,
+          output: {},
+          error: `Skill "${call.name}" cannot run because no skill registry is configured`,
+        }));
       }
     }
 
-    if (this.sessionStore && sessionId) {
+    state.turns.push({
+      id: randomUUID(),
+      iteration,
+      // Only the first iteration carries the user prompt; later loop turns are
+      // internal continuations and leave it empty (see providerModelAdapter).
+      userMessage: iteration === 1 ? userPrompt : "",
+      assistantMessage: step.assistantMessage,
+      toolCalls: step.toolCalls,
+      toolResults: toolOutcome.results,
+      ...(skillCalls.length > 0 ? { skillCalls, skillResults } : {}),
+    });
+
+    if (this.sessionStore && sessionId && shouldSnapshot(iteration, options.snapshotEvery)) {
       await this.sessionStore.saveSnapshot(sessionId, runId, state);
     }
-    return state;
+
+    for (const hook of this.afterHooks) {
+      await hook(state, iteration);
+    }
+
+    return Boolean(step.stop || toolOutcome.limitReached || skillLimitReached);
   }
 
   /** Session id of the most recently started active run, if any. */

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { EventSink, ExecutionEvent } from "../events/types";
 import type {
   ModelAdapter,
   ModelProfile,
@@ -10,6 +9,9 @@ import type {
   StepInput,
   StepPlan,
 } from "../model/types";
+import { InMemoryObservabilityExporter } from "../observability/inMemoryExporter";
+import { createObservability } from "../observability/provider";
+import type { ObservabilityProvider, StreamEvent, StreamSink } from "../observability/types";
 import type { ToolPolicyContext, ToolPolicyEngine, ToolPolicyEvaluation } from "../policy/types";
 import type { PromptBundle, PromptSource } from "../prompts/types";
 import { SkillRegistry } from "../skills/registry";
@@ -19,13 +21,43 @@ import { Agent } from "./agent";
 import type { RunState } from "./state";
 import type { RunOptions } from "./types";
 
+class CapturingStreamSink implements StreamSink {
+  readonly events: StreamEvent[] = [];
+  push(event: StreamEvent): void {
+    this.events.push(event);
+  }
+  types(): string[] {
+    return this.events.map((e) => e.type);
+  }
+  ofType(type: string): StreamEvent[] {
+    return this.events.filter((e) => e.type === type);
+  }
+}
+
+interface Obs {
+  provider: ObservabilityProvider;
+  stream: CapturingStreamSink;
+  memory: InMemoryObservabilityExporter;
+}
+
+function makeObs(): Obs {
+  const stream = new CapturingStreamSink();
+  const memory = new InMemoryObservabilityExporter();
+  const provider = createObservability({
+    stream,
+    traceExporters: [memory],
+    metricExporters: [memory],
+    logExporters: [memory],
+    logLevel: "trace",
+  });
+  return { provider, stream, memory };
+}
+
 class FakeModel implements ModelAdapter {
   private readonly step: StepPlan;
-
   constructor(step: StepPlan) {
     this.step = step;
   }
-
   async nextStep(_input: StepInput): Promise<StepPlan> {
     return this.step;
   }
@@ -36,22 +68,13 @@ class FakeStreamingModel implements ModelAdapter {
     await input.onReasoningDelta?.("thinking...");
     await input.onAssistantDelta?.("hello ");
     await input.onAssistantDelta?.("world");
-    return {
-      assistantMessage: "hello world",
-      toolCalls: [],
-      stop: true,
-    };
+    return { assistantMessage: "hello world", toolCalls: [], stop: true };
   }
 }
 
 class FakePromptSource implements PromptSource {
   async load(_promptName: string, task: string): Promise<PromptBundle> {
-    return {
-      system: "system",
-      instructions: [],
-      task,
-      metadata: { name: "default" },
-    };
+    return { system: "system", instructions: [], task, metadata: { name: "default" } };
   }
 }
 
@@ -90,20 +113,10 @@ class AllowPolicy implements ToolPolicyEngine {
   }
 }
 
-class FakeEventSink implements EventSink {
-  readonly events: ExecutionEvent[] = [];
-
-  async push(event: ExecutionEvent): Promise<void> {
-    this.events.push(event);
-  }
-}
-
 class FakeContextManager {
   setGoal(_goal: string): void {}
   async init(): Promise<void> {}
-  async buildWorkingTurns(state: RunState["turns"]): Promise<{
-    recentTurns: RunState["turns"];
-  }> {
+  async buildWorkingTurns(state: RunState["turns"]): Promise<{ recentTurns: RunState["turns"] }> {
     return { recentTurns: state };
   }
 }
@@ -115,7 +128,7 @@ const options: RunOptions = {
 };
 
 test("runtime does not crash on unknown tool", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const runtime = new Agent({
     promptName: "default",
     model: new FakeModel({
@@ -128,7 +141,7 @@ test("runtime does not crash on unknown tool", async () => {
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
 
   const state = await runtime.run("hello", options);
@@ -138,7 +151,7 @@ test("runtime does not crash on unknown tool", async () => {
 });
 
 test("runtime normalizes simple function-style tool names", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const tools = new ToolRegistry();
   tools.register({
     name: "time",
@@ -161,7 +174,7 @@ test("runtime normalizes simple function-style tool names", async () => {
     tools,
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
 
   const state = await runtime.run("hello", options);
@@ -171,8 +184,8 @@ test("runtime normalizes simple function-style tool names", async () => {
   assert.deepEqual(state.turns[0]?.toolResults[0]?.output, { now: "2026-01-01T00:00:00.000Z" });
 });
 
-test("runtime emits limit event and exits gracefully when tool call limit is exceeded", async () => {
-  const events = new FakeEventSink();
+test("runtime streams limit event and exits gracefully when tool call limit is exceeded", async () => {
+  const obs = makeObs();
   const tools = new ToolRegistry();
   tools.register({
     name: "echo",
@@ -195,30 +208,24 @@ test("runtime emits limit event and exits gracefully when tool call limit is exc
     tools,
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
-    limits: {
-      toolTimeoutMs: 1000,
-      maxActionCallsPerRun: 0,
-    },
+    observability: obs.provider,
+    limits: { toolTimeoutMs: 1000, maxActionCallsPerRun: 0 },
   });
 
   const state = await runtime.run("hello", options);
-  // The over-budget call is recorded as a blocked result (not silently dropped).
   assert.equal(state.turns.length, 1);
   assert.equal(state.turns[0]?.toolResults[0]?.ok, false);
   assert.match(state.turns[0]?.toolResults[0]?.error ?? "", /limit/i);
+  assert.equal(obs.stream.ofType("limit.reached").length > 0, true);
+  assert.equal(obs.stream.ofType("run.completed").length > 0, true);
   assert.equal(
-    events.events.some((event) => event.type === "run.limit_reached"),
-    true,
-  );
-  assert.equal(
-    events.events.some((event) => event.type === "run.completed"),
+    obs.memory.getMetrics().some((m) => m.name === "runtime.limit_reached"),
     true,
   );
 });
 
-test("runtime emits model.delta and stream completion events", async () => {
-  const events = new FakeEventSink();
+test("runtime streams model deltas and completion events", async () => {
+  const obs = makeObs();
   const runtime = new Agent({
     promptName: "default",
     model: new FakeStreamingModel(),
@@ -227,54 +234,63 @@ test("runtime emits model.delta and stream completion events", async () => {
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
 
   const state = await runtime.run("hello", options);
   assert.equal(state.turns[0]?.assistantMessage, "hello world");
-  const deltaEvents = events.events.filter((event) => event.type === "model.delta");
-  assert.equal(deltaEvents.length, 2);
-  const reasoningEvents = events.events.filter((event) => event.type === "model.reasoning_delta");
-  assert.equal(reasoningEvents.length, 1);
-  assert.equal(
-    events.events.some((event) => event.type === "model.thinking_started"),
-    true,
-  );
-  assert.equal(
-    events.events.some((event) => event.type === "model.thinking_completed"),
-    true,
-  );
-  assert.equal(
-    events.events.some((event) => event.type === "model.reasoning_stream_completed"),
-    true,
-  );
-  assert.equal(
-    events.events.some((event) => event.type === "model.stream_completed"),
-    true,
-  );
+  assert.equal(obs.stream.ofType("model.output_delta").length, 2);
+  assert.equal(obs.stream.ofType("model.reasoning_delta").length, 1);
+  assert.equal(obs.stream.ofType("model.thinking_started").length > 0, true);
+  assert.equal(obs.stream.ofType("model.thinking_completed").length > 0, true);
+  assert.equal(obs.stream.ofType("model.reasoning_completed").length > 0, true);
+  assert.equal(obs.stream.ofType("model.output_completed").length > 0, true);
 });
 
-test("runtime passes taskType hint into model selector", async () => {
-  const events = new FakeEventSink();
+test("runtime records a span tree with run, iteration, model, and context spans", async () => {
+  const obs = makeObs();
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeStreamingModel(),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  await runtime.run("hello", options);
+  const spans = obs.memory.getSpans();
+  const kinds = spans.map((s) => s.kind);
+  assert.equal(kinds.includes("run"), true);
+  assert.equal(kinds.includes("iteration"), true);
+  assert.equal(kinds.includes("model"), true);
+  // All spans share the run's trace id.
+  const runSpan = spans.find((s) => s.kind === "run");
+  assert.ok(runSpan);
+  for (const span of spans) {
+    assert.equal(span.context.traceId, runSpan?.context.traceId);
+  }
+});
+
+test("runtime passes taskType hint into model selector and stream", async () => {
+  const obs = makeObs();
   const selector = new CapturingModelSelector();
   const runtime = new Agent({
     promptName: "default",
-    model: new FakeModel({
-      assistantMessage: "ok",
-      toolCalls: [],
-      stop: true,
-    }),
+    model: new FakeModel({ assistantMessage: "ok", toolCalls: [], stop: true }),
     modelSelector: selector,
     prompts: new ReasoningPromptSource(),
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
 
   await runtime.run("hello", options);
   assert.equal(selector.seen?.taskType, "reasoning");
-  const selected = events.events.find((event) => event.type === "model.selected");
+  const selected = obs.stream.ofType("model.selected")[0];
   assert.equal(selected?.payload.taskType, "reasoning");
 });
 
@@ -285,7 +301,7 @@ class ApprovalPolicy implements ToolPolicyEngine {
 }
 
 test("approval handler that returns true allows the tool call", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const tools = new ToolRegistry();
   tools.register({
     name: "risky",
@@ -307,19 +323,17 @@ test("approval handler that returns true allows the tool call", async () => {
     tools,
     context: new FakeContextManager() as never,
     policy: new ApprovalPolicy(),
-    eventSink: events,
+    observability: obs.provider,
     approvalHandler: async () => true,
   });
   const state = await runtime.run("hello", options);
   assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
-  assert.equal(
-    events.events.some((e) => e.type === "action.approval_approved"),
-    true,
-  );
+  const resolved = obs.stream.ofType("tool.approval_resolved")[0];
+  assert.equal(resolved?.payload.approved, true);
 });
 
 test("approval handler that returns false blocks the tool call", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const tools = new ToolRegistry();
   tools.register({
     name: "risky",
@@ -341,7 +355,7 @@ test("approval handler that returns false blocks the tool call", async () => {
     tools,
     context: new FakeContextManager() as never,
     policy: new ApprovalPolicy(),
-    eventSink: events,
+    observability: obs.provider,
     approvalHandler: async () => false,
   });
   const state = await runtime.run("hello", options);
@@ -350,7 +364,7 @@ test("approval handler that returns false blocks the tool call", async () => {
 });
 
 test("missing approval handler blocks require_approval", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const tools = new ToolRegistry();
   tools.register({
     name: "risky",
@@ -372,7 +386,7 @@ test("missing approval handler blocks require_approval", async () => {
     tools,
     context: new FakeContextManager() as never,
     policy: new ApprovalPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
   const state = await runtime.run("hello", options);
   assert.equal(state.turns[0]?.toolResults[0]?.ok, false);
@@ -380,7 +394,7 @@ test("missing approval handler blocks require_approval", async () => {
 });
 
 test("RunOptions.limits overrides runtime default limits per run", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const tools = new ToolRegistry();
   tools.register({
     name: "echo",
@@ -402,7 +416,7 @@ test("RunOptions.limits overrides runtime default limits per run", async () => {
     tools,
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
     limits: { toolTimeoutMs: 5000, maxActionCallsPerRun: 100 },
   });
   const state = await runtime.run("hello", {
@@ -410,45 +424,33 @@ test("RunOptions.limits overrides runtime default limits per run", async () => {
     maxIterations: 3,
     limits: { maxActionCallsPerRun: 1 },
   });
-  // Iteration 1 executes the single allowed call (budget 1 → 0).
-  // Iteration 2's call is over budget → recorded as a blocked result, then break.
   assert.equal(state.turns.length, 2);
   assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
   assert.equal(state.turns[1]?.toolResults[0]?.ok, false);
   assert.match(state.turns[1]?.toolResults[0]?.error ?? "", /limit/i);
-  assert.equal(
-    events.events.some((e) => e.type === "run.limit_reached"),
-    true,
-  );
+  assert.equal(obs.stream.ofType("limit.reached").length > 0, true);
 });
 
 test("invoke adapter returns AgentRunResult with summary", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const runtime = new Agent({
     promptName: "default",
-    model: new FakeModel({
-      assistantMessage: "done",
-      toolCalls: [],
-      stop: true,
-    }),
+    model: new FakeModel({ assistantMessage: "done", toolCalls: [], stop: true }),
     modelSelector: new FakeModelSelector(),
     prompts: new FakePromptSource(),
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
 
-  const result = await runtime.invoke({
-    prompt: "hello",
-    execution: options,
-  });
+  const result = await runtime.invoke({ prompt: "hello", execution: options });
   assert.equal(result.summary, "done");
   assert.equal(result.runId.length > 0, true);
 });
 
 test("capabilityScope denyActions blocks tool execution", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const tools = new ToolRegistry();
   tools.register({
     name: "echo",
@@ -470,7 +472,7 @@ test("capabilityScope denyActions blocks tool execution", async () => {
     tools,
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
 
   const state = await runtime.run("hello", {
@@ -482,7 +484,7 @@ test("capabilityScope denyActions blocks tool execution", async () => {
 });
 
 test("runtime executes skillCalls when skill engine is configured", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const skills = new SkillRegistry();
   skills.register({
     name: "summarize",
@@ -504,7 +506,7 @@ test("runtime executes skillCalls when skill engine is configured", async () => 
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
     skills,
   });
   const state = await runtime.run("hello", options);
@@ -522,7 +524,7 @@ class DenyByNamePolicy implements ToolPolicyEngine {
 }
 
 test("skills are governed by the policy engine (a denied skill does not run)", async () => {
-  const events = new FakeEventSink();
+  const obs = makeObs();
   const skills = new SkillRegistry();
   let ran = false;
   skills.register({
@@ -546,16 +548,13 @@ test("skills are governed by the policy engine (a denied skill does not run)", a
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new DenyByNamePolicy("danger_skill"),
-    eventSink: events,
+    observability: obs.provider,
     skills,
   });
   const state = await runtime.run("hello", options);
   assert.equal(ran, false);
   assert.equal(state.turns[0]?.skillResults?.[0]?.ok, false);
-  assert.equal(
-    events.events.some((e) => e.type === "action.blocked"),
-    true,
-  );
+  assert.equal(obs.stream.ofType("tool.blocked").length > 0, true);
 });
 
 class ThrowingModel implements ModelAdapter {
@@ -564,8 +563,8 @@ class ThrowingModel implements ModelAdapter {
   }
 }
 
-test("run emits run.failed and rethrows when a step throws", async () => {
-  const events = new FakeEventSink();
+test("run streams run.failed and rethrows when a step throws", async () => {
+  const obs = makeObs();
   const runtime = new Agent({
     promptName: "default",
     model: new ThrowingModel(),
@@ -574,32 +573,32 @@ test("run emits run.failed and rethrows when a step throws", async () => {
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: events,
+    observability: obs.provider,
   });
   await assert.rejects(() => runtime.run("hello", options), /model exploded/);
-  const failed = events.events.find((e) => e.type === "run.failed");
-  assert.ok(failed, "run.failed must be emitted");
+  const failed = obs.stream.ofType("run.failed")[0];
+  assert.ok(failed, "run.failed must be streamed");
   assert.match(String(failed?.payload.reason ?? ""), /model exploded/);
+  assert.equal(
+    obs.memory
+      .getMetrics()
+      .some((m) => m.name === "model.calls" && m.attributes.status === "error"),
+    true,
+  );
 });
 
 test("handleChannel maps channel request to runtime invoke", async () => {
+  const obs = makeObs();
   const runtime = new Agent({
     promptName: "default",
-    model: new FakeModel({
-      assistantMessage: "channel result",
-      toolCalls: [],
-      stop: true,
-    }),
+    model: new FakeModel({ assistantMessage: "channel result", toolCalls: [], stop: true }),
     modelSelector: new FakeModelSelector(),
     prompts: new FakePromptSource(),
     tools: new ToolRegistry(),
     context: new FakeContextManager() as never,
     policy: new AllowPolicy(),
-    eventSink: new FakeEventSink(),
+    observability: obs.provider,
   });
-  const response = await runtime.handleChannel({
-    input: "hello",
-    runOptions: options,
-  });
+  const response = await runtime.handleChannel({ input: "hello", runOptions: options });
   assert.equal(response.finalMessage, "channel result");
 });

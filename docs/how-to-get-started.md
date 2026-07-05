@@ -168,7 +168,7 @@ import {
   DefaultPolicyEngine,
   FsPromptSource,
   Agent,
-  MemoryEventSink,
+  createObservability,
   ProviderModelAdapter,
   ProviderRegistry,
   CredentialsRegistry,
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
       goal: "Perform a focused local code review",
     }),
     policy: new DefaultPolicyEngine(),
-    eventSink: new MemoryEventSink(),
+    observability: createObservability(),
     sessionStore: new SessionStore(stateDir),
   });
 
@@ -270,18 +270,20 @@ registerCoreDefaults({
 
 ## Stream from the model
 
-To stream both model thinking and final answer text to your user, use a custom
-`EventSink` and forward `model.reasoning_delta` + `model.delta`.
+To stream both model thinking and final answer text to your user, implement a
+`StreamSink` and forward `model.reasoning_delta` + `model.output_delta`, then
+pass it to `createObservability({ stream })`.
 
 ```ts
-import type { EventSink, ExecutionEvent } from "@micro-harnesses/core";
+import { createObservability } from "@micro-harnesses/core";
+import type { StreamEvent, StreamSink } from "@micro-harnesses/core";
 
-class StreamingEventSink implements EventSink {
+class StreamingSink implements StreamSink {
   constructor(
     private readonly onChunk: (kind: "thinking" | "answer", chunk: string) => void,
   ) {}
 
-  async push(event: ExecutionEvent): Promise<void> {
+  push(event: StreamEvent): void {
     if (event.type === "model.reasoning_delta") {
       const delta = event.payload.delta;
       if (typeof delta === "string" && delta.length > 0) {
@@ -290,7 +292,7 @@ class StreamingEventSink implements EventSink {
       return;
     }
 
-    if (event.type === "model.delta") {
+    if (event.type === "model.output_delta") {
       const delta = event.payload.delta;
       if (typeof delta === "string" && delta.length > 0) {
         this.onChunk("answer", delta);
@@ -303,23 +305,25 @@ class StreamingEventSink implements EventSink {
 Replace:
 
 ```ts
-eventSink: new MemoryEventSink(),
+observability: createObservability(),
 ```
 
 with:
 
 ```ts
-eventSink: new StreamingEventSink((kind, chunk) => {
-  // Terminal example:
-  process.stdout.write(kind === "thinking" ? `[thinking] ${chunk}` : chunk);
+observability: createObservability({
+  stream: new StreamingSink((kind, chunk) => {
+    // Terminal example:
+    process.stdout.write(kind === "thinking" ? `[thinking] ${chunk}` : chunk);
 
-  // Web app example:
-  // ws.send(JSON.stringify({ kind, chunk }));
+    // Web app example:
+    // ws.send(JSON.stringify({ kind, chunk }));
+  }),
 }),
 ```
 
 If a provider/model does not expose reasoning tokens, you still get answer
-streaming via `model.delta`.
+streaming via `model.output_delta`.
 
 ---
 
@@ -372,7 +376,7 @@ import {
   DefaultPolicyEngine,
   FsPromptSource,
   Agent,
-  MemoryEventSink,
+  createObservability,
   ProviderModelAdapter,
   ProviderRegistry,
   CredentialsRegistry,
@@ -425,7 +429,7 @@ async function main(): Promise<void> {
       goal: "Perform a focused local code review",
     }),
     policy: new DefaultPolicyEngine(),
-    eventSink: new MemoryEventSink(),
+    observability: createObservability(),
     sessionStore: new SessionStore(stateDir),
   });
 

@@ -47,8 +47,8 @@ Each domain owns its own `types.ts`:
 - `prompts/` — types, fsPromptSource
 - `context/` — types, manager, defaultCompressor
 - `session/` — types, sessionStore
-- `events/` — types, memoryEventSink
-- `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), runEmitter, snapshotCadence
+- `observability/` — types, provider (`ObservabilityProvider`/`createObservability`), tracer, metrics, logger, sampler, redaction, tokenCounter, in-memory/console/jsonl exporters (zero-dep, OTel-shaped traces + metrics + logs + `StreamSink`)
+- `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), runObserver (`RunObserver`: run/iteration/model/action span tree + metrics + logs + stream), snapshotCadence
 - `subagents/` — types, inProcessSubagentRunner
 - `plugins/` — types, host, loader
 
@@ -63,12 +63,16 @@ interface PluginApi {
   registerCredentialsResolver(providerId, resolver);
   registerPolicyRule(rule);       // composed by CompositePolicyEngine (most-restrictive-wins)
   setModelSelector(selector);
+  observability: {                // read tracer/meter/logger + register span/metric/log exporters
+    tracer; meter; logger;
+    registerTraceExporter(e); registerMetricExporter(e); registerLogExporter(e);
+  };
   agents: { spawn(opts): Promise<SubagentResult>; invoke(req): Promise<AgentRunResult> };
 }
 ```
 
 Every `HarnessPlugin` must declare `capabilities: PluginCapability[]`.
-Capabilities: `"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`.
+Capabilities: `"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "observability"`.
 The `PluginHost` throws `PluginCapabilityError` when a plugin uses an
 undeclared surface.
 

@@ -12,11 +12,13 @@ import {
   ContextManager,
   CredentialsRegistry,
   DefaultModelSelector,
+  DefaultObservabilityProvider,
   DefaultPolicyEngine,
   FsPromptSource,
   type HarnessPlugin,
   HarnessRuntime,
   InProcessSubagentRunner,
+  JsonlObservabilityExporter,
   PluginHost,
   PluginLoader,
   ProviderModelAdapter,
@@ -50,6 +52,18 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
   const rootSessionId = runArgs.sessionId ?? `s-${randomUUID()}`;
   const liveEventSink = new LiveEventSink();
 
+  // Observability: live stream to the CLI, durable telemetry to the session dir.
+  const telemetryExporter = new JsonlObservabilityExporter({
+    dir: path.join(runArgs.stateDir, "sessions", rootSessionId, "telemetry"),
+  });
+  const observability = new DefaultObservabilityProvider({
+    resource: { serviceName: "micro-harness-cli", serviceVersion: "1.0.0" },
+    stream: liveEventSink,
+    traceExporters: [telemetryExporter],
+    metricExporters: [telemetryExporter],
+    logExporters: [telemetryExporter],
+  });
+
   const context = new ContextManager({
     stateDir: path.join(runArgs.stateDir, "sessions", rootSessionId, "context"),
     maxWorkingTurns: 6,
@@ -82,7 +96,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
     tools: toolRegistry,
     context,
     policy,
-    eventSink: liveEventSink,
+    observability,
     sessionStore,
     approvalHandler: ttyApprovalHandler,
   });
@@ -129,7 +143,7 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
         tools: childTools,
         context: childContext,
         policy,
-        eventSink: liveEventSink,
+        observability,
         sessionStore,
         approvalHandler: ttyApprovalHandler,
       });
@@ -166,6 +180,14 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
     onAfterLoop: (hook) => runtime.addAfterHook(hook),
     setCompressor: (compressor) => runtime.setCompressor(compressor),
     setModelSelector: (selector) => runtime.setModelSelector(selector),
+    observability: {
+      tracer: observability.tracer,
+      meter: observability.meter,
+      logger: observability.logger,
+      registerTraceExporter: (exporter) => observability.addTraceExporter(exporter),
+      registerMetricExporter: (exporter) => observability.addMetricExporter(exporter),
+      registerLogExporter: (exporter) => observability.addLogExporter(exporter),
+    },
     subagents: subagentRunner,
   });
 

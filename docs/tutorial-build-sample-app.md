@@ -35,7 +35,7 @@ import {
   DefaultModelSelector,
   DefaultPolicyEngine,
   Agent,
-  MemoryEventSink,
+  createObservability,
   ToolRegistry,
   type ModelAdapter,
   type PromptBundle,
@@ -94,7 +94,7 @@ const runtime = new Agent({
     goal: "Demo tutorial run",
   }),
   policy: new DefaultPolicyEngine(),
-  eventSink: new MemoryEventSink(),
+  observability: createObservability(),
 });
 
 const state = await runtime.run("hello microHarnesses", {

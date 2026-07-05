@@ -6,7 +6,7 @@ import test from "node:test";
 import type { Turn } from "../runtime/state";
 import { SessionStore } from "./sessionStore";
 
-test("SessionStore persists manifest, events, and snapshots", async () => {
+test("SessionStore persists manifest and snapshots", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-"));
   const store = new SessionStore(stateDir);
 
@@ -14,12 +14,7 @@ test("SessionStore persists manifest, events, and snapshots", async () => {
     const manifest = await store.initSession({ goal: "ship feature" });
     assert.equal(manifest.goal, "ship feature");
 
-    await store.appendEvent(manifest.sessionId, {
-      type: "run.started",
-      timestamp: new Date().toISOString(),
-      runId: "run-1",
-      payload: {},
-    });
+    await store.appendSupportHistory(manifest.sessionId, { runId: "run-1", note: "started" });
 
     await store.saveSnapshot(manifest.sessionId, "run-1", {
       sessionId: manifest.sessionId,
@@ -30,7 +25,7 @@ test("SessionStore persists manifest, events, and snapshots", async () => {
 
     const sessions = await store.listSessions();
     assert.equal(sessions.length, 1);
-    assert.equal(sessions[0]?.lastEventSeq, 1);
+    assert.equal(sessions[0]?.latestRunId, "run-1");
 
     const restored = await store.loadLatestSnapshot(manifest.sessionId);
     assert.equal(restored?.sessionId, manifest.sessionId);

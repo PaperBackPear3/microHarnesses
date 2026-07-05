@@ -46,7 +46,7 @@ State root:
 Important files:
 
 - `manifest.json` (session metadata and latest pointers)
-- `events.jsonl` (execution event log)
+- `telemetry/` (`spans.jsonl` / `metrics.jsonl` / `logs.jsonl` — observability output when a `JsonlObservabilityExporter` is wired to the session dir)
 - `support-history.jsonl` (support/debug entries)
 - `snapshots/*.json` (periodic runtime snapshots)
 

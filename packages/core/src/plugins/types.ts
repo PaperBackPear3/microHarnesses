@@ -1,6 +1,14 @@
 import type { ChannelDefinition } from "../channels/types";
 import type { CompressorFn } from "../context/types";
 import type { ModelSelector } from "../model/types";
+import type {
+  LogExporter,
+  Logger,
+  Meter,
+  MetricExporter,
+  TraceExporter,
+  Tracer,
+} from "../observability/types";
 import type { PolicyRule } from "../policy/types";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
 import type {
@@ -23,7 +31,23 @@ export type PluginCapability =
   | "model-selector"
   | "channels"
   | "skills"
-  | "agents";
+  | "agents"
+  | "observability";
+
+/**
+ * Observability surface handed to plugins that declare the "observability"
+ * capability. Exposes read access to the tracer/meter/logger for custom
+ * instrumentation and lets plugins register exporters (e.g. an OpenTelemetry
+ * bridge) that receive every span, metric, and log the runtime produces.
+ */
+export interface PluginObservabilityApi {
+  readonly tracer: Tracer;
+  readonly meter: Meter;
+  readonly logger: Logger;
+  registerTraceExporter(exporter: TraceExporter): void;
+  registerMetricExporter(exporter: MetricExporter): void;
+  registerLogExporter(exporter: LogExporter): void;
+}
 
 /**
  * The extension surface handed to a plugin's `register`. Each method is gated
@@ -50,6 +74,8 @@ export interface PluginApi {
    */
   registerPolicyRule(rule: PolicyRule): void;
   setModelSelector(selector: ModelSelector): void;
+  /** Observability surface (gated by the "observability" capability). */
+  observability: PluginObservabilityApi;
   /** Unified agent API path (preferred over `subagents`). */
   agents: {
     spawn(options: SubagentRunOptions): Promise<SubagentResult>;

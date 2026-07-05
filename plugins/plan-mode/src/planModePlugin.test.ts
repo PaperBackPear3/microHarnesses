@@ -22,6 +22,20 @@ function makeApi(tools: Map<string, ToolDefinition>): PluginApi {
     registerCredentialsResolver() {},
     registerPolicyRule() {},
     setModelSelector() {},
+    observability: {
+      get tracer(): never {
+        throw new Error("observability not available in tests");
+      },
+      get meter(): never {
+        throw new Error("observability not available in tests");
+      },
+      get logger(): never {
+        throw new Error("observability not available in tests");
+      },
+      registerTraceExporter() {},
+      registerMetricExporter() {},
+      registerLogExporter() {},
+    },
     agents: {
       async spawn() {
         throw new Error("agents not available in tests");

@@ -1,5 +1,6 @@
+import type { ErrorCategory, Span } from "../observability/types";
 import type { SafetyMode, ToolPolicyEngine } from "../policy/types";
-import type { RunEmitter } from "../runtime/runEmitter";
+import type { RunObserver } from "../runtime/runObserver";
 import type { ApprovalHandler, CapabilityScope, RuntimeLimits } from "../runtime/types";
 import { ToolTimeoutError } from "../shared/errors";
 import type { ToolCall, ToolDefinition, ToolResolver, ToolResult } from "../tools/types";
@@ -11,8 +12,8 @@ export interface ActionExecutionEngineDeps {
   approvalHandler?: ApprovalHandler;
   /**
    * Label describing what kind of action this engine executes ("Tool" or
-   * "Skill"). Only affects support-history/error phrasing; both kinds share the
-   * same governed pipeline and `tool.*` events.
+   * "Skill"). Drives span kind, metric selection, and error phrasing; both
+   * kinds share the same governed pipeline.
    */
   actionLabel?: string;
 }
@@ -26,7 +27,9 @@ export interface ActionExecutionContext {
   promptName: string;
   iteration: number;
   safetyMode?: SafetyMode;
-  emitter: RunEmitter;
+  observer: RunObserver;
+  /** Iteration span the per-action spans are parented under. */
+  parentSpan: Span;
   capabilityScope?: CapabilityScope;
   /** Aborted when the run is killed; propagated into every tool execution. */
   signal?: AbortSignal;
@@ -49,12 +52,14 @@ export interface ActionExecutionOutcome {
   limitReached: boolean;
 }
 
+type ActionKind = "tool" | "skill";
+
 /**
  * Executes the model-requested actions (tools or skills) of a single step:
  * scope/budget/policy evaluation, cancellation checks, timeout/abort
- * enforcement, and event/support-history reporting. Both tools and skills flow
- * through this one governed pipeline. Failures never throw — they become
- * `{ ok: false }` results.
+ * enforcement, and full observability (per-action span, metrics, logs, live
+ * stream). Both tools and skills flow through this one governed pipeline.
+ * Failures never throw — they become `{ ok: false }` results.
  */
 export class ActionExecutionEngine {
   private readonly tools: ToolResolver;
@@ -62,6 +67,7 @@ export class ActionExecutionEngine {
   private readonly limits: RuntimeLimits;
   private readonly approvalHandler?: ApprovalHandler;
   private readonly actionLabel: string;
+  private readonly kind: ActionKind;
 
   constructor(deps: ActionExecutionEngineDeps) {
     this.tools = deps.tools;
@@ -69,6 +75,7 @@ export class ActionExecutionEngine {
     this.limits = deps.limits;
     this.approvalHandler = deps.approvalHandler;
     this.actionLabel = deps.actionLabel ?? "Tool";
+    this.kind = this.actionLabel === "Skill" ? "skill" : "tool";
   }
 
   async executeCalls(
@@ -85,192 +92,216 @@ export class ActionExecutionEngine {
       if (ctx.budget && ctx.budget.remaining <= 0) {
         limitReached = true;
         const message = `${this.actionLabel} "${call.name}" skipped: run tool-call limit of ${this.limits.maxActionCallsPerRun} reached`;
-        await ctx.emitter.emit("run.limit_reached", {
-          action: call.name,
-          limit: this.limits.maxActionCallsPerRun,
-          iteration: ctx.iteration,
-        });
-        await ctx.emitter.support({
-          iteration: ctx.iteration,
+        ctx.observer.countLimitReached(call.name);
+        ctx.observer.countError("limit_reached", call.name);
+        ctx.observer.log("warn", message, {
           action: call.name,
           category: "limit_reached",
-          reason: message,
-        });
-        results.push({ ok: false, output: {}, error: message });
-        continue;
-      }
-
-      if (isOutOfScope(call.name, ctx.capabilityScope)) {
-        const message = `${this.actionLabel} "${call.name}" is out of scope for this agent invocation`;
-        await ctx.emitter.emit("action.blocked", {
-          action: call.name,
-          input: call.input,
-          decision: "deny",
-          reason: message,
           iteration: ctx.iteration,
         });
-        await ctx.emitter.support({
-          iteration: ctx.iteration,
-          action: call.name,
-          category: "out_of_scope",
-          reason: message,
-        });
-        results.push({ ok: false, output: {}, error: message });
-        continue;
-      }
-
-      if (ctx.isCancelled()) {
-        await ctx.emitter.emit("action.killed", {
-          action: call.name,
-          reason: "runtime killed during tool phase",
-          iteration: ctx.iteration,
-        });
-        await ctx.emitter.support({
-          iteration: ctx.iteration,
-          action: call.name,
-          category: "killed",
-          reason: "runtime killed during tool phase",
-        });
-        results.push({
-          ok: false,
-          output: {},
-          error: `${this.actionLabel} skipped because runtime was killed`,
-        });
-        continue;
-      }
-
-      let tool: ToolDefinition;
-      try {
-        tool = this.tools.get(call.name);
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : `Unknown ${this.actionLabel}`;
-        await ctx.emitter.emit("action.blocked", {
-          action: call.name,
-          input: call.input,
-          decision: "deny",
-          reason: message,
-          iteration: ctx.iteration,
-        });
-        await ctx.emitter.support({
-          iteration: ctx.iteration,
-          action: call.name,
-          category: "unknown_tool",
-          reason: message,
-        });
-        results.push({ ok: false, output: {}, error: message });
-        continue;
-      }
-
-      if (call.malformedInput) {
-        const message = `${this.actionLabel} "${call.name}" received malformed arguments from the model`;
-        await ctx.emitter.support({
-          iteration: ctx.iteration,
-          action: call.name,
-          category: "malformed_args",
-          reason: message,
-        });
-        results.push({ ok: false, output: {}, error: message });
-        continue;
-      }
-
-      const policy = await this.policy.evaluate(tool, call, {
-        runId: ctx.emitter.runId,
-        promptName: ctx.promptName,
-        iteration: ctx.iteration,
-        safetyMode: ctx.safetyMode,
-        parentSessionId: ctx.lineage?.parentSessionId,
-        parentRunId: ctx.lineage?.parentRunId,
-        rootSessionId: ctx.lineage?.rootSessionId,
-        depth: ctx.lineage?.depth,
-      });
-
-      // Re-check cancellation after the (async) policy evaluation.
-      if (ctx.isCancelled()) {
-        results.push({
-          ok: false,
-          output: {},
-          error: `${this.actionLabel} skipped because runtime was killed`,
-        });
-        continue;
-      }
-
-      if (policy.decision !== "allow") {
-        if (policy.decision === "require_approval") {
-          const approved = await this.requestApproval(tool, call, policy.reason, ctx);
-          if (!approved || ctx.isCancelled()) {
-            const denialReason = ctx.isCancelled()
-              ? "Approval abandoned because runtime was killed"
-              : this.approvalHandler
-                ? `Approval denied: ${policy.reason}`
-                : `Approval required but no handler configured: ${policy.reason}`;
-            await ctx.emitter.emit("action.blocked", {
-              action: call.name,
-              input: call.input,
-              decision: "require_approval",
-              reason: denialReason,
-              iteration: ctx.iteration,
-            });
-            await ctx.emitter.support({
-              iteration: ctx.iteration,
-              action: call.name,
-              category: "approval_denied",
-              reason: denialReason,
-            });
-            results.push({ ok: false, output: {}, error: denialReason });
-            continue;
-          }
-        } else {
-          await ctx.emitter.emit("action.blocked", {
-            action: call.name,
-            input: call.input,
-            decision: policy.decision,
-            reason: policy.reason,
-            iteration: ctx.iteration,
-          });
-          await ctx.emitter.support({
-            iteration: ctx.iteration,
-            action: call.name,
-            category: "policy",
-            reason: policy.reason,
-          });
-          results.push({ ok: false, output: {}, error: policy.reason });
-          continue;
-        }
-      }
-
-      await ctx.emitter.emit("action.allowed", {
-        action: call.name,
-        input: call.input,
-        iteration: ctx.iteration,
-      });
-
-      if (ctx.budget) {
-        ctx.budget.remaining -= 1;
-      }
-      executed += 1;
-
-      try {
-        const output = await withTimeout(
-          (signal) => tool.execute(call.input, { signal }),
-          this.limits.toolTimeoutMs,
-          ctx.signal,
+        await ctx.observer.stream(
+          "limit.reached",
+          { action: call.name, limit: this.limits.maxActionCallsPerRun, iteration: ctx.iteration },
+          ctx.parentSpan,
         );
-        results.push({ ok: true, output });
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : "unknown tool error";
-        const code = error instanceof Error && "code" in error ? String(error.code) : undefined;
-        await ctx.emitter.support({
-          iteration: ctx.iteration,
-          action: call.name,
-          category: "tool_error",
-          reason: message,
-          code,
-        });
         results.push({ ok: false, output: {}, error: message });
+        continue;
       }
+
+      const single = await this.executeSingle(call, ctx);
+      results.push(single.result);
+      if (single.executed) executed += 1;
     }
 
     return { results, executed, limitReached };
+  }
+
+  private async executeSingle(
+    call: ToolCall,
+    ctx: ActionExecutionContext,
+  ): Promise<{ result: ToolResult; executed: boolean }> {
+    const span = ctx.observer.startAction(this.kind, call.name, ctx.parentSpan, {
+      iteration: ctx.iteration,
+      ...ctx.observer.content({ input: safeJson(call.input) }),
+    });
+    try {
+      return await this.governAndRun(call, ctx, span);
+    } finally {
+      span.end();
+    }
+  }
+
+  private async governAndRun(
+    call: ToolCall,
+    ctx: ActionExecutionContext,
+    span: Span,
+  ): Promise<{ result: ToolResult; executed: boolean }> {
+    if (isOutOfScope(call.name, ctx.capabilityScope)) {
+      const message = `${this.actionLabel} "${call.name}" is out of scope for this agent invocation`;
+      return this.blocked(ctx, span, call, "deny", "out_of_scope", message);
+    }
+
+    if (ctx.isCancelled()) {
+      return this.killed(ctx, span, call, "runtime killed during tool phase");
+    }
+
+    let tool: ToolDefinition;
+    try {
+      tool = this.tools.get(call.name);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : `Unknown ${this.actionLabel}`;
+      return this.blocked(ctx, span, call, "deny", "unknown_tool", message);
+    }
+
+    if (call.malformedInput) {
+      const message = `${this.actionLabel} "${call.name}" received malformed arguments from the model`;
+      ctx.observer.countAction(this.kind, call.name, "malformed_args");
+      ctx.observer.countError("malformed_args", call.name);
+      ctx.observer.log(
+        "warn",
+        message,
+        { action: call.name, category: "malformed_args", iteration: ctx.iteration },
+        span,
+      );
+      span.recordException(new Error(message), "malformed_args");
+      return { result: { ok: false, output: {}, error: message }, executed: false };
+    }
+
+    const policy = await this.policy.evaluate(tool, call, {
+      runId: ctx.observer.runId,
+      promptName: ctx.promptName,
+      iteration: ctx.iteration,
+      safetyMode: ctx.safetyMode,
+      parentSessionId: ctx.lineage?.parentSessionId,
+      parentRunId: ctx.lineage?.parentRunId,
+      rootSessionId: ctx.lineage?.rootSessionId,
+      depth: ctx.lineage?.depth,
+    });
+    ctx.observer.countPolicyDecision(policy.decision, call.name);
+    span.addEvent("policy.evaluated", { decision: policy.decision, reason: policy.reason });
+
+    // Re-check cancellation after the (async) policy evaluation.
+    if (ctx.isCancelled()) {
+      return this.killed(ctx, span, call, "runtime killed during tool phase");
+    }
+
+    if (policy.decision !== "allow") {
+      if (policy.decision === "require_approval") {
+        const approved = await this.requestApproval(tool, call, policy.reason, ctx, span);
+        if (!approved || ctx.isCancelled()) {
+          const denialReason = ctx.isCancelled()
+            ? "Approval abandoned because runtime was killed"
+            : this.approvalHandler
+              ? `Approval denied: ${policy.reason}`
+              : `Approval required but no handler configured: ${policy.reason}`;
+          ctx.observer.countApprovalDenied(call.name);
+          return this.blocked(ctx, span, call, "require_approval", "approval_denied", denialReason);
+        }
+      } else {
+        return this.blocked(ctx, span, call, policy.decision, "policy", policy.reason);
+      }
+    }
+
+    span.addEvent("action.allowed");
+    await ctx.observer.stream(
+      "tool.started",
+      { action: call.name, kind: this.kind, iteration: ctx.iteration },
+      span,
+    );
+
+    if (ctx.budget) {
+      ctx.budget.remaining -= 1;
+    }
+
+    const startedAt = Date.now();
+    try {
+      const output = await withTimeout(
+        (signal) => tool.execute(call.input, { signal, traceContext: span.context }),
+        this.limits.toolTimeoutMs,
+        ctx.signal,
+      );
+      const durationMs = Date.now() - startedAt;
+      ctx.observer.countAction(this.kind, call.name, "ok");
+      ctx.observer.recordActionDuration(this.kind, durationMs, call.name, "ok");
+      span.setStatus({ code: "ok" });
+      span.setAttributes(ctx.observer.content({ output: safeJson(output) }));
+      await ctx.observer.stream(
+        "tool.completed",
+        { action: call.name, kind: this.kind, ok: true, durationMs, iteration: ctx.iteration },
+        span,
+      );
+      return { result: { ok: true, output }, executed: true };
+    } catch (error: unknown) {
+      const durationMs = Date.now() - startedAt;
+      const message = error instanceof Error ? error.message : "unknown tool error";
+      const category: ErrorCategory = error instanceof ToolTimeoutError ? "timeout" : "tool_error";
+      ctx.observer.countAction(this.kind, call.name, "error");
+      ctx.observer.recordActionDuration(this.kind, durationMs, call.name, "error");
+      ctx.observer.countToolError(call.name, category);
+      ctx.observer.countError(category, call.name);
+      ctx.observer.log(
+        "error",
+        message,
+        { action: call.name, category, iteration: ctx.iteration },
+        span,
+      );
+      span.recordException(error, category);
+      await ctx.observer.stream(
+        "tool.completed",
+        { action: call.name, kind: this.kind, ok: false, durationMs, iteration: ctx.iteration },
+        span,
+      );
+      return { result: { ok: false, output: {}, error: message }, executed: true };
+    }
+  }
+
+  private blocked(
+    ctx: ActionExecutionContext,
+    span: Span,
+    call: ToolCall,
+    decision: "deny" | "require_approval",
+    category: ErrorCategory,
+    reason: string,
+  ): { result: ToolResult; executed: boolean } {
+    ctx.observer.countAction(this.kind, call.name, category);
+    ctx.observer.countError(category, call.name);
+    ctx.observer.log(
+      "warn",
+      reason,
+      { action: call.name, category, decision, iteration: ctx.iteration },
+      span,
+    );
+    span.recordException(new Error(reason), category);
+    void ctx.observer.stream(
+      "tool.blocked",
+      { action: call.name, decision, reason, category, iteration: ctx.iteration },
+      span,
+    );
+    return { result: { ok: false, output: {}, error: reason }, executed: false };
+  }
+
+  private killed(
+    ctx: ActionExecutionContext,
+    span: Span,
+    call: ToolCall,
+    reason: string,
+  ): { result: ToolResult; executed: boolean } {
+    ctx.observer.countError("killed", call.name);
+    ctx.observer.log(
+      "warn",
+      reason,
+      { action: call.name, category: "killed", iteration: ctx.iteration },
+      span,
+    );
+    span.recordException(new Error(reason), "killed");
+    return {
+      result: {
+        ok: false,
+        output: {},
+        error: `${this.actionLabel} skipped because runtime was killed`,
+      },
+      executed: false,
+    };
   }
 
   private async requestApproval(
@@ -278,19 +309,21 @@ export class ActionExecutionEngine {
     call: ToolCall,
     reason: string,
     ctx: ActionExecutionContext,
+    span: Span,
   ): Promise<boolean> {
-    await ctx.emitter.emit("action.approval_requested", {
-      action: call.name,
-      input: call.input,
-      reason,
-      iteration: ctx.iteration,
-    });
+    ctx.observer.countApprovalRequest(call.name);
+    span.addEvent("approval.requested", { reason });
+    await ctx.observer.stream(
+      "tool.approval_requested",
+      { action: call.name, reason, iteration: ctx.iteration },
+      span,
+    );
     if (!this.approvalHandler) {
       return false;
     }
     try {
       const approved = await this.approvalHandler({
-        runId: ctx.emitter.runId,
+        runId: ctx.observer.runId,
         iteration: ctx.iteration,
         promptName: ctx.promptName,
         tool,
@@ -302,21 +335,26 @@ export class ActionExecutionEngine {
         rootSessionId: ctx.lineage?.rootSessionId,
         depth: ctx.lineage?.depth,
       });
-      await ctx.emitter.emit(approved ? "action.approval_approved" : "action.approval_denied", {
-        action: call.name,
-        input: call.input,
-        iteration: ctx.iteration,
-        reason,
-      });
+      span.addEvent("approval.resolved", { approved });
+      await ctx.observer.stream(
+        "tool.approval_resolved",
+        { action: call.name, approved, reason, iteration: ctx.iteration },
+        span,
+      );
       return approved;
     } catch (error) {
       const message = error instanceof Error ? error.message : "approval handler failed";
-      await ctx.emitter.emit("action.approval_denied", {
-        action: call.name,
-        input: call.input,
-        iteration: ctx.iteration,
-        reason: `handler error: ${message}`,
-      });
+      span.addEvent("approval.resolved", { approved: false, error: message });
+      await ctx.observer.stream(
+        "tool.approval_resolved",
+        {
+          action: call.name,
+          approved: false,
+          reason: `handler error: ${message}`,
+          iteration: ctx.iteration,
+        },
+        span,
+      );
       return false;
     }
   }
@@ -335,6 +373,14 @@ function isOutOfScope(actionName: string, scope?: CapabilityScope): boolean {
     return true;
   }
   return false;
+}
+
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return "<unserializable>";
+  }
 }
 
 /**

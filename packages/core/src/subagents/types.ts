@@ -1,3 +1,4 @@
+import type { TraceContext } from "../observability/types";
 import type { RunState } from "../runtime/state";
 import type { AgentHandle, AgentInvokeRequest, RunOptions } from "../runtime/types";
 
@@ -12,6 +13,8 @@ export interface SubagentRunOptions {
   signal?: AbortSignal;
   /** Optional goal string for the child session. */
   goal?: string;
+  /** Parent span context, so the child run joins the parent's trace. */
+  parentTrace?: TraceContext;
 }
 
 export interface SubagentResult {

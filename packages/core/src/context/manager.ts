@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { HeuristicTokenCounter } from "../observability/tokenCounter";
+import type { TokenCounter } from "../observability/types";
 import type { Turn } from "../runtime/state";
 import { isNodeError } from "../shared/nodeError";
 import { defaultCompressor } from "./defaultCompressor";
-import type { CompressionResult, CompressorFn, WorkingContext } from "./types";
+import type { CompressionResult, CompressorFn, ContextWindowStats, WorkingContext } from "./types";
 
 export interface ContextManagerOptions {
   stateDir: string;
   maxWorkingTurns: number;
   compressor?: CompressorFn;
   goal?: string;
+  /** Token estimator for context-window utilization stats (default heuristic). */
+  tokenCounter?: TokenCounter;
+  /** Configured context window size in tokens for utilization (default 128000). */
+  contextWindowTokens?: number;
 }
 
 interface SummaryState {
@@ -30,6 +36,8 @@ export class ContextManager {
   private compressor: CompressorFn;
   private goal?: string;
   private latestSummary?: CompressionResult;
+  private readonly tokenCounter: TokenCounter;
+  private readonly contextWindowTokens: number;
 
   constructor(options: ContextManagerOptions) {
     this.summaryDir = path.join(options.stateDir, "summaries");
@@ -37,6 +45,8 @@ export class ContextManager {
     this.maxWorkingTurns = options.maxWorkingTurns;
     this.compressor = options.compressor ?? defaultCompressor;
     this.goal = options.goal;
+    this.tokenCounter = options.tokenCounter ?? new HeuristicTokenCounter();
+    this.contextWindowTokens = options.contextWindowTokens ?? 128_000;
   }
 
   setCompressor(compressor: CompressorFn): void {
@@ -56,16 +66,23 @@ export class ContextManager {
 
   async buildWorkingTurns(turns: Turn[]): Promise<WorkingContext> {
     if (turns.length <= this.maxWorkingTurns) {
-      return { recentTurns: turns, summary: this.latestSummary };
+      const recentTurns = turns;
+      return {
+        recentTurns,
+        summary: this.latestSummary,
+        stats: this.computeStats(turns.length, recentTurns, 0, false),
+      };
     }
 
     const overflowCount = turns.length - this.maxWorkingTurns;
     const summaryState = await this.readSummaryState();
     const newOverflowCount = overflowCount - summaryState.compressedTurnCount;
+    let compressed = false;
     if (newOverflowCount > 0) {
       const delta = turns.slice(summaryState.compressedTurnCount, overflowCount);
       const compression = await this.compressor(delta, { goal: this.goal });
       this.latestSummary = compression;
+      compressed = true;
       const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
       await writeFile(
         summaryFile,
@@ -86,7 +103,43 @@ export class ContextManager {
       await this.writeSummaryState({ compressedTurnCount: overflowCount });
     }
 
-    return { recentTurns: turns.slice(-this.maxWorkingTurns), summary: this.latestSummary };
+    const recentTurns = turns.slice(-this.maxWorkingTurns);
+    return {
+      recentTurns,
+      summary: this.latestSummary,
+      stats: this.computeStats(turns.length, recentTurns, overflowCount, compressed),
+    };
+  }
+
+  /** Estimates context-window utilization for the working turns + summary. */
+  private computeStats(
+    totalTurns: number,
+    workingTurns: Turn[],
+    overflowTurns: number,
+    compressed: boolean,
+  ): ContextWindowStats {
+    let usedTokens = 0;
+    for (const turn of workingTurns) {
+      usedTokens += this.tokenCounter.count(turn.userMessage);
+      usedTokens += this.tokenCounter.count(turn.assistantMessage);
+    }
+    if (this.latestSummary) {
+      usedTokens += this.tokenCounter.count(this.latestSummary.summary);
+      for (const highlight of this.latestSummary.highlights) {
+        usedTokens += this.tokenCounter.count(highlight);
+      }
+    }
+    const maxTokens = this.contextWindowTokens;
+    const utilization = maxTokens > 0 ? Math.min(1, usedTokens / maxTokens) : 0;
+    return {
+      totalTurns,
+      workingTurns: workingTurns.length,
+      overflowTurns,
+      compressed,
+      usedTokens,
+      maxTokens,
+      utilization,
+    };
   }
 
   private async loadLatestSummary(): Promise<CompressionResult | undefined> {

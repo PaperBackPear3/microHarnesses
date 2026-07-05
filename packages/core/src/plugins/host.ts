@@ -1,6 +1,14 @@
 import type { ChannelRegistry } from "../channels/registry";
 import type { CompressorFn } from "../context/types";
 import type { ModelSelector } from "../model/types";
+import type {
+  LogExporter,
+  Logger,
+  Meter,
+  MetricExporter,
+  TraceExporter,
+  Tracer,
+} from "../observability/types";
 import type { CompositePolicyEngine } from "../policy/compositePolicyEngine";
 import type { CredentialsRegistry } from "../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../providers/registry";
@@ -11,6 +19,16 @@ import type { SkillRegistry } from "../skills/registry";
 import type { SubagentRunner } from "../subagents/types";
 import type { ToolRegistry } from "../tools/registry";
 import type { HarnessPlugin, PluginApi, PluginCapability } from "./types";
+
+/** Host wiring for the plugin observability surface. */
+export interface PluginObservabilityHost {
+  tracer: Tracer;
+  meter: Meter;
+  logger: Logger;
+  registerTraceExporter(exporter: TraceExporter): void;
+  registerMetricExporter(exporter: MetricExporter): void;
+  registerLogExporter(exporter: LogExporter): void;
+}
 
 export interface PluginHostDeps {
   tools: ToolRegistry;
@@ -24,6 +42,7 @@ export interface PluginHostDeps {
   channels?: ChannelRegistry;
   skills?: SkillRegistry;
   subagents?: SubagentRunner;
+  observability?: PluginObservabilityHost;
   invokeAgent?(request: AgentInvokeRequest): Promise<AgentRunResult>;
 }
 
@@ -74,6 +93,7 @@ export class PluginHost {
   }
 
   private apiFor(plugin: HarnessPlugin, staged: Array<() => void>): PluginApi {
+    const observabilityHost = this.deps.observability;
     const guard = (capability: PluginCapability): void => {
       if (!plugin.capabilities.includes(capability)) {
         throw new PluginCapabilityError(
@@ -146,6 +166,29 @@ export class PluginHost {
         }
         this.modelSelectorOwner = plugin.name;
         staged.push(() => this.deps.setModelSelector(selector));
+      },
+      get observability() {
+        guard("observability");
+        const host = observabilityHost;
+        if (!host) {
+          throw new PluginCapabilityError(
+            `Plugin "${plugin.name}" requested observability but no provider is configured`,
+          );
+        }
+        return {
+          tracer: host.tracer,
+          meter: host.meter,
+          logger: host.logger,
+          registerTraceExporter: (exporter: TraceExporter) => {
+            staged.push(() => host.registerTraceExporter(exporter));
+          },
+          registerMetricExporter: (exporter: MetricExporter) => {
+            staged.push(() => host.registerMetricExporter(exporter));
+          },
+          registerLogExporter: (exporter: LogExporter) => {
+            staged.push(() => host.registerLogExporter(exporter));
+          },
+        };
       },
       agents: {
         spawn: async (options) => {

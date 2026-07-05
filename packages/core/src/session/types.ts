@@ -7,9 +7,7 @@ export interface SessionManifest {
   latestSnapshotId?: string;
   latestSnapshotPath?: string;
   lastSnapshotSeq?: number;
-  eventLogPath: string;
   supportHistoryPath: string;
-  lastEventSeq: number;
   /** When set, this session is a child spawned by another session. */
   parentSessionId?: string;
   parentRunId?: string;

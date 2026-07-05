@@ -1,4 +1,5 @@
 import type { ModelProfile } from "../model/types";
+import type { TraceContext } from "../observability/types";
 import type { SafetyMode } from "../policy/types";
 import type { ToolCall, ToolDefinition } from "../tools/types";
 import type { RunState } from "./state";
@@ -54,6 +55,8 @@ export interface RunOptions {
   rootSessionId?: string;
   depth?: number;
   spawnedByTool?: string;
+  /** Parent span context, propagated so a subagent run joins the parent trace. */
+  parentTrace?: TraceContext;
   capabilityScope?: CapabilityScope;
 }
 

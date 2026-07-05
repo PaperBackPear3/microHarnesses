@@ -54,15 +54,28 @@ export * from "./context/defaultCompressor";
 export * from "./session/types";
 export * from "./session/sessionStore";
 
-// Events
-export * from "./events/types";
-export * from "./events/memoryEventSink";
+// Observability (traces + metrics + logs; zero-dependency, OTel-shaped)
+export * from "./observability/types";
+export * from "./observability/ids";
+export * from "./observability/span";
+export * from "./observability/tracer";
+export * from "./observability/metrics";
+export * from "./observability/logger";
+export * from "./observability/sampler";
+export * from "./observability/redaction";
+export * from "./observability/tokenCounter";
+export * from "./observability/metricNames";
+export * from "./observability/inMemoryExporter";
+export * from "./observability/consoleExporter";
+export * from "./observability/jsonlExporter";
+export * from "./observability/noop";
+export * from "./observability/provider";
 
 // Runtime
 export * from "./runtime/types";
 export * from "./runtime/state";
 export * from "./runtime/agent";
-export * from "./runtime/runEmitter";
+export * from "./runtime/runObserver";
 export * from "./runtime/snapshotCadence";
 
 // Plugins

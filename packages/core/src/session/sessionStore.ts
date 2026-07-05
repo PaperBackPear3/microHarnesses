@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { ExecutionEvent } from "../events/types";
 import type { RunState } from "../runtime/state";
 import { isNodeError } from "../shared/nodeError";
 import type { InitSessionOptions, SessionManifest } from "./types";
@@ -38,9 +37,7 @@ export class SessionStore {
       goal: options.goal ?? "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      eventLogPath: "events.jsonl",
       supportHistoryPath: "support-history.jsonl",
-      lastEventSeq: 0,
       ...(options.parentSessionId ? { parentSessionId: options.parentSessionId } : {}),
       ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
       ...(options.rootSessionId ? { rootSessionId: options.rootSessionId } : {}),
@@ -59,19 +56,6 @@ export class SessionStore {
       updatedAt: new Date().toISOString(),
     };
     await this.writeManifest(updated);
-  }
-
-  async appendEvent(sessionId: string, event: ExecutionEvent): Promise<void> {
-    const manifest = await this.readManifest(sessionId);
-    const nextSeq = manifest.lastEventSeq + 1;
-    const row = {
-      seq: nextSeq,
-      ...event,
-    };
-    await appendFile(this.eventLogAbsolutePath(manifest), `${JSON.stringify(row)}\n`, "utf8");
-    manifest.lastEventSeq = nextSeq;
-    manifest.updatedAt = new Date().toISOString();
-    await this.writeManifest(manifest);
   }
 
   async appendSupportHistory(sessionId: string, data: Record<string, unknown>): Promise<void> {
@@ -165,10 +149,6 @@ export class SessionStore {
 
   private sessionDir(sessionId: string): string {
     return path.join(this.rootDir, sessionId);
-  }
-
-  private eventLogAbsolutePath(manifest: SessionManifest): string {
-    return path.join(this.sessionDir(manifest.sessionId), manifest.eventLogPath);
   }
 
   private supportHistoryAbsolutePath(manifest: SessionManifest): string {

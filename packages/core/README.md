@@ -34,7 +34,7 @@ new Agent({
   tools,              // ToolRegistry
   context,            // ContextManager
   policy,             // ToolPolicyEngine
-  eventSink,          // EventSink
+  observability,      // ObservabilityProvider (optional; traces + metrics + logs + live stream)
   sessionStore,       // SessionStore   (optional)
   limits,             // RuntimeLimits  (optional)
   approvalHandler,    // ApprovalHandler (optional)
@@ -44,6 +44,35 @@ new Agent({
 Every field is an interface — swap any implementation. Most users compose
 `CompositePolicyEngine` + `PolicyRule`s rather than replacing the policy
 engine wholesale.
+
+## Observability
+
+The runtime emits OpenTelemetry-shaped **traces**, **metrics**, and **logs**
+through a zero-dependency `ObservabilityProvider`, plus a latency-sensitive
+`StreamSink` for live UI progress. Build one with `createObservability({ ... })`
+(or the `DefaultObservabilityProvider`), passing exporters:
+
+```ts
+const memory = new InMemoryObservabilityExporter();
+const observability = createObservability({
+  resource: { serviceName: "my-app", serviceVersion: "1.0.0" },
+  traceExporters: [memory],
+  metricExporters: [memory],
+  logExporters: [memory],
+  // Redaction: capture content by default; flip privacyMode to drop
+  // prompt/reasoning/tool payloads entirely.
+  redaction: { privacyMode: false },
+  // Deterministic sampling (default AlwaysOn):
+  // sampler: new TraceIdRatioSampler(0.1),
+});
+```
+
+The runtime traces a span tree of `run → iteration → { context, model, tool,
+skill }`, records metrics (token usage, tool/skill durations and outcomes,
+context-window utilization — used/free/max/utilization tokens, error counters),
+and structured logs. Concrete OpenTelemetry/OTLP exporters ship as plugins via
+the `"observability"` plugin capability. Omit `observability` to get a
+zero-overhead no-op provider.
 
 ## `FsPromptSource` prompt-pack format
 

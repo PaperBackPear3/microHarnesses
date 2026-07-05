@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ChannelRegistry } from "../channels/registry";
+import { InMemoryObservabilityExporter } from "../observability/inMemoryExporter";
+import { DefaultObservabilityProvider } from "../observability/provider";
 import { CompositePolicyEngine } from "../policy/compositePolicyEngine";
 import { DefaultPolicyEngine } from "../policy/defaultPolicyEngine";
 import { CredentialsRegistry } from "../providers/credentialsRegistry";
@@ -175,4 +177,57 @@ test("host rejects two plugins claiming the model selector", async () => {
   });
   await host.register([makeSelectorPlugin("a")]);
   await assert.rejects(() => host.register([makeSelectorPlugin("b")]), PluginLoadError);
+});
+
+test("host throws when a plugin uses observability without declaring it", async () => {
+  const { host } = buildHost();
+  const plugin: HarnessPlugin = {
+    name: "obs-undeclared",
+    capabilities: ["tools"],
+    register(api: PluginApi) {
+      api.observability.registerTraceExporter({ export() {} });
+    },
+  };
+  await assert.rejects(() => host.register([plugin]), PluginCapabilityError);
+});
+
+test("plugin registers observability exporters when it declares the capability", async () => {
+  const tools = new ToolRegistry();
+  const providers = new ProviderRegistry();
+  const credentials = new CredentialsRegistry();
+  const policy = new CompositePolicyEngine(new DefaultPolicyEngine());
+  const provider = new DefaultObservabilityProvider({ traceExporters: [] });
+  const host = new PluginHost({
+    tools,
+    providers,
+    credentials,
+    policy,
+    onBeforeLoop: () => {},
+    onAfterLoop: () => {},
+    setCompressor: () => {},
+    setModelSelector: () => {},
+    observability: {
+      tracer: provider.tracer,
+      meter: provider.meter,
+      logger: provider.logger,
+      registerTraceExporter: (exporter) => provider.addTraceExporter(exporter),
+      registerMetricExporter: (exporter) => provider.addMetricExporter(exporter),
+      registerLogExporter: (exporter) => provider.addLogExporter(exporter),
+    },
+  });
+
+  const memory = new InMemoryObservabilityExporter();
+  const plugin: HarnessPlugin = {
+    name: "otel-ish",
+    capabilities: ["observability"],
+    register(api: PluginApi) {
+      api.observability.registerTraceExporter(memory);
+    },
+  };
+  await host.register([plugin]);
+
+  const span = provider.tracer.startSpan("test", { kind: "tool" });
+  span.end();
+  await provider.forceFlush();
+  assert.equal(memory.getSpans().length, 1);
 });

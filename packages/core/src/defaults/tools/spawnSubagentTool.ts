@@ -63,6 +63,7 @@ export function createSpawnSubagentTool(
         maxIterations: requestedMaxIterations,
         goal,
         signal: context?.signal,
+        ...(context?.traceContext ? { parentTrace: context.traceContext } : {}),
       });
       return {
         summary: result.summary,

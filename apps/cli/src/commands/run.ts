@@ -155,7 +155,6 @@ async function printSessionInfo(
     const manifest = await composition.sessionStore.getSession(sessionId);
     const details = [
       `updated=${manifest.updatedAt}`,
-      `events=${manifest.lastEventSeq}`,
       `latestRun=${manifest.latestRunId ?? "none"}`,
       `latestSnapshot=${manifest.latestSnapshotId ?? "none"}`,
     ];
