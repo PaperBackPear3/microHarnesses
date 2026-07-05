@@ -1,6 +1,8 @@
 # Composing plugins
 
-Plugins extend behavior without changing core runtime code. Register capabilities through `PluginApi`.
+Plugins are the extension model for the package ecosystem.
+
+Compose plugins in your own app's composition root (or in `apps/cli` as a reference example) to extend behavior without changing core runtime code.
 
 ## What plugins can register
 
@@ -13,16 +15,18 @@ Plugins extend behavior without changing core runtime code. Register capabilitie
 - compressor
 - subagents
 
-## Use built-in plugins
+## Where composition lives
 
-The CLI composition (`apps/cli/src/composition.ts`) wires common defaults:
+Architecture belongs in packages; your app wires those packages together.
+
+In this repository, `apps/cli/src/composition.ts` is a reference composition that wires common defaults:
 
 - provider plugins (OpenAI, Anthropic, Ollama)
 - basic tools plugin
 - subagents plugin
 - plan mode plugin
 
-## Load an extra plugin
+## Load an extra plugin (reference CLI example)
 
 ```bash
 npm run cli:run -- "use my custom tool" \

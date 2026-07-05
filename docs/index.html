@@ -3,27 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>microHarnesses: plugin-first TypeScript runtime for AI agents</title>
+    <title>microHarnesses: package-first TypeScript agent engine</title>
     <meta
       name="description"
-      content="microHarnesses is a plugin-first TypeScript runtime for building tool-using AI agents and CLIs with composable providers, policy, and subagents."
+      content="microHarnesses is a package-first TypeScript ecosystem for building agent runtimes with composable core, providers, and plugins."
     />
     <meta name="google-site-verification" content="XiaZ0FhYsQ8mX0-vIMSuQLizK2h94Tk4UmgGy9thgbk" />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
     <link rel="canonical" href="https://paperbackpear3.github.io/microHarnesses/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="microHarnesses" />
-    <meta property="og:title" content="microHarnesses: plugin-first TypeScript runtime for AI agents" />
+    <meta property="og:title" content="microHarnesses: package-first TypeScript agent engine" />
     <meta
       property="og:description"
-      content="Build tool-using AI agents and CLIs with a composable, plugin-first runtime."
+      content="Build agent runtimes from reusable core, provider, and plugin packages."
     />
     <meta property="og:url" content="https://paperbackpear3.github.io/microHarnesses/" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="microHarnesses: plugin-first TypeScript runtime for AI agents" />
+    <meta name="twitter:title" content="microHarnesses: package-first TypeScript agent engine" />
     <meta
       name="twitter:description"
-      content="Build tool-using AI agents and CLIs with a composable, plugin-first runtime."
+      content="Build agent runtimes from reusable core, provider, and plugin packages."
     />
     <style>
       :root {
@@ -149,14 +149,14 @@
         <div id="page-header">
           <h1>microHarnesses</h1>
           <p class="lead">
-            Build agent loops with ease, extend later.
+            Package-first building blocks for agent runtimes.
           </p>
         </div>
 
         <div id="doc-container">
-          <p id="doc-intro">See the CLI (reference app) in apps/cli for an example composition — you don’t need it to use the runtime. Read its README in the repository.
+          <p id="doc-intro">The product surface is the package ecosystem: <code>@micro-harness/core</code> for the engine, plus provider and plugin packages for capabilities.
 
-Create your agent loop: a minimal runtime core plus optional plugins for providers, tools, policy, planning, and subagents. No big promises — it’s a composable toolkit to help you start small and extend later.</p>
+The CLI in <code>apps/cli</code> is a private reference app that consumes those packages. Use it as an example composition, not as the main architecture target.</p>
 
         <h2>How the library is structured</h2>
         <div class="grid">
@@ -174,6 +174,11 @@ Create your agent loop: a minimal runtime core plus optional plugins for provide
             <strong>Plugin packages</strong>
             Add focused capabilities like planning mode, subagents, and utility
             tools without bloating core.
+          </div>
+          <div class="card">
+            <strong>apps/cli (reference app)</strong>
+            Demonstrates one package composition. Secondary to the reusable
+            package APIs.
           </div>
         </div>
 
@@ -200,7 +205,7 @@ Create your agent loop: a minimal runtime core plus optional plugins for provide
         "url": "https://paperbackpear3.github.io/microHarnesses/",
         "programmingLanguage": "TypeScript",
         "license": "https://opensource.org/license/mit",
-        "description": "Plugin-first TypeScript runtime for building tool-using AI agents and CLIs."
+        "description": "Package-first TypeScript ecosystem for building reusable agent runtimes."
       }
     </script>
     <script>
