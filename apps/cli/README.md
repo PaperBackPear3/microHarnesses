@@ -23,7 +23,7 @@ These are enabled by default on every `run`:
 | Plugin | What it adds |
 |---|---|
 | `builtInProviderPlugins()` from `@micro-harness/providers` | Providers: `openai`, `anthropic`, `ollama` |
-| `basicToolsPlugin` | Tools: `fs_list`, `fs_read`, `fs_write`, `fs_append`, `fs_mkdir`, `fs_move`, `fs_remove`, `grep_search`, `shell_exec` |
+| `basicToolsPlugin` | Tools: `fs_write`, `fs_append`, `fs_mkdir`, `fs_move`, `fs_remove`, `shell_exec` |
 | `subagentsPlugin` | Tool: `spawn_subagent` |
 | `PlanModePlugin` | Tools: `plan_agent`, `explore_agent`, `plan_mode_info` |
 
@@ -110,7 +110,7 @@ npm run cli:run -- "Summarise the repository architecture in 5 bullets." \
 ### 2) Basic file + search tools
 
 ```bash
-npm run cli:run -- "Read the first 40 lines of apps/cli/src/composition.ts and grep for basicToolsPlugin references." \
+npm run cli:run -- "Use shell_exec to run ls -la and summarize what you find." \
   --provider openai --model gpt-4.1-mini
 ```
 

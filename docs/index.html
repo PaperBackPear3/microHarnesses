@@ -3,27 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>microHarnesses: package-first TypeScript agent engine</title>
+    <title>microHarnesses documentation</title>
     <meta
       name="description"
-      content="microHarnesses is a package-first TypeScript ecosystem for building agent runtimes with composable core, providers, and plugins."
+      content="microHarnesses documentation: project overview, architecture, package concepts, getting started, and tutorial."
     />
     <meta name="google-site-verification" content="XiaZ0FhYsQ8mX0-vIMSuQLizK2h94Tk4UmgGy9thgbk" />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
     <link rel="canonical" href="https://paperbackpear3.github.io/microHarnesses/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="microHarnesses" />
-    <meta property="og:title" content="microHarnesses: package-first TypeScript agent engine" />
+    <meta property="og:title" content="microHarnesses documentation" />
     <meta
       property="og:description"
-      content="Build agent runtimes from reusable core, provider, and plugin packages."
+      content="Project docs, architecture, package reference, getting started, and a sample-app tutorial."
     />
     <meta property="og:url" content="https://paperbackpear3.github.io/microHarnesses/" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="microHarnesses: package-first TypeScript agent engine" />
+    <meta name="twitter:title" content="microHarnesses documentation" />
     <meta
       name="twitter:description"
-      content="Build agent runtimes from reusable core, provider, and plugin packages."
+      content="Project docs, architecture, package reference, getting started, and a sample-app tutorial."
     />
     <style>
       :root {
@@ -37,15 +37,15 @@
         color: CanvasText;
       }
       .layout {
-        max-width: 1120px;
+        max-width: 1160px;
         margin: 0 auto;
-        padding: 2rem 1.25rem;
+        padding: 1.5rem 1.1rem;
         display: grid;
-        grid-template-columns: 260px minmax(0, 1fr);
-        gap: 1.5rem;
+        grid-template-columns: 290px minmax(0, 1fr);
+        gap: 1rem;
       }
       aside {
-        border: 1px solid color-mix(in oklab, CanvasText 18%, Canvas 82%);
+        border: 1px solid color-mix(in oklab, CanvasText 16%, Canvas 84%);
         border-radius: 12px;
         padding: 1rem;
         height: fit-content;
@@ -53,57 +53,72 @@
         top: 1rem;
       }
       main {
-        border: 1px solid color-mix(in oklab, CanvasText 12%, Canvas 88%);
+        border: 1px solid color-mix(in oklab, CanvasText 10%, Canvas 90%);
         border-radius: 12px;
-        padding: 1.25rem;
+        padding: 1.1rem;
       }
       h1 {
-        margin: 0 0 0.75rem;
-      }
-      h3 {
-        margin: 0 0 0.6rem;
+        margin: 0 0 0.65rem;
       }
       h2 {
-        margin: 2rem 0 0.75rem;
+        margin: 1.5rem 0 0.65rem;
+      }
+      h3 {
+        margin: 0;
       }
       p {
-        margin: 0 0 1rem;
-      }
-      .lead {
-        font-size: 1.1rem;
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 0.75rem;
-      }
-      .card {
-        border: 1px solid color-mix(in oklab, CanvasText 18%, Canvas 82%);
-        border-radius: 10px;
-        padding: 0.85rem;
-      }
-      .card strong {
-        display: block;
-        margin-bottom: 0.35rem;
-      }
-      .docs-menu {
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-      .docs-menu li {
-        margin: 0 0 0.8rem;
-      }
-      .docs-links {
-        font-size: 0.95rem;
-      }
-      .docs-links a {
-        margin-right: 0.5rem;
+        margin: 0 0 0.9rem;
       }
       a {
         color: LinkText;
       }
-      @media (max-width: 900px) {
+      .menu-group {
+        margin-bottom: 1rem;
+      }
+      .menu-group h4 {
+        margin: 0 0 0.45rem;
+        font-size: 0.95rem;
+      }
+      .menu-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .menu-list li {
+        margin: 0 0 0.4rem;
+      }
+      .menu-list a {
+        text-decoration: none;
+      }
+      .hero {
+        margin-bottom: 1rem;
+      }
+      .lead {
+        font-size: 1.06rem;
+      }
+      .cta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 0.7rem;
+        margin-top: 0.7rem;
+      }
+      .card {
+        border: 1px solid color-mix(in oklab, CanvasText 16%, Canvas 84%);
+        border-radius: 10px;
+        padding: 0.8rem;
+      }
+      .card strong {
+        display: block;
+        margin-bottom: 0.3rem;
+      }
+      .home-links {
+        margin-top: 1rem;
+        font-size: 0.94rem;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+      @media (max-width: 920px) {
         .layout {
           grid-template-columns: 1fr;
         }
@@ -116,63 +131,81 @@
   <body>
     <div class="layout">
       <aside>
-        <h3>Docs</h3>
-        <ul class="docs-menu">
-          <li>
-            <strong><a href="#" data-home style="color: inherit; text-decoration: none;">Home</a></strong>
-          </li>
-          <li>
-            <strong>Getting started</strong>
-            <div class="docs-links">
-              <a href="./how-to-get-started.md" data-doc="how-to-get-started.md">Open</a>
-              <a href="./how-to-get-started.md" download>Download .md</a>
-            </div>
-          </li>
-          <li>
-            <strong>Composing plugins</strong>
-            <div class="docs-links">
-              <a href="./how-to-compose-plugins.md" data-doc="how-to-compose-plugins.md">Open</a>
-              <a href="./how-to-compose-plugins.md" download>Download .md</a>
-            </div>
-          </li>
-        </ul>
+        <div class="menu-group">
+          <h4><a href="#" data-home style="color: inherit; text-decoration: none">microHarnesses docs</a></h4>
+        </div>
+
+        <div class="menu-group">
+          <h4>Start here</h4>
+          <ul class="menu-list">
+            <li><a href="./how-to-get-started.md" data-doc="how-to-get-started.md">Getting started</a></li>
+            <li><a href="./tutorial-build-sample-app.md" data-doc="tutorial-build-sample-app.md">Tutorial: sample app</a></li>
+          </ul>
+        </div>
+
+        <div class="menu-group">
+          <h4>Core docs</h4>
+          <ul class="menu-list">
+            <li><a href="./what-is-microharnesses.md" data-doc="what-is-microharnesses.md">What is microHarnesses</a></li>
+            <li><a href="./how-runtime-works.md" data-doc="how-runtime-works.md">How runtime works</a></li>
+            <li><a href="./package-reference.md" data-doc="package-reference.md">Package reference</a></li>
+            <li><a href="./how-to-compose-plugins.md" data-doc="how-to-compose-plugins.md">Composing plugins</a></li>
+          </ul>
+        </div>
+
+        <div class="menu-group">
+          <h4>Package READMEs</h4>
+          <ul class="menu-list">
+            <li><a href="https://github.com/PaperBackPear3/microHarnesses/tree/main/packages/core">core</a></li>
+            <li><a href="https://github.com/PaperBackPear3/microHarnesses/tree/main/plugins/basic-tools">plugin-basic-tools</a></li>
+            <li><a href="https://github.com/PaperBackPear3/microHarnesses/tree/main/plugins/plan-mode">plugin-plan-mode</a></li>
+            <li><a href="https://github.com/PaperBackPear3/microHarnesses/tree/main/plugins/example-tools">plugin-example-tools</a></li>
+          </ul>
+        </div>
       </aside>
 
       <main>
-        <div id="page-header">
-          <h1>microHarnesses</h1>
+        <div id="page-header" class="hero">
+          <h1>microHarnesses documentation</h1>
           <p class="lead">
-            Package-first building blocks for agent runtimes.
+            Build agent runtimes from composable TypeScript packages.
+          </p>
+          <p>
+            This docs site includes project-level architecture, package concepts, a getting-started path, and a tutorial that builds a full sample app.
+          </p>
+
+          <div class="cta-grid">
+            <div class="card">
+              <strong>Getting started</strong>
+              Set up a minimal runtime quickly.
+              <div><a href="./how-to-get-started.md" data-doc="how-to-get-started.md">Open guide</a></div>
+            </div>
+            <div class="card">
+              <strong>Tutorial</strong>
+              Build a sample Node.js app with plugin tools.
+              <div><a href="./tutorial-build-sample-app.md" data-doc="tutorial-build-sample-app.md">Open tutorial</a></div>
+            </div>
+            <div class="card">
+              <strong>Architecture</strong>
+              Understand loop internals and policy flow.
+              <div><a href="./how-runtime-works.md" data-doc="how-runtime-works.md">Open architecture docs</a></div>
+            </div>
+          </div>
+
+          <p class="home-links">
+            Repository: <a href="https://github.com/PaperBackPear3/microHarnesses">github.com/PaperBackPear3/microHarnesses</a>
           </p>
         </div>
 
         <div id="doc-container">
-          <p id="doc-intro">The product surface is the package ecosystem: <code>@micro-harness/core</code> for the engine, plus plugin packages for optional capabilities.</p>
-
-        <h2>How the library is structured</h2>
-        <div class="grid">
-          <div class="card">
-            <strong>@micro-harness/core</strong>
-            Runtime loop, tool execution, context/session management, plugin
-            host.
-          </div>
-          <div class="card">
-            <strong>Plugin packages</strong>
-            Add focused capabilities like planning mode, subagents, and utility
-            tools without bloating core.
-          </div>
+          <h2>Documentation map</h2>
+          <p>
+            Use the left navigation to open docs directly in this page. Markdown docs are loaded client-side.
+          </p>
+          <p>
+            Suggested reading order: <a href="./what-is-microharnesses.md" data-doc="what-is-microharnesses.md">overview</a> -> <a href="./how-runtime-works.md" data-doc="how-runtime-works.md">runtime internals</a> -> <a href="./package-reference.md" data-doc="package-reference.md">package reference</a> -> <a href="./how-to-get-started.md" data-doc="how-to-get-started.md">getting started</a> -> <a href="./tutorial-build-sample-app.md" data-doc="tutorial-build-sample-app.md">tutorial</a>.
+          </p>
         </div>
-
-        <h2>Why plugins</h2>
-        <p>
-          Plugins keep the system flexible: teams can swap implementations,
-          enforce policy, and extend behavior without forking the runtime. You
-          build the agent stack you actually need, and evolve it incrementally.
-        </p>
-
-        <p>
-          <a href="https://github.com/PaperBackPear3/microHarnesses">GitHub repository</a>
-        </p>
       </main>
     </div>
 
@@ -190,75 +223,67 @@
       }
     </script>
     <script>
-      // Simple client-side markdown loader using marked.js
-      const links = document.querySelectorAll('a[data-doc]');
-      const container = document.getElementById('doc-container');
-      const pageHeader = document.getElementById('page-header');
+      const links = document.querySelectorAll("a[data-doc]");
+      const container = document.getElementById("doc-container");
+      const pageHeader = document.getElementById("page-header");
       const initialHomeHtml = container.innerHTML;
 
       function showHome({ pushHistory = true } = {}) {
         container.innerHTML = initialHomeHtml;
-        pageHeader.style.display = 'block';
+        pageHeader.style.display = "block";
         if (pushHistory) {
-          window.history.pushState({ view: 'home' }, '', './');
+          window.history.pushState({ view: "home" }, "", "./");
         }
       }
 
       async function loadDoc(path, { pushHistory = true } = {}) {
         try {
           const res = await fetch(path);
-          if (!res.ok) throw new Error('Failed to fetch ' + path);
+          if (!res.ok) throw new Error("Failed to fetch " + path);
           const md = await res.text();
           const html = marked.parse(md);
           container.innerHTML = html;
-          pageHeader.style.display = 'none';
+          pageHeader.style.display = "none";
           if (pushHistory) {
-            window.history.pushState({ view: 'doc', path }, '', path);
+            window.history.pushState({ view: "doc", path }, "", path);
           }
         } catch (err) {
-          container.innerHTML = '<p>Unable to load doc.</p>';
+          container.innerHTML = "<p>Unable to load doc.</p>";
           console.error(err);
         }
       }
 
-      links.forEach(a => {
-        a.addEventListener('click', (e) => {
+      links.forEach((a) => {
+        a.addEventListener("click", (e) => {
           e.preventDefault();
-          const path = a.getAttribute('data-doc');
+          const path = a.getAttribute("data-doc");
           loadDoc(path);
         });
       });
 
-      // home link handler
-      const homeLink = document.querySelector('a[data-home]');
+      const homeLink = document.querySelector("a[data-home]");
       if (homeLink) {
-        homeLink.addEventListener('click', (e) => {
+        homeLink.addEventListener("click", (e) => {
           e.preventDefault();
           showHome();
         });
       }
 
-      // If URL points to a doc, load it on open
-      const p = location.pathname.split('/').pop();
-      if (p && p.endsWith('.md')) {
-        window.history.replaceState({ view: 'doc', path: p }, '', p);
-        loadDoc(p, { pushHistory: false });
+      const path = location.pathname.split("/").pop();
+      if (path && path.endsWith(".md")) {
+        window.history.replaceState({ view: "doc", path }, "", path);
+        loadDoc(path, { pushHistory: false });
       } else {
-        window.history.replaceState({ view: 'home' }, '', './');
+        window.history.replaceState({ view: "home" }, "", "./");
       }
 
-      window.addEventListener('popstate', (event) => {
+      window.addEventListener("popstate", (event) => {
         const state = event.state;
-        if (state?.view === 'doc' && state.path) {
+        if (state?.view === "doc" && state.path) {
           loadDoc(state.path, { pushHistory: false });
           return;
         }
         showHome({ pushHistory: false });
-      });
-
-      // clicking the header title goes back to home
-      pageHeader.addEventListener('click', () => {
-        showHome();
       });
     </script>
   </body>
