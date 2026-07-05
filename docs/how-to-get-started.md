@@ -268,6 +268,61 @@ registerCoreDefaults({
 
 ---
 
+## Stream from the model
+
+To stream both model thinking and final answer text to your user, use a custom
+`EventSink` and forward `model.reasoning_delta` + `model.delta`.
+
+```ts
+import type { EventSink, ExecutionEvent } from "@micro-harnesses/core";
+
+class StreamingEventSink implements EventSink {
+  constructor(
+    private readonly onChunk: (kind: "thinking" | "answer", chunk: string) => void,
+  ) {}
+
+  async push(event: ExecutionEvent): Promise<void> {
+    if (event.type === "model.reasoning_delta") {
+      const delta = event.payload.delta;
+      if (typeof delta === "string" && delta.length > 0) {
+        this.onChunk("thinking", delta);
+      }
+      return;
+    }
+
+    if (event.type === "model.delta") {
+      const delta = event.payload.delta;
+      if (typeof delta === "string" && delta.length > 0) {
+        this.onChunk("answer", delta);
+      }
+    }
+  }
+}
+```
+
+Replace:
+
+```ts
+eventSink: new MemoryEventSink(),
+```
+
+with:
+
+```ts
+eventSink: new StreamingEventSink((kind, chunk) => {
+  // Terminal example:
+  process.stdout.write(kind === "thinking" ? `[thinking] ${chunk}` : chunk);
+
+  // Web app example:
+  // ws.send(JSON.stringify({ kind, chunk }));
+}),
+```
+
+If a provider/model does not expose reasoning tokens, you still get answer
+streaming via `model.delta`.
+
+---
+
 ## 5. Add scripts to `package.json`
 
 ```json
