@@ -1,6 +1,8 @@
 import type { CredentialsRegistry } from "../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
+import type { AfterLoopHook, BeforeLoopHook } from "../runtime/types";
+import { ValidationError } from "../shared/errors";
 import type { SubagentRunner } from "../subagents/types";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
@@ -14,6 +16,11 @@ import {
 export * from "./providers";
 export * from "./tools/workspaceReadOnly";
 export * from "./tools/spawnSubagentTool";
+
+export interface LoopHookRegistrar {
+  onBeforeLoop(hook: BeforeLoopHook): void;
+  onAfterLoop(hook: AfterLoopHook): void;
+}
 
 export interface RegisterCoreDefaultsOptions {
   providerRegistry: ProviderRegistry;
@@ -31,6 +38,12 @@ export interface RegisterCoreDefaultsOptions {
   }>;
   /** Explicit tools to register in the runtime's tool catalog. */
   tools?: ToolDefinition[];
+  /** Runtime/composition hook target. Required when beforeHooks/afterHooks are provided. */
+  hookRegistrar?: LoopHookRegistrar;
+  /** Native before-loop hooks to register in declaration order. */
+  beforeHooks?: BeforeLoopHook[];
+  /** Native after-loop hooks to register in declaration order. */
+  afterHooks?: AfterLoopHook[];
 }
 
 export interface CreateCoreDefaultToolsOptions {
@@ -70,5 +83,20 @@ export function registerCoreDefaults(options: RegisterCoreDefaultsOptions): void
 
   if (options.tools && options.tools.length > 0) {
     registerTools(options.toolRegistry, options.tools);
+  }
+
+  const beforeHooks = options.beforeHooks ?? [];
+  const afterHooks = options.afterHooks ?? [];
+  if (beforeHooks.length === 0 && afterHooks.length === 0) return;
+  if (!options.hookRegistrar) {
+    throw new ValidationError(
+      "registerCoreDefaults requires hookRegistrar when beforeHooks/afterHooks are provided",
+    );
+  }
+  for (const hook of beforeHooks) {
+    options.hookRegistrar.onBeforeLoop(hook);
+  }
+  for (const hook of afterHooks) {
+    options.hookRegistrar.onAfterLoop(hook);
   }
 }

@@ -17,6 +17,7 @@ import {
   PluginLoader,
   ProviderModelAdapter,
   ProviderRegistry,
+  registerCoreDefaults,
   SessionStore,
   type SubagentBuiltRuntime,
   type SubagentRunOptions,
@@ -84,6 +85,17 @@ export async function buildComposition(runArgs: RunArgs): Promise<Composition> {
     eventSink: liveEventSink,
     sessionStore,
     approvalHandler: ttyApprovalHandler,
+  });
+
+  registerCoreDefaults({
+    providerRegistry,
+    credentialsRegistry,
+    toolRegistry,
+    includeBuiltInProviders: false,
+    hookRegistrar: {
+      onBeforeLoop: (hook) => runtime.addBeforeHook(hook),
+      onAfterLoop: (hook) => runtime.addAfterHook(hook),
+    },
   });
 
   const subagentFactory: SubagentRuntimeFactory = {

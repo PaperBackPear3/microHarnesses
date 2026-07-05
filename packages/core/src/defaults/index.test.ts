@@ -93,3 +93,51 @@ test("createCoreDefaultTools composes optional bundles", () => {
   const names = tools.map((tool) => tool.name);
   assert.deepEqual(names, ["fs_list", "fs_read", "grep_search"]);
 });
+
+test("registerCoreDefaults registers native loop hooks in declaration order", () => {
+  const providers = new ProviderRegistry();
+  const credentials = new CredentialsRegistry();
+  const tools = new ToolRegistry();
+  const before: unknown[] = [];
+  const after: unknown[] = [];
+  const beforeHooks = [() => {}, () => {}];
+  const afterHooks = [() => {}];
+
+  registerCoreDefaults({
+    providerRegistry: providers,
+    credentialsRegistry: credentials,
+    toolRegistry: tools,
+    includeBuiltInProviders: false,
+    hookRegistrar: {
+      onBeforeLoop(hook) {
+        before.push(hook);
+      },
+      onAfterLoop(hook) {
+        after.push(hook);
+      },
+    },
+    beforeHooks,
+    afterHooks,
+  });
+
+  assert.deepEqual(before, beforeHooks);
+  assert.deepEqual(after, afterHooks);
+});
+
+test("registerCoreDefaults throws when hooks are provided without hookRegistrar", () => {
+  const providers = new ProviderRegistry();
+  const credentials = new CredentialsRegistry();
+  const tools = new ToolRegistry();
+
+  assert.throws(
+    () =>
+      registerCoreDefaults({
+        providerRegistry: providers,
+        credentialsRegistry: credentials,
+        toolRegistry: tools,
+        includeBuiltInProviders: false,
+        beforeHooks: [() => {}],
+      }),
+    /hookRegistrar/,
+  );
+});

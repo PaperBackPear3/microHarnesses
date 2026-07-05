@@ -115,11 +115,23 @@ registerCoreDefaults({
     workspaceTools: { rootDir: process.cwd() },
     subagents: subagentRunner,
   }),
+  hookRegistrar: {
+    onBeforeLoop: (hook) => runtime.addBeforeHook(hook),
+    onAfterLoop: (hook) => runtime.addAfterHook(hook),
+  },
+  beforeHooks: [
+    async (state, iteration) => {
+      // composition-owned hook behavior
+    },
+  ],
+  afterHooks: [],
 });
 ```
 
 Custom providers are registered by passing `{ adapter, credentials }` entries
-to `providers`. Custom tools are registered by passing `tools`.
+to `providers`. Custom tools are registered by passing `tools`. Native loop
+hooks can be registered through `beforeHooks` / `afterHooks` when
+`hookRegistrar` is provided by the composition root.
 
 ## Command-safety rule
 

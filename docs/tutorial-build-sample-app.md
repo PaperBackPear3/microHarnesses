@@ -1,6 +1,11 @@
 # Tutorial: build a sample application
 
-This tutorial builds a small Node.js app that runs a microHarnesses runtime with plugin tools.
+This tutorial builds a small Node.js app that runs a microHarnesses runtime with
+plugin tools.
+
+Use this tutorial when you want a **full sample app walkthrough**.
+If you want a faster, task-focused setup, start with
+`docs/how-to-get-started.md`.
 
 ## Goal
 

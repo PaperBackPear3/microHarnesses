@@ -1,5 +1,14 @@
 # Getting started: local code review agent (Ollama + gemma4:latest)
 
+## Which guide should you use?
+
+Use this page if you want the **fastest path** to a working runtime focused on
+one concrete use case (local code review).
+
+If you want a broader end-to-end walkthrough of a generic Node app structure
+and plugin wiring, use **Tutorial: build a sample application**
+(`docs/tutorial-build-sample-app.md`).
+
 ## Goal
 
 Build a small **local code review agent** that runs with:
@@ -236,6 +245,23 @@ void main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : "Unknown error";
   console.error(`Error: ${message}`);
   process.exit(1);
+});
+```
+
+You can also register runtime-native loop hooks in the same call by providing
+`hookRegistrar`, `beforeHooks`, and `afterHooks`:
+
+```ts
+registerCoreDefaults({
+  providerRegistry,
+  credentialsRegistry,
+  toolRegistry,
+  includeBuiltInProviders: false,
+  hookRegistrar: {
+    onBeforeLoop: (hook) => runtime.addBeforeHook(hook),
+    onAfterLoop: (hook) => runtime.addAfterHook(hook),
+  },
+  beforeHooks: [async (_state, _iteration) => {}],
 });
 ```
 
