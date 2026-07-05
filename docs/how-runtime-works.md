@@ -29,6 +29,22 @@ The loop stops when:
 - **Execution plane**: runs tools with timeout + abort signal.
 - **State plane**: persists events, turns, and snapshots.
 
+## Prompt loading (`PromptSource` / `FsPromptSource`)
+
+At run start, runtime loads one prompt bundle for the selected `agentName` via `PromptSource`.
+
+With `FsPromptSource`, prompt files are loaded from:
+
+- `<rootDir>/<agentName>/system.md` (required)
+- optional section files from `sections` (default: `developer.md`, `tools.md`)
+- optional `<rootDir>/<agentName>/prompt.meta.json`
+
+Section-to-role mapping:
+
+- `developer` section -> developer role
+- `tools` section -> tools role
+- any other section name -> custom role
+
 ## Policy and safety
 
 Default flow:

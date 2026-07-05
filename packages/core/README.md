@@ -44,6 +44,52 @@ Every field is an interface — swap any implementation. Most users compose
 `CompositePolicyEngine` + `PolicyRule`s rather than replacing the policy
 engine wholesale.
 
+## `FsPromptSource` prompt-pack format
+
+`FsPromptSource` loads prompts from:
+
+`<rootDir>/<agentName>/`
+
+Required file:
+
+- `system.md`
+
+Optional files:
+
+- `developer.md`
+- `tools.md`
+- any extra section file you configure through `sections` (for example `constraints.md`)
+
+Optional metadata file:
+
+- `prompt.meta.json` (`name`, `modelHint`, `taskTypeHint`, `safetyMode`, `tags`)
+
+Default behavior:
+
+- `sections` defaults to `["developer", "tools"]`
+- missing optional section files are skipped
+- role mapping:
+  - section `"developer"` -> instruction role `"developer"`
+  - section `"tools"` -> instruction role `"tools"`
+  - any other section name -> instruction role `"custom"` (with `name` set to section name)
+
+Example:
+
+```ts
+const prompts = new FsPromptSource({
+  rootDir: path.resolve("prompts"),
+  sections: ["developer", "tools", "constraints", "examples"],
+});
+```
+
+For agent `code-review`, this resolves:
+
+- `prompts/code-review/system.md` (required)
+- `prompts/code-review/developer.md` (optional)
+- `prompts/code-review/tools.md` (optional)
+- `prompts/code-review/constraints.md` (optional, custom role)
+- `prompts/code-review/examples.md` (optional, custom role)
+
 ## Core defaults: capabilities-first composition
 
 Core exposes provider/tool management primitives and optional built-ins.
@@ -100,6 +146,12 @@ Plugins declare which surfaces they use:
 
 The host throws `PluginCapabilityError` when a plugin uses an undeclared
 surface.
+
+## Further reading
+
+- [Concepts and decision guide](../../docs/concepts-and-decision-guide.md)
+- [Runtime interfaces reference](../../docs/reference-runtime-interfaces.md)
+- [How runtime works](../../docs/how-runtime-works.md)
 
 ## License
 

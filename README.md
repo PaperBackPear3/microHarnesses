@@ -9,7 +9,9 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 - Website: https://paperbackpear3.github.io/microHarnesses/
 - Project + architecture: [`docs/what-is-microharnesses.md`](docs/what-is-microharnesses.md)
 - How runtime works: [`docs/how-runtime-works.md`](docs/how-runtime-works.md)
+- Concepts + adoption choices: [`docs/concepts-and-decision-guide.md`](docs/concepts-and-decision-guide.md)
 - Package concepts + functionality: [`docs/package-reference.md`](docs/package-reference.md)
+- Runtime interfaces reference: [`docs/reference-runtime-interfaces.md`](docs/reference-runtime-interfaces.md)
 - Getting started: [`docs/how-to-get-started.md`](docs/how-to-get-started.md)
 - Tutorial (build a sample app): [`docs/tutorial-build-sample-app.md`](docs/tutorial-build-sample-app.md)
 - Plugin composition: [`docs/how-to-compose-plugins.md`](docs/how-to-compose-plugins.md)

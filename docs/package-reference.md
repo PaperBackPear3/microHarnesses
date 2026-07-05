@@ -21,6 +21,7 @@ This page documents package functionality and the concepts each package is respo
 - **Interfaces first**: model, prompts, policy, session, tools are all replaceable seams.
 - **Capability boundaries**: plugin APIs are guarded by declared capabilities.
 - **Most restrictive wins**: policy composition can only increase restrictions.
+- **Prompt pack convention**: `FsPromptSource` uses `<rootDir>/<agentName>/system.md` plus optional sections (`developer`, `tools`, and custom sections).
 
 ---
 

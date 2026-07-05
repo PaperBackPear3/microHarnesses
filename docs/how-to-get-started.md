@@ -97,6 +97,48 @@ You can use:
 Use tools only when needed, keep exploration focused.
 ```
 
+### How `FsPromptSource` reads these files
+
+With:
+
+```ts
+new FsPromptSource({ rootDir: path.resolve("prompts") });
+```
+
+and runtime call:
+
+```ts
+runtime.run("code-review", ...);
+```
+
+it resolves this folder:
+
+```text
+prompts/code-review/
+```
+
+File behavior:
+
+- `system.md`: required
+- `developer.md`: optional (loaded by default sections)
+- `tools.md`: optional (loaded by default sections)
+- `prompt.meta.json`: optional metadata
+
+Default sections are `["developer", "tools"]`. You can override:
+
+```ts
+new FsPromptSource({
+  rootDir: path.resolve("prompts"),
+  sections: ["developer", "tools", "constraints", "examples"],
+});
+```
+
+Section roles:
+
+- `developer` -> developer instruction role
+- `tools` -> tools instruction role
+- any other section name -> custom instruction role
+
 ---
 
 ## 4. Create the runtime (`src/index.ts`)

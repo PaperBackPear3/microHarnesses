@@ -29,5 +29,7 @@ Instead of shipping one monolithic framework, microHarnesses gives you composabl
 ## Read next
 
 - Runtime internals: [`how-runtime-works.md`](./how-runtime-works.md)
+- Concepts and adoption choices: [`concepts-and-decision-guide.md`](./concepts-and-decision-guide.md)
 - Package reference: [`package-reference.md`](./package-reference.md)
+- Runtime interfaces: [`reference-runtime-interfaces.md`](./reference-runtime-interfaces.md)
 - Hands-on tutorial: [`tutorial-build-sample-app.md`](./tutorial-build-sample-app.md)
