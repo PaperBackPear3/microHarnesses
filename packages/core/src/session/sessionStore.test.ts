@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -34,6 +34,31 @@ test("SessionStore persists manifest and snapshots", async () => {
   }
 });
 
+test("initSession omits support history path until history is appended", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-history-"));
+  const store = new SessionStore(stateDir);
+
+  try {
+    const manifest = await store.initSession({ goal: "track support history" });
+    assert.equal(manifest.supportHistoryPath, undefined);
+
+    await store.appendSupportHistory(manifest.sessionId, { note: "first row" });
+    const updated = await store.getSession(manifest.sessionId);
+    assert.equal(updated.supportHistoryPath, "support-history.jsonl");
+
+    const historyPath = path.join(
+      stateDir,
+      "sessions",
+      manifest.sessionId,
+      updated.supportHistoryPath ?? "",
+    );
+    const historyFile = await stat(historyPath);
+    assert.equal(historyFile.isFile(), true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("loadLatestSnapshot reconstructs turns across snapshot resets", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-merge-"));
   const store = new SessionStore(stateDir);
@@ -60,6 +85,58 @@ test("loadLatestSnapshot reconstructs turns across snapshot resets", async () =>
 
     const restored = await store.loadLatestSnapshot(manifest.sessionId);
     assert.ok(restored);
+    assert.deepEqual(
+      restored?.turns.map((turn) => turn.id),
+      ["turn-a", "turn-b", "turn-c"],
+    );
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("saveSnapshot stores incremental turn deltas across snapshots", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-delta-"));
+  const store = new SessionStore(stateDir);
+
+  try {
+    const manifest = await store.initSession({ goal: "delta snapshots" });
+
+    const turnA = makeTurn("turn-a", "first", "answer-1");
+    const turnB = makeTurn("turn-b", "second", "answer-2");
+    await store.saveSnapshot(manifest.sessionId, "run-1", {
+      sessionId: manifest.sessionId,
+      runId: "run-1",
+      startedAt: new Date().toISOString(),
+      turns: [turnA, turnB],
+    });
+
+    const turnC = makeTurn("turn-c", "third", "answer-3");
+    await store.saveSnapshot(manifest.sessionId, "run-1", {
+      sessionId: manifest.sessionId,
+      runId: "run-1",
+      startedAt: new Date().toISOString(),
+      turns: [turnA, turnB, turnC],
+    });
+
+    const snapshotsDir = path.join(stateDir, "sessions", manifest.sessionId, "snapshots");
+    const files = (await readdir(snapshotsDir)).filter((name) => name.endsWith(".json")).sort();
+    assert.equal(files.length, 2);
+    const latestName = files[1];
+    assert.ok(latestName);
+    const latestRaw = await readFile(path.join(snapshotsDir, latestName), "utf8");
+    const latest = JSON.parse(latestRaw) as {
+      turnsMode?: string;
+      baseTurnCount?: number;
+      state?: { turns?: Array<{ id?: string }> };
+    };
+    assert.equal(latest.turnsMode, "delta");
+    assert.equal(latest.baseTurnCount, 2);
+    assert.deepEqual(
+      (latest.state?.turns ?? []).map((turn) => turn.id),
+      ["turn-c"],
+    );
+
+    const restored = await store.loadLatestSnapshot(manifest.sessionId);
     assert.deepEqual(
       restored?.turns.map((turn) => turn.id),
       ["turn-a", "turn-b", "turn-c"],

@@ -52,7 +52,7 @@ export interface AgentOptions {
 
 const DEFAULT_LIMITS: RuntimeLimits = {
   toolTimeoutMs: 20_000,
-  maxActionCallsPerRun: 20,
+  maxActionCallsPerRun: 40,
 };
 
 /** Per-`run()` state so concurrent runs on one agent cannot clobber each other. */
@@ -217,22 +217,6 @@ export class Agent implements AgentHandle {
     const { limits, goal, sessionId, runId } = resolved;
     const promptName = this.promptName;
 
-    const engine = new ActionExecutionEngine({
-      tools: this.tools,
-      policy: this.policy,
-      limits,
-      approvalHandler: this.approvalHandler,
-    });
-    const skillEngine = this.skills
-      ? new ActionExecutionEngine({
-          tools: skillsAsToolResolver(this.skills),
-          policy: this.policy,
-          limits,
-          approvalHandler: this.approvalHandler,
-          actionLabel: "Skill",
-        })
-      : undefined;
-
     let state: RunState = {
       sessionId,
       runId,
@@ -247,6 +231,29 @@ export class Agent implements AgentHandle {
       }
     }
 
+    const priorTurns = state.turns.length;
+    const maxIterations = adaptiveIterationLimit(options.maxIterations, priorTurns);
+    const adaptiveLimits: RuntimeLimits = {
+      ...limits,
+      maxActionCallsPerRun: adaptiveActionCallLimit(limits.maxActionCallsPerRun, priorTurns),
+    };
+
+    const engine = new ActionExecutionEngine({
+      tools: this.tools,
+      policy: this.policy,
+      limits: adaptiveLimits,
+      approvalHandler: this.approvalHandler,
+    });
+    const skillEngine = this.skills
+      ? new ActionExecutionEngine({
+          tools: skillsAsToolResolver(this.skills),
+          policy: this.policy,
+          limits: adaptiveLimits,
+          approvalHandler: this.approvalHandler,
+          actionLabel: "Skill",
+        })
+      : undefined;
+
     await this.context.init();
     this.context.setGoal(goal);
     await observer.stream("run.started", {
@@ -254,13 +261,16 @@ export class Agent implements AgentHandle {
       sessionId,
       resume: Boolean(options.resume),
       goal,
+      maxIterations,
+      maxActionCallsPerRun: adaptiveLimits.maxActionCallsPerRun,
     });
 
     const bundle = await this.prompts.load(promptName, userPrompt);
     const taskType = bundle.metadata.taskTypeHint;
-    const budget: ActionCallBudget = { remaining: limits.maxActionCallsPerRun };
+    const budget: ActionCallBudget = { remaining: adaptiveLimits.maxActionCallsPerRun };
+    let maxIterationLimitReached = false;
 
-    for (let iteration = 1; iteration <= options.maxIterations; iteration += 1) {
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
       if (runCtx.cancelled) {
         observer.countError("killed");
         observer.log("warn", "agent killed before next iteration", {
@@ -292,12 +302,30 @@ export class Agent implements AgentHandle {
         });
         iterationSpan.setStatus({ code: "ok" });
         if (stop) break;
+        if (iteration === maxIterations) {
+          maxIterationLimitReached = true;
+        }
       } catch (error) {
         iterationSpan.recordException(error);
         throw error;
       } finally {
         iterationSpan.end();
       }
+    }
+
+    if (maxIterationLimitReached) {
+      const action = "max_iterations";
+      observer.countLimitReached(action);
+      observer.countError("limit_reached", action);
+      observer.log("warn", `Run iteration limit of ${maxIterations} reached`, {
+        action,
+        category: "limit_reached",
+      });
+      await observer.stream("limit.reached", {
+        action,
+        limit: maxIterations,
+        iteration: maxIterations,
+      });
     }
 
     if (this.sessionStore && sessionId) {
@@ -346,7 +374,22 @@ export class Agent implements AgentHandle {
     }
 
     const contextSpan = observer.startContext(iterationSpan);
-    const working = await this.context.buildWorkingTurns(state.turns);
+    const working = await this.context.buildWorkingTurns(state.turns, {
+      onCompressionStarted: async ({ overflowTurns, deltaTurns }) => {
+        await observer.stream(
+          "context.compression_started",
+          { iteration, overflowTurns, deltaTurns },
+          contextSpan,
+        );
+      },
+      onCompressionCompleted: async ({ overflowTurns, deltaTurns }) => {
+        await observer.stream(
+          "context.compression_completed",
+          { iteration, overflowTurns, deltaTurns },
+          contextSpan,
+        );
+      },
+    });
     if (working.stats) {
       observer.recordContext(working.stats);
       contextSpan.setAttributes({
@@ -360,6 +403,7 @@ export class Agent implements AgentHandle {
       });
       await observer.stream("context.window", { ...working.stats, iteration }, contextSpan);
     }
+
     contextSpan.end();
 
     const modelSelection = this.modelSelector.select(
@@ -597,4 +641,16 @@ export function validateRunOptions(options: RunOptions): void {
       }
     }
   }
+}
+
+function adaptiveIterationLimit(baseLimit: number, priorTurns: number): number {
+  if (priorTurns < 24) return baseLimit;
+  const growthSteps = Math.floor(priorTurns / 24);
+  return Math.min(96, baseLimit + growthSteps * 2);
+}
+
+function adaptiveActionCallLimit(baseLimit: number, priorTurns: number): number {
+  if (priorTurns < 32) return baseLimit;
+  const growthSteps = Math.floor(priorTurns / 32);
+  return Math.min(240, baseLimit + growthSteps * 8);
 }

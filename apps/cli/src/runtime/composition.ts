@@ -104,7 +104,7 @@ export async function buildComposition(
 
   const context = new ContextManager({
     stateDir: path.join(config.stateDir, "sessions", rootSessionId, "context"),
-    maxWorkingTurns: 8,
+    maxWorkingTurns: 16,
     goal: "",
     contextWindowTokens: 128_000,
   });
@@ -165,7 +165,7 @@ export async function buildComposition(
           agent: childAgent,
           prompt: request.prompt,
           runOptions: {
-            maxIterations: request.maxIterations ?? Math.min(4, config.maxIterations),
+            maxIterations: request.maxIterations ?? Math.min(8, config.maxIterations),
             snapshotEvery: config.snapshotEvery,
             profile: profileForProvider(runtimeState.provider, runtimeState.model),
             modelOverride: runtimeState.model,

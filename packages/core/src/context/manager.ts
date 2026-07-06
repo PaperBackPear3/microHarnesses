@@ -23,6 +23,17 @@ interface SummaryState {
   compressedTurnCount: number;
 }
 
+export interface CompressionLifecycleHooks {
+  onCompressionStarted?(details: {
+    overflowTurns: number;
+    deltaTurns: number;
+  }): Promise<void> | void;
+  onCompressionCompleted?(details: {
+    overflowTurns: number;
+    deltaTurns: number;
+  }): Promise<void> | void;
+}
+
 /**
  * Owns the working context window: trims turns to `maxWorkingTurns`, compresses
  * overflowed turns exactly once (persisting summaries under
@@ -64,7 +75,10 @@ export class ContextManager {
     }
   }
 
-  async buildWorkingTurns(turns: Turn[]): Promise<WorkingContext> {
+  async buildWorkingTurns(
+    turns: Turn[],
+    hooks?: CompressionLifecycleHooks,
+  ): Promise<WorkingContext> {
     if (turns.length <= this.maxWorkingTurns) {
       const recentTurns = turns;
       return {
@@ -79,8 +93,15 @@ export class ContextManager {
     const newOverflowCount = overflowCount - summaryState.compressedTurnCount;
     let compressed = false;
     if (newOverflowCount > 0) {
+      await hooks?.onCompressionStarted?.({
+        overflowTurns: overflowCount,
+        deltaTurns: newOverflowCount,
+      });
       const delta = turns.slice(summaryState.compressedTurnCount, overflowCount);
-      const compression = await this.compressor(delta, { goal: this.goal });
+      const compression = await this.compressor(delta, {
+        goal: this.goal,
+        previousSummary: this.latestSummary,
+      });
       this.latestSummary = compression;
       compressed = true;
       const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
@@ -101,6 +122,10 @@ export class ContextManager {
         "utf8",
       );
       await this.writeSummaryState({ compressedTurnCount: overflowCount });
+      await hooks?.onCompressionCompleted?.({
+        overflowTurns: overflowCount,
+        deltaTurns: newOverflowCount,
+      });
     }
 
     const recentTurns = turns.slice(-this.maxWorkingTurns);

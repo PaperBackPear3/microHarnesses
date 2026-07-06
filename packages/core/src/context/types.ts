@@ -36,5 +36,5 @@ export interface WorkingContext {
 
 export type CompressorFn = (
   turns: Turn[],
-  context: { goal?: string },
+  context: { goal?: string; previousSummary?: CompressionResult },
 ) => Promise<CompressionResult> | CompressionResult;

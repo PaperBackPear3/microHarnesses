@@ -6,6 +6,8 @@ export interface StatusState {
   tokensOut: number;
   turns: number;
   errors: number;
+  limitHits: number;
+  compressing: boolean;
   contextUsedTokens?: number;
   contextMaxTokens?: number;
   contextUtilization?: number;
@@ -17,6 +19,8 @@ export function createStatusState(): StatusState {
     tokensOut: 0,
     turns: 0,
     errors: 0,
+    limitHits: 0,
+    compressing: false,
   };
 }
 
@@ -44,6 +48,15 @@ export function reduceStatus(state: StatusState, event: StreamEvent): StatusStat
   }
   if (event.type === "run.completed") {
     return { ...state, turns: state.turns + (asNumber(event.payload.turns) ?? 0) };
+  }
+  if (event.type === "context.compression_started") {
+    return { ...state, compressing: true };
+  }
+  if (event.type === "context.compression_completed") {
+    return { ...state, compressing: false };
+  }
+  if (event.type === "limit.reached") {
+    return { ...state, errors: state.errors + 1, limitHits: state.limitHits + 1 };
   }
   if (event.type === "tool.blocked" || event.type === "run.failed") {
     return { ...state, errors: state.errors + 1 };

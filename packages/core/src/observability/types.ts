@@ -259,6 +259,8 @@ export type StreamEventType =
   | "tool.approval_requested"
   | "tool.approval_resolved"
   | "context.window"
+  | "context.compression_started"
+  | "context.compression_completed"
   | "limit.reached";
 
 export interface StreamEvent {

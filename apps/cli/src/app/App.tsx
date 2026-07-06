@@ -13,9 +13,19 @@ import type { CliComposition } from "../runtime/composition";
 import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands";
 import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status";
 
-interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  text: string;
+interface ChatTurn {
+  id: string;
+  userText: string;
+  thinkingText: string;
+  assistantText: string;
+  thinkingCollapsed: boolean;
+}
+
+interface ChatEntry {
+  id: string;
+  type: "system" | "turn";
+  text?: string;
+  turn?: ChatTurn;
 }
 
 interface Props {
@@ -30,9 +40,7 @@ export function App({
   onExit,
 }: Props): React.ReactElement {
   const [composition, setComposition] = useState<CliComposition>(initialComposition);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [assistantDraft, setAssistantDraft] = useState("");
-  const [thinking, setThinking] = useState("");
+  const [chatEntries, setChatEntries] = useState<ChatEntry[]>([]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [screen, setScreen] = useState<UiScreen>("chat");
@@ -46,7 +54,7 @@ export function App({
 
   // Refs avoid stale-closure bugs in the long-lived stream subscription and
   // guard against overlapping runs triggered by rapid input.
-  const assistantDraftRef = useRef("");
+  const activeTurnIdRef = useRef<string | undefined>(undefined);
   const activeRunSessionRef = useRef<string | undefined>(undefined);
   const runningRef = useRef(false);
 
@@ -86,7 +94,7 @@ export function App({
       composition.agent.kill("interrupted by user");
       setRunning(false);
       runningRef.current = false;
-      setMessages((items) => [...items, { role: "system", text: "Run interrupted." }]);
+      appendSystemMessage("Run interrupted.");
       return;
     }
     if (key.ctrl && raw === "d") {
@@ -95,7 +103,11 @@ export function App({
     }
     if (key.tab && key.shift) {
       const next = composition.modeController.cycle();
-      setMessages((items) => [...items, { role: "system", text: `Mode changed to ${next}.` }]);
+      appendSystemMessage(`Mode changed to ${next}.`);
+      return;
+    }
+    if (key.ctrl && raw.toLowerCase() === "t") {
+      toggleLatestThinkingCollapse();
       return;
     }
   });
@@ -115,10 +127,7 @@ export function App({
         return;
       }
 
-      setMessages((items) => [...items, { role: "user", text: trimmed }]);
-      assistantDraftRef.current = "";
-      setAssistantDraft("");
-      setThinking("");
+      startTurn(trimmed);
       setScreen("chat");
       runningRef.current = true;
       setRunning(true);
@@ -137,11 +146,12 @@ export function App({
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : "unknown run failure";
-        setMessages((items) => [...items, { role: "system", text: `Error: ${message}` }]);
+        appendSystemMessage(`Error: ${message}`);
       } finally {
         runningRef.current = false;
         setRunning(false);
         activeRunSessionRef.current = undefined;
+        activeTurnIdRef.current = undefined;
       }
     },
     [composition, activeSessionId],
@@ -149,10 +159,7 @@ export function App({
 
   async function switchToSession(sessionId: string, notice: string): Promise<void> {
     if (runningRef.current) {
-      setMessages((items) => [
-        ...items,
-        { role: "system", text: "Cannot switch sessions while a run is in progress." },
-      ]);
+      appendSystemMessage("Cannot switch sessions while a run is in progress.");
       return;
     }
     // Rebuild the runtime so context + telemetry are rooted at the new session,
@@ -167,10 +174,8 @@ export function App({
 
     setComposition(next);
     setActiveSessionId(next.rootSessionId);
-    setMessages([{ role: "system", text: notice }]);
-    setAssistantDraft("");
-    assistantDraftRef.current = "";
-    setThinking("");
+    setChatEntries([{ id: randomUUID(), type: "system", text: notice }]);
+    activeTurnIdRef.current = undefined;
     setStatus(createStatusState());
     setScreen("chat");
   }
@@ -181,39 +186,29 @@ export function App({
       return;
     }
     if (command.type === "clear") {
-      setMessages([]);
-      setAssistantDraft("");
-      setThinking("");
+      setChatEntries([]);
+      activeTurnIdRef.current = undefined;
       return;
     }
     if (command.type === "set-mode") {
       composition.modeController.setMode(command.mode);
-      setMessages((items) => [...items, { role: "system", text: `Mode set to ${command.mode}.` }]);
+      appendSystemMessage(`Mode set to ${command.mode}.`);
       return;
     }
     if (command.type === "set-effort") {
       composition.runtimeState.effort = command.effort;
       composition.modelSelector.setEffort(command.effort);
-      setMessages((items) => [
-        ...items,
-        { role: "system", text: `Effort set to ${command.effort}.` },
-      ]);
+      appendSystemMessage(`Effort set to ${command.effort}.`);
       return;
     }
     if (command.type === "set-model") {
       composition.runtimeState.model = command.model;
-      setMessages((items) => [
-        ...items,
-        { role: "system", text: `Model override set to ${command.model}.` },
-      ]);
+      appendSystemMessage(`Model override set to ${command.model}.`);
       return;
     }
     if (command.type === "set-provider") {
       composition.runtimeState.provider = command.provider;
-      setMessages((items) => [
-        ...items,
-        { role: "system", text: `Provider set to ${command.provider}.` },
-      ]);
+      appendSystemMessage(`Provider set to ${command.provider}.`);
       return;
     }
     if (command.type === "new-session") {
@@ -273,6 +268,8 @@ export function App({
           `tokens in/out: ${status.tokensIn}/${status.tokensOut}`,
           `turns: ${status.turns}`,
           `errors: ${status.errors}`,
+          `limit hits: ${status.limitHits}`,
+          `compressing: ${status.compressing ? "yes" : "no"}`,
         ].join("\n"),
       );
       setScreen("telemetry");
@@ -297,41 +294,138 @@ export function App({
     }
 
     if (event.type === "model.reasoning_delta") {
-      setThinking((current) => `${current}${String(event.payload.delta ?? "")}`);
+      appendTurnThinking(String(event.payload.delta ?? ""));
       return;
     }
     if (event.type === "model.output_delta") {
-      assistantDraftRef.current = `${assistantDraftRef.current}${String(event.payload.delta ?? "")}`;
-      setAssistantDraft(assistantDraftRef.current);
+      appendTurnAssistant(String(event.payload.delta ?? ""));
       return;
     }
     if (event.type === "model.output_completed") {
-      const finalText = assistantDraftRef.current;
-      assistantDraftRef.current = "";
-      setAssistantDraft("");
-      if (finalText.length > 0) {
-        setMessages((items) => [...items, { role: "assistant", text: finalText }]);
-      }
+      activeTurnIdRef.current = undefined;
       return;
     }
     if (event.type === "tool.started") {
       const action = String(event.payload.action ?? "unknown_tool");
-      setMessages((items) => [...items, { role: "system", text: `tool started: ${action}` }]);
+      appendSystemMessage(`tool started: ${action}`);
       return;
     }
     if (event.type === "tool.blocked") {
       const action = String(event.payload.action ?? "unknown_tool");
       const reason = String(event.payload.reason ?? "blocked");
-      setMessages((items) => [
-        ...items,
-        { role: "system", text: `tool blocked: ${action} (${reason})` },
-      ]);
+      appendSystemMessage(`tool blocked: ${action} (${reason})`);
+      return;
+    }
+    if (event.type === "limit.reached") {
+      const action = String(event.payload.action ?? "unknown");
+      const limit = Number(event.payload.limit ?? 0);
+      appendSystemMessage(`limit reached: ${action} (${limit})`);
       return;
     }
     if (event.type === "run.failed") {
       const reason = String(event.payload.reason ?? "run failed");
-      setMessages((items) => [...items, { role: "system", text: reason }]);
+      appendSystemMessage(reason);
     }
+  }
+
+  function appendSystemMessage(text: string): void {
+    setChatEntries((items) => [...items, { id: randomUUID(), type: "system", text }]);
+  }
+
+  function startTurn(userText: string): void {
+    const turnId = randomUUID();
+    activeTurnIdRef.current = turnId;
+    setChatEntries((items) => [
+      ...items,
+      {
+        id: turnId,
+        type: "turn",
+        turn: {
+          id: turnId,
+          userText,
+          thinkingText: "",
+          assistantText: "",
+          thinkingCollapsed: false,
+        },
+      },
+    ]);
+  }
+
+  function ensureActiveTurn(): string {
+    const existing = activeTurnIdRef.current;
+    if (existing) return existing;
+    const turnId = randomUUID();
+    activeTurnIdRef.current = turnId;
+    setChatEntries((items) => [
+      ...items,
+      {
+        id: turnId,
+        type: "turn",
+        turn: {
+          id: turnId,
+          userText: "",
+          thinkingText: "",
+          assistantText: "",
+          thinkingCollapsed: false,
+        },
+      },
+    ]);
+    return turnId;
+  }
+
+  function appendTurnThinking(delta: string): void {
+    if (delta.length === 0) return;
+    const activeTurnId = ensureActiveTurn();
+    setChatEntries((items) =>
+      items.map((entry) => {
+        if (entry.type !== "turn" || !entry.turn || entry.turn.id !== activeTurnId) return entry;
+        return {
+          ...entry,
+          turn: {
+            ...entry.turn,
+            thinkingText: `${entry.turn.thinkingText}${delta}`,
+          },
+        };
+      }),
+    );
+  }
+
+  function appendTurnAssistant(delta: string): void {
+    if (delta.length === 0) return;
+    const activeTurnId = ensureActiveTurn();
+    setChatEntries((items) =>
+      items.map((entry) => {
+        if (entry.type !== "turn" || !entry.turn || entry.turn.id !== activeTurnId) return entry;
+        return {
+          ...entry,
+          turn: {
+            ...entry.turn,
+            assistantText: `${entry.turn.assistantText}${delta}`,
+          },
+        };
+      }),
+    );
+  }
+
+  function toggleLatestThinkingCollapse(): void {
+    setChatEntries((items) => {
+      for (let i = items.length - 1; i >= 0; i -= 1) {
+        const entry = items[i];
+        if (entry?.type !== "turn" || !entry.turn || entry.turn.thinkingText.length === 0) {
+          continue;
+        }
+        const next = items.slice();
+        next[i] = {
+          ...entry,
+          turn: {
+            ...entry.turn,
+            thinkingCollapsed: !entry.turn.thinkingCollapsed,
+          },
+        };
+        return next;
+      }
+      return items;
+    });
   }
 
   return (
@@ -349,27 +443,38 @@ export function App({
       <Box marginTop={1} flexDirection="column">
         {screen === "chat" && (
           <>
-            {messages.slice(-12).map((message, index) => (
-              <Text key={`${message.role}-${index}`}>
-                <Text color={colorForRole(message.role)}>
-                  {message.role}
-                  {" > "}
+            {chatEntries.slice(-12).map((entry) =>
+              entry.type === "system" ? (
+                <Text key={entry.id}>
+                  <Text color="gray">system &gt; </Text>
+                  {entry.text}
                 </Text>
-                {message.text}
-              </Text>
-            ))}
-            {thinking.length > 0 && (
-              <Box flexDirection="column" marginTop={1}>
-                <Text color="yellow">Thinking</Text>
-                <Text>{thinking.slice(-500)}</Text>
-              </Box>
+              ) : (
+                <Box key={entry.id} flexDirection="column">
+                  {entry.turn?.userText ? (
+                    <Text>
+                      <Text color="cyan">user &gt; </Text>
+                      {entry.turn.userText}
+                    </Text>
+                  ) : null}
+                  {entry.turn && entry.turn.thinkingText.length > 0 ? (
+                    <Box flexDirection="column">
+                      <Text color="yellow">
+                        Thinking [{entry.turn.thinkingCollapsed ? "collapsed" : "expanded"}]
+                      </Text>
+                      {!entry.turn.thinkingCollapsed && <Text>{entry.turn.thinkingText}</Text>}
+                    </Box>
+                  ) : null}
+                  {entry.turn?.assistantText ? (
+                    <Text>
+                      <Text color="green">assistant &gt; </Text>
+                      {entry.turn.assistantText}
+                    </Text>
+                  ) : null}
+                </Box>
+              ),
             )}
-            {assistantDraft.length > 0 && (
-              <Text>
-                <Text color="green">assistant&gt; </Text>
-                {assistantDraft}
-              </Text>
-            )}
+            {status.compressing ? <Text color="yellow">Compressing context...</Text> : null}
           </>
         )}
 
@@ -418,7 +523,8 @@ function StatusBar(props: {
         session={props.sessionId} | mode={props.mode} | effort={props.effort} | provider=
         {props.provider} | model={props.model ?? "-"} | ctx={utilization} | tokens=
         {props.status.tokensIn}/{props.status.tokensOut} | turns={props.status.turns} | errors=
-        {props.status.errors}
+        {props.status.errors} | limits={props.status.limitHits}
+        {props.status.compressing ? " | COMPRESSING" : ""}
         {props.running ? " | RUNNING" : ""}
       </Text>
     </Box>
@@ -462,12 +568,7 @@ function HelpScreen({ modelChoices }: { modelChoices: string[] }): React.ReactEl
     "/chat",
     "/clear",
     "/exit",
+    "Ctrl+T toggle latest thinking collapse",
   ].join("\n");
   return <Screen title="Commands">{lines}</Screen>;
-}
-
-function colorForRole(role: ChatMessage["role"]): "cyan" | "green" | "gray" {
-  if (role === "user") return "cyan";
-  if (role === "assistant") return "green";
-  return "gray";
 }

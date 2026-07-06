@@ -59,5 +59,19 @@ function printProgress(event: StreamEvent): void {
     process.stderr.write(
       `[blocked] ${String(event.payload.action ?? "unknown")}: ${String(event.payload.reason ?? "")}\n`,
     );
+    return;
+  }
+  if (event.type === "limit.reached") {
+    process.stderr.write(
+      `[limit] ${String(event.payload.action ?? "unknown")} (${String(event.payload.limit ?? "-")})\n`,
+    );
+    return;
+  }
+  if (event.type === "context.compression_started") {
+    process.stderr.write("[context] compressing...\n");
+    return;
+  }
+  if (event.type === "context.compression_completed") {
+    process.stderr.write("[context] compression completed\n");
   }
 }

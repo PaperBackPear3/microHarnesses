@@ -9,7 +9,7 @@ import type { CompressionResult } from "./types";
  */
 export async function defaultCompressor(
   turns: Turn[],
-  context: { goal?: string },
+  context: { goal?: string; previousSummary?: CompressionResult },
 ): Promise<CompressionResult> {
   const goal = context.goal?.trim() || "No explicit goal set";
   const scored = turns
@@ -19,11 +19,12 @@ export async function defaultCompressor(
     }))
     .sort((a, b) => b.score - a.score);
 
-  const top = scored.slice(0, Math.min(5, scored.length)).map((entry) => entry.turn);
-  const highlights = top.map(
-    (turn) =>
-      `iter=${turn.iteration} tools=${turn.toolCalls.length} assistant="${truncate(turn.assistantMessage, 120)}"`,
-  );
+  const top = scored.slice(0, Math.min(6, scored.length)).map((entry) => entry.turn);
+  const highlights = top.map((turn) => {
+    const user = truncate(turn.userMessage.trim(), 80);
+    const assistant = truncate(turn.assistantMessage.trim(), 100);
+    return `iter=${turn.iteration} tools=${turn.toolCalls.length} user="${user}" assistant="${assistant}"`;
+  });
 
   const supportHistory = turns.flatMap((turn) =>
     turn.toolResults
@@ -31,8 +32,15 @@ export async function defaultCompressor(
       .map((result) => `iter=${turn.iteration} tool-failure: ${result.error ?? "unknown error"}`),
   );
 
+  const previousSummary = context.previousSummary?.summary?.trim();
+  const summaryParts = [
+    `Goal: ${goal}.`,
+    previousSummary ? `Prior context: ${truncate(previousSummary, 260)}` : "",
+    `Compressed ${turns.length} older turns and retained ${highlights.length} key highlights.`,
+  ].filter((part) => part.length > 0);
+
   return {
-    summary: `Goal: ${goal}. Retained ${highlights.length} high-priority highlights out of ${turns.length} compressed turns.`,
+    summary: summaryParts.join(" "),
     highlights,
     supportHistory,
   };

@@ -10,6 +10,8 @@ interface SnapshotFile {
   createdAt: string;
   seq: number;
   runId: string;
+  turnsMode?: "full" | "delta";
+  baseTurnCount?: number;
   state: RunState;
 }
 
@@ -37,7 +39,6 @@ export class SessionStore {
       goal: options.goal ?? "",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      supportHistoryPath: "support-history.jsonl",
       ...(options.parentSessionId ? { parentSessionId: options.parentSessionId } : {}),
       ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
       ...(options.rootSessionId ? { rootSessionId: options.rootSessionId } : {}),
@@ -60,6 +61,9 @@ export class SessionStore {
 
   async appendSupportHistory(sessionId: string, data: Record<string, unknown>): Promise<void> {
     const manifest = await this.readManifest(sessionId);
+    if (!manifest.supportHistoryPath) {
+      manifest.supportHistoryPath = "support-history.jsonl";
+    }
     const row = {
       timestamp: new Date().toISOString(),
       ...data,
@@ -75,12 +79,20 @@ export class SessionStore {
     const snapshotSeq = (manifest.lastSnapshotSeq ?? 0) + 1;
     const snapshotRelPath = path.join("snapshots", `${snapshotId}.json`);
     const snapshotPath = path.join(this.sessionDir(sessionId), snapshotRelPath);
+    const previousSnapshotTurnCount = Math.max(0, manifest.lastSnapshotTurnCount ?? 0);
+    const previousTurnCount =
+      state.turns.length > previousSnapshotTurnCount ? previousSnapshotTurnCount : 0;
     const payload: SnapshotFile = {
       id: snapshotId,
       createdAt: new Date().toISOString(),
       seq: snapshotSeq,
       runId,
-      state,
+      turnsMode: "delta",
+      baseTurnCount: previousTurnCount,
+      state: {
+        ...state,
+        turns: state.turns.slice(previousTurnCount),
+      },
     };
     await writeFile(snapshotPath, JSON.stringify(payload, null, 2), "utf8");
 
@@ -90,6 +102,7 @@ export class SessionStore {
       latestSnapshotId: snapshotId,
       latestSnapshotPath: snapshotRelPath,
       lastSnapshotSeq: snapshotSeq,
+      lastSnapshotTurnCount: state.turns.length,
       updatedAt: new Date().toISOString(),
     };
     await this.writeManifest(updated);
@@ -152,7 +165,10 @@ export class SessionStore {
   }
 
   private supportHistoryAbsolutePath(manifest: SessionManifest): string {
-    return path.join(this.sessionDir(manifest.sessionId), manifest.supportHistoryPath);
+    return path.join(
+      this.sessionDir(manifest.sessionId),
+      manifest.supportHistoryPath ?? "support-history.jsonl",
+    );
   }
 
   private async readManifest(sessionId: string): Promise<SessionManifest> {

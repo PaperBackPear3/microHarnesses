@@ -60,3 +60,26 @@ test("buildWorkingTurns reports overflow and compression once turns exceed the w
     await rm(stateDir, { recursive: true, force: true });
   }
 });
+
+test("buildWorkingTurns invokes compression lifecycle hooks for new overflow deltas", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-hooks-"));
+  try {
+    const manager = new ContextManager({ stateDir, maxWorkingTurns: 1 });
+    await manager.init();
+    const turns = [makeTurn(1, "a", "1"), makeTurn(2, "b", "2"), makeTurn(3, "c", "3")];
+    let started = 0;
+    let completed = 0;
+    await manager.buildWorkingTurns(turns, {
+      onCompressionStarted(details) {
+        started = details.deltaTurns;
+      },
+      onCompressionCompleted(details) {
+        completed = details.deltaTurns;
+      },
+    });
+    assert.equal(started, 2);
+    assert.equal(completed, 2);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});

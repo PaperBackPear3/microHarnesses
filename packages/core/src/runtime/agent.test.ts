@@ -121,6 +121,26 @@ class FakeContextManager {
   }
 }
 
+class CompressingContextManager extends FakeContextManager {
+  async buildWorkingTurns(
+    state: RunState["turns"],
+    hooks?: {
+      onCompressionStarted?(details: {
+        overflowTurns: number;
+        deltaTurns: number;
+      }): Promise<void> | void;
+      onCompressionCompleted?(details: {
+        overflowTurns: number;
+        deltaTurns: number;
+      }): Promise<void> | void;
+    },
+  ): Promise<{ recentTurns: RunState["turns"] }> {
+    await hooks?.onCompressionStarted?.({ overflowTurns: 3, deltaTurns: 2 });
+    await hooks?.onCompressionCompleted?.({ overflowTurns: 3, deltaTurns: 2 });
+    return { recentTurns: state };
+  }
+}
+
 const options: RunOptions = {
   maxIterations: 1,
   snapshotEvery: 1,
@@ -224,6 +244,30 @@ test("runtime streams limit event and exits gracefully when tool call limit is e
   );
 });
 
+test("runtime emits limit event when max iterations are exhausted", async () => {
+  const obs = makeObs();
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({
+      assistantMessage: "keep going",
+      toolCalls: [],
+      stop: false,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("hello", { ...options, maxIterations: 1 });
+  assert.equal(state.turns.length, 1);
+  const reached = obs.stream.ofType("limit.reached");
+  assert.equal(reached.length > 0, true);
+  assert.equal(reached[0]?.payload.action, "max_iterations");
+});
+
 test("runtime streams model deltas and completion events", async () => {
   const obs = makeObs();
   const runtime = new Agent({
@@ -245,6 +289,24 @@ test("runtime streams model deltas and completion events", async () => {
   assert.equal(obs.stream.ofType("model.thinking_completed").length > 0, true);
   assert.equal(obs.stream.ofType("model.reasoning_completed").length > 0, true);
   assert.equal(obs.stream.ofType("model.output_completed").length > 0, true);
+});
+
+test("runtime streams context compression lifecycle events", async () => {
+  const obs = makeObs();
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({ assistantMessage: "ok", toolCalls: [], stop: true }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new CompressingContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  await runtime.run("hello", options);
+  assert.equal(obs.stream.ofType("context.compression_started").length, 1);
+  assert.equal(obs.stream.ofType("context.compression_completed").length, 1);
 });
 
 test("runtime records a span tree with run, iteration, model, and context spans", async () => {
