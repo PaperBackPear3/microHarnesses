@@ -4,6 +4,13 @@ export interface CompressionResult {
   summary: string;
   highlights: string[];
   supportHistory: string[];
+  /**
+   * Goal rediscovered mid-run by a goals-finder-style compressor (e.g. the
+   * agentic compressor plugin). When present, `ContextManager` adopts it as
+   * the working goal for subsequent compression cycles in the same run.
+   * `defaultCompressor` never sets this field.
+   */
+  refinedGoal?: string;
 }
 
 /**

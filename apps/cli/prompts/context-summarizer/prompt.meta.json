@@ -1,0 +1,6 @@
+{
+  "name": "context-summarizer",
+  "taskTypeHint": "default",
+  "safetyMode": "strict",
+  "tags": ["cli", "compression", "subagent"]
+}

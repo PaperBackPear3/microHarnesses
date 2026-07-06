@@ -1,0 +1,39 @@
+{
+  "name": "@micro-harnesses/plugin-agentic-compression",
+  "version": "1.0.4",
+  "description": "Agentic context-compression plugin for @micro-harnesses/core. Spawns summarizer + goal-finder subagents to compress overflowed turns instead of scoring them heuristically.",
+  "license": "MIT",
+  "keywords": ["micro-harness", "plugin", "compression", "context", "subagents"],
+  "homepage": "https://paperbackpear3.github.io/microHarnesses/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PaperBackPear3/microHarnesses.git",
+    "directory": "plugins/agentic-compression"
+  },
+  "bugs": {
+    "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "test": "node --test \"dist/**/*.test.js\""
+  },
+  "peerDependencies": {
+    "@micro-harnesses/core": "^1.0.4"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "goal-finder",
+  "taskTypeHint": "default",
+  "safetyMode": "strict",
+  "tags": ["cli", "compression", "subagent"]
+}

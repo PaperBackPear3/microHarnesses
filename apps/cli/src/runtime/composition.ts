@@ -20,6 +20,7 @@ import {
   createCoreDefaultTools,
   registerCoreDefaults,
 } from "@micro-harnesses/core";
+import { AgenticCompressionPlugin } from "@micro-harnesses/plugin-agentic-compression";
 import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
 import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
@@ -218,6 +219,7 @@ export async function buildComposition(
     ...builtInProviderPlugins(),
     new BasicToolsPlugin({ rootDir: process.cwd() }),
     new PlanModePlugin({ rootDir: process.cwd() }),
+    new AgenticCompressionPlugin(),
     exampleToolsPlugin,
   ]);
 

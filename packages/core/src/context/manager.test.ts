@@ -61,6 +61,39 @@ test("buildWorkingTurns reports overflow and compression once turns exceed the w
   }
 });
 
+test("buildWorkingTurns adopts a compressor's refinedGoal for later compression cycles", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-refined-goal-"));
+  try {
+    const seenGoals: Array<string | undefined> = [];
+    const manager = new ContextManager({
+      stateDir,
+      maxWorkingTurns: 1,
+      goal: "original goal",
+      compressor: (turns, context) => {
+        seenGoals.push(context.goal);
+        return {
+          summary: `compressed ${turns.length} turns`,
+          highlights: [],
+          supportHistory: [],
+          refinedGoal: "refined goal",
+        };
+      },
+    });
+    await manager.init();
+
+    await manager.buildWorkingTurns([makeTurn(1, "a", "1"), makeTurn(2, "b", "2")]);
+    await manager.buildWorkingTurns([
+      makeTurn(1, "a", "1"),
+      makeTurn(2, "b", "2"),
+      makeTurn(3, "c", "3"),
+    ]);
+
+    assert.deepEqual(seenGoals, ["original goal", "refined goal"]);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("buildWorkingTurns invokes compression lifecycle hooks for new overflow deltas", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-hooks-"));
   try {

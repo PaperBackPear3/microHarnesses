@@ -104,6 +104,12 @@ export class ContextManager {
       });
       this.latestSummary = compression;
       compressed = true;
+      // A goals-finder-style compressor may rediscover a more accurate goal
+      // mid-run; adopt it so later compression cycles in this run see it.
+      const refinedGoal = compression.refinedGoal?.trim();
+      if (refinedGoal) {
+        this.setGoal(refinedGoal);
+      }
       const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
       await writeFile(
         summaryFile,

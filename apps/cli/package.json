@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@micro-harnesses/core": "^1.0.4",
+    "@micro-harnesses/plugin-agentic-compression": "^1.0.4",
     "@micro-harnesses/plugin-basic-tools": "^1.0.4",
     "@micro-harnesses/plugin-example-tools": "^1.0.4",
     "@micro-harnesses/plugin-plan-mode": "^1.0.4",
