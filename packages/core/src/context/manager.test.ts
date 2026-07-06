@@ -61,6 +61,58 @@ test("buildWorkingTurns reports overflow and compression once turns exceed the w
   }
 });
 
+test("buildWorkingTurns batches token-trigger compaction with hysteresis", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-token-overflow-"));
+  try {
+    let compressions = 0;
+    const manager = new ContextManager({
+      stateDir,
+      maxWorkingTurns: 10,
+      contextWindowTokens: 100,
+      compressionTriggerUtilization: 0.7,
+      compressionTargetUtilization: 0.4,
+      tokenCounter: {
+        count(text) {
+          return text.length;
+        },
+      },
+      compressor: () => {
+        compressions += 1;
+        return {
+          summary: "",
+          highlights: [],
+          supportHistory: [],
+        };
+      },
+    });
+    await manager.init();
+    const baseTurns = [
+      makeTurn(1, "u".repeat(10), "a".repeat(10)),
+      makeTurn(2, "u".repeat(10), "a".repeat(10)),
+      makeTurn(3, "u".repeat(10), "a".repeat(10)),
+      makeTurn(4, "u".repeat(10), "a".repeat(10)),
+    ];
+
+    const first = await manager.buildWorkingTurns(baseTurns);
+    assert.equal(first.stats?.compressionTrigger, "tokens");
+    assert.equal(first.stats?.overflowTurnsByTokenUsage, 1);
+    assert.equal(first.stats?.overflowTurns, 2);
+    assert.equal(first.recentTurns.length, 2);
+    assert.equal(compressions, 1);
+
+    const second = await manager.buildWorkingTurns([
+      ...baseTurns,
+      makeTurn(5, "u".repeat(10), "a".repeat(10)),
+    ]);
+    assert.equal(second.stats?.compressionTrigger, "tokens");
+    assert.equal(second.stats?.overflowTurnsByTokenUsage, 2);
+    assert.equal(second.stats?.compressed, false);
+    assert.equal(compressions, 1);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("buildWorkingTurns adopts a compressor's refinedGoal for later compression cycles", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-refined-goal-"));
   try {

@@ -1,4 +1,5 @@
 import type { AgentHandle } from "../runtime/types";
+import { InProcessSubagentSupervisor } from "./supervisor";
 import type {
   SubagentResult,
   SubagentRunOptions,
@@ -17,37 +18,13 @@ import type {
  * currently in `run()`.
  */
 export class InProcessSubagentRunner implements SubagentRunner {
-  private readonly factory: SubagentRuntimeFactory;
-  private readonly parent: AgentHandle;
+  private readonly supervisor: InProcessSubagentSupervisor;
 
   constructor(factory: SubagentRuntimeFactory, parent: AgentHandle) {
-    this.factory = factory;
-    this.parent = parent;
+    this.supervisor = new InProcessSubagentSupervisor(factory, parent);
   }
 
   async run(options: SubagentRunOptions): Promise<SubagentResult> {
-    const built = await this.factory.build(options, this.parent);
-
-    let abortHandler: (() => void) | undefined;
-    if (options.signal) {
-      if (options.signal.aborted) {
-        built.agent.kill("aborted before subagent invoke");
-      } else {
-        abortHandler = () => built.agent.kill("aborted by parent signal");
-        options.signal.addEventListener("abort", abortHandler, { once: true });
-      }
-    }
-
-    try {
-      const result = await built.agent.invoke({
-        prompt: built.prompt,
-        execution: built.runOptions,
-      });
-      return { summary: result.summary, state: result.state };
-    } finally {
-      if (abortHandler && options.signal) {
-        options.signal.removeEventListener("abort", abortHandler);
-      }
-    }
+    return await this.supervisor.run(options);
   }
 }

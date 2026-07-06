@@ -4,6 +4,9 @@ Package-first reusable runtime library building block for `microHarnesses`. Zero
 
 ## Latest updates
 
+- Core now ships `InProcessSubagentSupervisor` plus default
+  `spawn_subagent`/`wait_subagents` tools for deterministic async delegation and
+  model-facing join behavior.
 - Runtime consumers (like the CLI app) now rely on stricter autopilot guidance to keep multi-step exploration running until completion.
 
 ## What's inside
@@ -17,7 +20,7 @@ Package-first reusable runtime library building block for `microHarnesses`. Zero
 - **Provider & credentials registries** — `ProviderRegistry`, `CredentialsRegistry`, `ProviderModelAdapter`
 - **Prompt source** — `FsPromptSource` (Markdown-based prompt packs)
 - **Plugin host** — `PluginHost` with capability enforcement; `PluginLoader` for dynamic loading
-- **Subagent primitive** — `InProcessSubagentRunner` runs children in-process with a filtered `ToolRegistry` and nested session
+- **Subagent primitives** — `InProcessSubagentRunner` runs blocking children; `InProcessSubagentSupervisor` tracks async children and deterministic waits
 
 ## Install
 
@@ -147,7 +150,7 @@ registerCoreDefaults({
   // explicit tool set owned by the composition root
   tools: createCoreDefaultTools({
     workspaceTools: { rootDir: process.cwd() },
-    subagents: subagentRunner,
+    subagents: subagentSupervisor,
   }),
   hookRegistrar: {
     onBeforeLoop: (hook) => runtime.addBeforeHook(hook),
@@ -166,6 +169,16 @@ Custom providers are registered by passing `{ adapter, credentials }` entries
 to `providers`. Custom tools are registered by passing `tools`. Native loop
 hooks can be registered through `beforeHooks` / `afterHooks` when
 `hookRegistrar` is provided by the composition root.
+
+When `createCoreDefaultTools` receives a `SubagentSupervisor`, it registers:
+
+- `spawn_subagent` — launches a tracked child and returns a handle immediately.
+- `wait_subagents` — waits for the next completed child by default, or all
+  selected running children with `mode: "all"`, returning completed summaries
+  plus the remaining running subagents.
+
+The blocking `SubagentRunner.run` contract remains available for plugins and
+composition code that need an immediate child result.
 
 ## Command-safety rule
 

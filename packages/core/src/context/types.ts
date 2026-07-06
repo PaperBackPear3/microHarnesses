@@ -21,6 +21,9 @@ export interface ContextWindowStats {
   totalTurns: number;
   workingTurns: number;
   overflowTurns: number;
+  overflowTurnsByTurnLimit?: number;
+  overflowTurnsByTokenUsage?: number;
+  compressionTrigger?: "none" | "turns" | "tokens" | "both";
   /** True when older turns were compressed into a summary this build. */
   compressed: boolean;
   usedTokens: number;

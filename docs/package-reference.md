@@ -14,7 +14,7 @@ This page documents package functionality and the concepts each package is respo
 - Policy model (`DefaultPolicyEngine`, `CompositePolicyEngine`, `PolicyRule`)
 - Plugin host + capability enforcement (`PluginHost`)
 - Provider + credentials registries
-- Subagent primitive (`InProcessSubagentRunner`)
+- Subagent primitives (`InProcessSubagentRunner`, `InProcessSubagentSupervisor`)
 
 ### Concepts
 
@@ -22,6 +22,9 @@ This page documents package functionality and the concepts each package is respo
 - **Capability boundaries**: plugin APIs are guarded by declared capabilities.
 - **Most restrictive wins**: policy composition can only increase restrictions.
 - **Prompt pack convention**: `FsPromptSource` uses `<rootDir>/<promptName>/system.md` plus optional sections (`developer`, `tools`, and custom sections).
+- **Deterministic subagent wait**: the supervisor tracks launch order, completion
+  order, failures, aborts, and remaining running children; default tools expose
+  this as `spawn_subagent` plus `wait_subagents`.
 
 ---
 

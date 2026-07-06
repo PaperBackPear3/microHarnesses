@@ -86,6 +86,7 @@ export * from "./plugins/host";
 // Subagents
 export * from "./subagents/types";
 export * from "./subagents/inProcessSubagentRunner";
+export * from "./subagents/supervisor";
 
 // Defaults
 export * from "./defaults";

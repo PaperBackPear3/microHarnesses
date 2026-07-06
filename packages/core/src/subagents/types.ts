@@ -23,8 +23,57 @@ export interface SubagentResult {
   state: RunState;
 }
 
+export type SubagentStatus = "running" | "completed" | "failed";
+
+export interface SubagentSnapshot {
+  id: string;
+  launchIndex: number;
+  prompt: string;
+  promptName?: string;
+  goal?: string;
+  sessionId?: string;
+  status: SubagentStatus;
+  startedAt: string;
+  completedAt?: string;
+  summary?: string;
+  error?: string;
+}
+
+export interface SubagentSpawnResult {
+  id: string;
+  launchIndex: number;
+  sessionId?: string;
+  status: "running";
+}
+
+export interface SubagentWaitOptions {
+  /**
+   * Subagent handles to wait for. When omitted, waits over all currently
+   * running subagents tracked by the supervisor.
+   */
+  ids?: string[];
+  /**
+   * "next" resolves when the next selected subagent finishes. "all" resolves
+   * when every selected running subagent has finished.
+   */
+  mode?: "next" | "all";
+  /** Abort signal propagated from the waiting tool/run. */
+  signal?: AbortSignal;
+}
+
+export interface SubagentWaitResult {
+  completed: SubagentSnapshot[];
+  running: SubagentSnapshot[];
+}
+
 export interface SubagentRunner {
   run(options: SubagentRunOptions): Promise<SubagentResult>;
+}
+
+export interface SubagentSupervisor extends SubagentRunner {
+  spawn(options: SubagentRunOptions): Promise<SubagentSpawnResult>;
+  wait(options?: SubagentWaitOptions): Promise<SubagentWaitResult>;
+  list(): SubagentSnapshot[];
 }
 
 /**

@@ -3,6 +3,7 @@ import test from "node:test";
 import { CredentialsRegistry } from "../providers/credentialsRegistry";
 import { ProviderRegistry } from "../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
+import type { SubagentSupervisor } from "../subagents/types";
 import { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
 import { createCoreDefaultTools, registerCoreDefaults } from "./index";
@@ -92,6 +93,30 @@ test("createCoreDefaultTools composes optional bundles", () => {
   });
   const names = tools.map((tool) => tool.name);
   assert.deepEqual(names, ["fs_list", "fs_read", "grep_search"]);
+});
+
+test("createCoreDefaultTools registers wait tool for subagent supervisors", () => {
+  const supervisor: SubagentSupervisor = {
+    async run() {
+      throw new Error("not used");
+    },
+    async spawn() {
+      return { id: "s1", launchIndex: 1, status: "running" };
+    },
+    async wait() {
+      return { completed: [], running: [] };
+    },
+    list() {
+      return [];
+    },
+  };
+
+  const tools = createCoreDefaultTools({ subagents: supervisor });
+
+  assert.deepEqual(
+    tools.map((tool) => tool.name),
+    ["spawn_subagent", "wait_subagents"],
+  );
 });
 
 test("registerCoreDefaults registers native loop hooks in declaration order", () => {

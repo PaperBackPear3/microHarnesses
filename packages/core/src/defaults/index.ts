@@ -7,7 +7,12 @@ import type { SubagentRunner } from "../subagents/types";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
 import { registerBuiltInProviders, registerProviders } from "./providers/plugins";
-import { type SpawnSubagentToolOptions, createSpawnSubagentTool } from "./tools/spawnSubagentTool";
+import {
+  type SpawnSubagentToolOptions,
+  createSpawnSubagentTool,
+  createWaitSubagentsTool,
+  isSubagentSupervisor,
+} from "./tools/spawnSubagentTool";
 import {
   type ReadOnlyWorkspaceToolsOptions,
   createReadOnlyWorkspaceTools,
@@ -59,6 +64,9 @@ export function createCoreDefaultTools(options: CreateCoreDefaultToolsOptions): 
   }
   if (options.subagents) {
     tools.push(createSpawnSubagentTool(options.subagents, options.spawnSubagent));
+    if (isSubagentSupervisor(options.subagents)) {
+      tools.push(createWaitSubagentsTool(options.subagents));
+    }
   }
   return tools;
 }

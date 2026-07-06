@@ -21,7 +21,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "version" || command === "--version" || command === "-v") {
-    process.stdout.write("1.0.6\n");
+    process.stdout.write("2.0.0\n");
     return;
   }
 

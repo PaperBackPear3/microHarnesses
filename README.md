@@ -6,6 +6,9 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 
 ## Latest updates
 
+- Core now includes a deterministic subagent supervisor with async spawn and
+  wait/join defaults, so model-facing agents can delegate work and explicitly
+  wait for child summaries.
 - CLI chat layout now keeps the composer anchored at the bottom and renders runtime status in a dedicated footer below input.
 - Autopilot mode is now instructed to continue until the goal is actually completed (instead of stopping after announcing a next step).
 
@@ -25,7 +28,7 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 
 | Package | Purpose |
 | --- | --- |
-| [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, session/context system, plugin host, subagent primitive. |
+| [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, session/context system, plugin host, subagent runner/supervisor primitives. |
 | [`@micro-harnesses/plugin-basic-tools`](plugins/basic-tools) | Workspace-scoped file mutation tools and shell execution tool. |
 | [`@micro-harnesses/plugin-plan-mode`](plugins/plan-mode) | Read-only planning and code exploration tools. |
 | [`@micro-harnesses/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |

@@ -9,6 +9,7 @@ import type { ToolPolicyEngine } from "../policy/types";
 import type { PromptSource } from "../prompts/types";
 import type { SessionStore } from "../session/sessionStore";
 import { ValidationError } from "../shared/errors";
+import { truncate } from "../shared/text";
 import { skillsAsToolResolver } from "../skills/asTool";
 import type { SkillRegistry } from "../skills/registry";
 import { deriveToolDescriptors } from "../tools/descriptors";
@@ -127,6 +128,10 @@ export class Agent implements AgentHandle {
     this.modelSelector = selector;
   }
 
+  setContextWindowTokens(tokens: number): void {
+    this.context.setContextWindowTokens(tokens);
+  }
+
   async compactSession(sessionId: string): Promise<{
     sessionId: string;
     totalTurns: number;
@@ -219,7 +224,13 @@ export class Agent implements AgentHandle {
       observer.recordRunDuration(Date.now() - startedAt, "ok");
       observer.runSpan.setAttribute("run.turns", state.turns.length);
       observer.runSpan.setStatus({ code: "ok" });
-      await observer.stream("run.completed", { turns: state.turns.length, sessionId });
+      await observer.stream("run.completed", {
+        turns: state.turns.length,
+        sessionId,
+        kind: this.kind,
+        promptName: this.promptName,
+        summary: truncate(state.turns[state.turns.length - 1]?.assistantMessage ?? "", 800),
+      });
       observer.runSpan.end();
       await this.observability.forceFlush();
       return state;
@@ -231,7 +242,12 @@ export class Agent implements AgentHandle {
         observer.recordRunDuration(Date.now() - startedAt, "error");
         observer.log("error", message, { category: "run_failed", sessionId: sessionId ?? "" });
         observer.runSpan.recordException(error, "run_failed");
-        await observer.stream("run.failed", { sessionId, reason: message });
+        await observer.stream("run.failed", {
+          sessionId,
+          reason: message,
+          kind: this.kind,
+          promptName: this.promptName,
+        });
         observer.runSpan.end();
         await this.observability.forceFlush();
       }
@@ -293,8 +309,11 @@ export class Agent implements AgentHandle {
     await observer.stream("run.started", {
       promptName,
       sessionId,
+      kind: this.kind,
       resume: Boolean(options.resume),
       goal,
+      parentSessionId: options.parentSessionId,
+      rootSessionId: options.rootSessionId,
       maxIterations,
       maxActionCallsPerRun: adaptiveLimits.maxActionCallsPerRun,
     });

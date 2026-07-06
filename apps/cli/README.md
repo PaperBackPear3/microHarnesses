@@ -38,28 +38,32 @@ Then re-run `npx mh` (or your local script) to pick up the new version.
 ## UX notes
 
 - Chat input/composer is anchored at the bottom of the terminal.
-- Runtime status (mode/model/context/usage) is rendered in a footer below input to keep the typing area clean.
+- Runtime status (mode/model/context/usage/subagents/compression) is rendered in a footer below input to keep the typing area clean.
+- Running and recently completed subagents are shown in the transcript so delegated work is not hidden.
 - In autopilot mode, prompts are augmented with an execution contract that pushes the agent to continue until the requested goal is finished.
 
 ## Context compression
 
-The CLI compresses older turns when the session exceeds the context manager's
-working-turn window (`maxWorkingTurns`, currently `16` in
-`src/runtime/composition.ts`).
+The CLI compacts based on **estimated context usage**, not only turn count.
+At each iteration, `ContextManager.buildWorkingTurns(...)` estimates token usage
+for what is actually sent (summary + working turns + tool feedback text), then
+triggers compaction when either condition is exceeded:
 
-At each loop iteration the runtime asks `ContextManager.buildWorkingTurns(...)`
-for:
+- turn window overflow (`maxWorkingTurns`, currently `16`)
+- token utilization over the trigger threshold (currently **70%**)
 
-- recent turns to keep verbatim
-- an optional persisted summary of older turns
+Compaction uses hysteresis (target currently **45%**) so it drops enough history
+in one batch and avoids recompacting every new turn.
 
-Compression triggers automatically only when there is **new overflow**:
+### Ollama context window sizing
 
-`overflowTurns = totalTurns - maxWorkingTurns`
+For `--provider ollama`, the CLI resolves context window tokens dynamically from
+the selected model by calling Ollama `POST /api/show` and parsing context-length
+metadata. If detection is unavailable, it falls back to a conservative local
+default (`8192`) instead of assuming a very large window.
 
-If `overflowTurns` grows beyond what was already summarized, the compressor runs
-for that new delta and persists a new summary under
-`.micro-harness/sessions/<session>/context/summaries/`.
+For non-Ollama providers, the CLI uses the default window (`128000`) unless you
+customize core composition.
 
 ### Default vs agentic compressor
 
@@ -102,6 +106,7 @@ compressor.
 - Sessions: `/new`, `/sessions`, `/session <id>`, `/resume <id>`
 - Screens: `/chat`, `/context`, `/telemetry`, `/help` (or `/commands`)
 - Compression: `/compact` (force a compaction pass for the active session)
+- Subagents: `/wait` (user-facing wait-all over currently running subagents; models use the `wait_subagents` tool)
 - Control: `/clear`, `/exit`
 
 ## Keybindings

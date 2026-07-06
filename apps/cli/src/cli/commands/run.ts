@@ -13,6 +13,7 @@ export async function runHeadlessPrompt(
   });
   try {
     const effectivePrompt = withModeExecutionContract(prompt, composition.modeController.getMode());
+    await composition.refreshContextWindowTokens();
     const state = await composition.agent.run(effectivePrompt, {
       ...composition.runOptions(),
       sessionId,

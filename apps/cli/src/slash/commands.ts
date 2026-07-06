@@ -12,6 +12,7 @@ export type SlashCommand =
   | { type: "set-model"; model: string }
   | { type: "set-provider"; provider: string }
   | { type: "compact" }
+  | { type: "wait-subagents" }
   | { type: "show-context" }
   | { type: "show-telemetry" }
   | { type: "show-help" }
@@ -43,6 +44,7 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
   if (command === "model" && args[0]) return { type: "set-model", model: args[0] };
   if (command === "provider" && args[0]) return { type: "set-provider", provider: args[0] };
   if (command === "compact") return { type: "compact" };
+  if (command === "wait") return { type: "wait-subagents" };
   if (command === "context") return { type: "show-context" };
   if (command === "telemetry") return { type: "show-telemetry" };
   if (command === "help" || command === "commands") return { type: "show-help" };

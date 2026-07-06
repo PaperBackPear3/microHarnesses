@@ -66,6 +66,7 @@ test("help lines include commands and shortcuts discoverability", () => {
   const commands = helpCommandLines(["gpt-5.3-codex", "claude-sonnet-5"]);
   assert(commands.includes("/help | /commands"));
   assert(commands.includes("/compact"));
+  assert(commands.includes("/wait"));
   assert(
     commands.includes("/model <id> (choices: gpt-5.3-codex, claude-sonnet-5)"),
     "expected dynamic model line to be rendered in help commands",

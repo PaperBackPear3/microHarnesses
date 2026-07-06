@@ -28,6 +28,7 @@ const HELP_COMMAND_LINES_BASE = [
   "/resume <id>",
   "/context",
   "/compact",
+  "/wait",
   "/telemetry",
   "/chat",
   "/clear",

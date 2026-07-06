@@ -8,12 +8,13 @@ import {
   DefaultObservabilityProvider,
   DefaultPolicyEngine,
   FsPromptSource,
-  InProcessSubagentRunner,
+  InProcessSubagentSupervisor,
   JsonlObservabilityExporter,
   PluginHost,
   ProviderRegistry,
   type RunOptions,
   type SessionStore,
+  type SubagentSupervisor,
   ToolRegistry,
   builtInProviderPlugins,
   createCommandSafetyRule,
@@ -25,12 +26,17 @@ import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
 import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 import type { CliConfig, EffortLevel } from "../config/config";
-import { profileForProvider } from "../config/providers";
+import { modelForEffort, profileForProvider } from "../config/providers";
 import { ModeController } from "../modes/modes";
 import { SessionService } from "../session/sessionService";
 import { UiStream } from "../streaming/uiStream";
 import { ApprovalController } from "./approvalHandler";
 import { createModeAwareApprovalPolicy, planModeAllowActions } from "./approvalPolicy";
+import {
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_OLLAMA_CONTEXT_WINDOW_TOKENS,
+  detectOllamaContextWindowTokens,
+} from "./contextWindow";
 import { EffortModelSelector } from "./modelSelector";
 import { RuntimeModelAdapter } from "./runtimeModelAdapter";
 
@@ -49,9 +55,21 @@ export interface CliComposition {
   sessionService: SessionService;
   rootSessionId: string;
   runtimeState: RuntimeState;
+  refreshContextWindowTokens(): Promise<{
+    tokens: number;
+    provider: string;
+    model: string;
+    source: "default" | "ollama-api" | "ollama-fallback";
+  }>;
   runOptions(): RunOptions;
   sessionStore: SessionStore;
+  subagents: SubagentSupervisor;
 }
+
+const COMPRESSION_TRIGGER_UTILIZATION = 0.7;
+const COMPRESSION_TARGET_UTILIZATION = 0.45;
+const TURN_COMPACTION_TARGET_RATIO = 0.75;
+const NON_TURN_TOKEN_RESERVE = 1_500;
 
 export async function buildComposition(
   config: CliConfig,
@@ -72,7 +90,7 @@ export async function buildComposition(
   });
 
   const observability = new DefaultObservabilityProvider({
-    resource: { serviceName: "micro-harness-cli", serviceVersion: "1.0.6" },
+    resource: { serviceName: "micro-harness-cli", serviceVersion: "2.0.0" },
     stream: uiStream,
     traceExporters: [telemetryExporter],
     metricExporters: [telemetryExporter],
@@ -103,11 +121,16 @@ export async function buildComposition(
     policy.addRule(createCommandSafetyRule());
   }
 
+  let contextWindowTokens = DEFAULT_CONTEXT_WINDOW_TOKENS;
   const context = new ContextManager({
     stateDir: path.join(config.stateDir, "sessions", rootSessionId, "context"),
     maxWorkingTurns: 16,
     goal: "",
-    contextWindowTokens: 128_000,
+    contextWindowTokens,
+    compressionTriggerUtilization: COMPRESSION_TRIGGER_UTILIZATION,
+    compressionTargetUtilization: COMPRESSION_TARGET_UTILIZATION,
+    turnCompactionTargetRatio: TURN_COMPACTION_TARGET_RATIO,
+    nonTurnTokenReserve: NON_TURN_TOKEN_RESERVE,
   });
   const prompts = new FsPromptSource({ rootDir: config.promptsDir });
   const modelSelector = new EffortModelSelector(runtimeState.effort);
@@ -116,7 +139,6 @@ export async function buildComposition(
     model: runtimeState.model,
     maxTokens: config.maxTokens,
   }));
-
   const sessionService = new SessionService(config.stateDir);
   const sessionStore = sessionService.getStore();
 
@@ -133,13 +155,14 @@ export async function buildComposition(
     approvalHandler: approvalController.createHandler(() => modeController.getMode()),
   });
 
-  const subagentRunner = new InProcessSubagentRunner(
+  const subagents = new InProcessSubagentSupervisor(
     {
       async build(request, parent) {
         const childSessionId = `s-${randomUUID()}`;
         const childTools = new ToolRegistry();
         for (const tool of tools.list()) {
           if (tool.name === "spawn_subagent") continue;
+          if (tool.name === "wait_subagents") continue;
           if (request.allowedTools && !request.allowedTools.includes(tool.name)) continue;
           childTools.register(tool);
         }
@@ -147,7 +170,11 @@ export async function buildComposition(
           stateDir: path.join(config.stateDir, "sessions", childSessionId, "context"),
           maxWorkingTurns: 6,
           goal: request.goal ?? request.prompt,
-          contextWindowTokens: 128_000,
+          contextWindowTokens,
+          compressionTriggerUtilization: COMPRESSION_TRIGGER_UTILIZATION,
+          compressionTargetUtilization: COMPRESSION_TARGET_UTILIZATION,
+          turnCompactionTargetRatio: TURN_COMPACTION_TARGET_RATIO,
+          nonTurnTokenReserve: NON_TURN_TOKEN_RESERVE,
         });
         const childAgent = new Agent({
           promptName: request.promptName ?? "coder",
@@ -190,7 +217,7 @@ export async function buildComposition(
     includeBuiltInProviders: false,
     tools: createCoreDefaultTools({
       workspaceTools: { rootDir: process.cwd() },
-      subagents: subagentRunner,
+      subagents,
     }),
   });
 
@@ -211,7 +238,7 @@ export async function buildComposition(
       registerMetricExporter: (exporter) => observability.addMetricExporter(exporter),
       registerLogExporter: (exporter) => observability.addLogExporter(exporter),
     },
-    subagents: subagentRunner,
+    subagents,
     invokeAgent: (request) => agent.invoke(request),
   });
 
@@ -223,6 +250,43 @@ export async function buildComposition(
     exampleToolsPlugin,
   ]);
 
+  async function refreshContextWindowTokens(): Promise<{
+    tokens: number;
+    provider: string;
+    model: string;
+    source: "default" | "ollama-api" | "ollama-fallback";
+  }> {
+    const provider = runtimeState.provider;
+    const profile = profileForProvider(provider, runtimeState.model);
+    const model = runtimeState.model ?? modelForEffort(profile, runtimeState.effort);
+    let source: "default" | "ollama-api" | "ollama-fallback" = "default";
+    let tokens = DEFAULT_CONTEXT_WINDOW_TOKENS;
+
+    if (provider === "ollama") {
+      source = "ollama-fallback";
+      tokens = DEFAULT_OLLAMA_CONTEXT_WINDOW_TOKENS;
+      try {
+        const auth = await credentials.get("ollama").resolve();
+        const detected = await detectOllamaContextWindowTokens({
+          baseUrl: auth.baseUrl ?? "http://127.0.0.1:11434/v1",
+          model,
+        });
+        if (detected && detected > 0) {
+          tokens = detected;
+          source = "ollama-api";
+        }
+      } catch {
+        // Keep conservative fallback for local models when detection is unavailable.
+      }
+    }
+
+    contextWindowTokens = tokens;
+    agent.setContextWindowTokens(tokens);
+    return { tokens, provider, model, source };
+  }
+
+  await refreshContextWindowTokens();
+
   return {
     agent,
     uiStream,
@@ -232,7 +296,9 @@ export async function buildComposition(
     sessionService,
     rootSessionId,
     runtimeState,
+    refreshContextWindowTokens,
     sessionStore,
+    subagents,
     runOptions() {
       const mode = modeController.getMode();
       const maxIterations =

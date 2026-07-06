@@ -63,12 +63,18 @@ Important: command safety is screening, not sandboxing.
 
 ## Subagents
 
-`InProcessSubagentRunner` builds child runtimes in-process. Typical usage:
+`InProcessSubagentRunner` builds child runtimes in-process and waits for them to
+finish. `InProcessSubagentSupervisor` uses the same factory contract but tracks
+async children so model-facing tools can spawn first and join later.
+
+Typical usage:
 
 - filter tool registry for the child
 - give child its own context/session path
 - propagate abort signals
 - record parent-child session linkage
+- register `spawn_subagent` and `wait_subagents` from `createCoreDefaultTools`
+  when the model should delegate and then wait for child summaries
 
 ## Why this design
 

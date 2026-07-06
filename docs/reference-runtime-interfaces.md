@@ -87,3 +87,18 @@ Templating:
 | `ollama` | none (`OLLAMA_API_KEY` optional) | `OLLAMA_BASE_URL` | `http://127.0.0.1:11434/v1` |
 
 For local use, `ollama` is the quickest path because it works without mandatory API key configuration.
+
+## 7) Subagent lifecycle
+
+Core exposes two in-process delegation contracts:
+
+- `SubagentRunner.run(options)` blocks until the child agent finishes and returns
+  its final summary.
+- `SubagentSupervisor.spawn(options)` launches a tracked child and returns a
+  handle; `wait(options)` returns completed child summaries and the remaining
+  running children.
+
+`wait({ mode: "next" })` is intended for model-facing incremental joins: the
+parent run stays open, receives one completed child result, and can decide
+whether to wait again. `wait({ mode: "all" })` joins the selected running
+snapshot, which is useful for user-facing commands such as CLI `/wait`.

@@ -40,6 +40,16 @@ interface Props {
   onExit(): void;
 }
 
+interface SubagentStatus {
+  sessionId: string;
+  promptName: string;
+  goal?: string;
+  model?: string;
+  status: "running" | "completed" | "failed";
+  activity?: string;
+  summary?: string;
+}
+
 export function App({
   composition: initialComposition,
   buildForSession,
@@ -58,12 +68,14 @@ export function App({
   const [contextView, setContextView] = useState<string>("No context metrics yet.");
   const [telemetryView, setTelemetryView] = useState<string>("No telemetry yet.");
   const [pendingApproval, setPendingApproval] = useState<ApprovalView | undefined>(undefined);
+  const [subagents, setSubagents] = useState<SubagentStatus[]>([]);
 
   // Refs avoid stale-closure bugs in the long-lived stream subscription and
   // guard against overlapping runs triggered by rapid input.
   const activeTurnIdRef = useRef<string | undefined>(undefined);
   const activeRunSessionRef = useRef<string | undefined>(undefined);
   const runningRef = useRef(false);
+  const subagentsRef = useRef<SubagentStatus[]>([]);
 
   const mode = composition.modeController.getMode();
   const modeStyle = modePromptStyle(mode);
@@ -82,8 +94,9 @@ export function App({
   const contentRows = Math.max(1, viewportHeight - composerRows - footerRows);
 
   const chatLines = useMemo(
-    () => buildChatLines(chatEntries, status.compressing, pendingApproval, terminalColumns),
-    [chatEntries, status.compressing, pendingApproval, terminalColumns],
+    () =>
+      buildChatLines(chatEntries, subagents, status.compressing, pendingApproval, terminalColumns),
+    [chatEntries, subagents, status.compressing, pendingApproval, terminalColumns],
   );
   const transcriptViewport = useMemo(
     () => sliceFromBottom(chatLines, contentRows, chatScrollOffset),
@@ -97,8 +110,13 @@ export function App({
   }, [chatScrollOffset, transcriptViewport.maxOffset]);
 
   useEffect(() => {
+    subagentsRef.current = subagents;
+  }, [subagents]);
+
+  useEffect(() => {
     return composition.uiStream.subscribe(({ streamEvent }) => {
-      applyStreamEvent(streamEvent);
+      const includeInMainStatus = applyStreamEvent(streamEvent);
+      if (!includeInMainStatus) return;
       setStatus((current) => reduceStatus(current, streamEvent));
     });
   }, [composition.uiStream]);
@@ -194,6 +212,7 @@ export function App({
           trimmed,
           composition.modeController.getMode(),
         );
+        await composition.refreshContextWindowTokens();
         const state = await composition.agent.run(effectivePrompt, {
           ...composition.runOptions(),
           sessionId: runSessionId,
@@ -229,12 +248,14 @@ export function App({
     next.runtimeState.effort = composition.runtimeState.effort;
     next.modelSelector.setEffort(composition.runtimeState.effort);
     next.modeController.setMode(composition.modeController.getMode());
+    await next.refreshContextWindowTokens();
 
     setComposition(next);
     setActiveSessionId(next.rootSessionId);
     setChatEntries([{ id: randomUUID(), type: "system", text: notice }]);
     setChatScrollOffset(0);
     activeTurnIdRef.current = undefined;
+    setSubagents([]);
     setStatus(createStatusState());
     setScreen("chat");
   }
@@ -257,17 +278,53 @@ export function App({
     if (command.type === "set-effort") {
       composition.runtimeState.effort = command.effort;
       composition.modelSelector.setEffort(command.effort);
-      appendSystemMessage(`Effort set to ${command.effort}.`);
+      const synced = await composition.refreshContextWindowTokens();
+      appendSystemMessage(
+        `Effort set to ${command.effort}. Context window set to ${synced.tokens} tokens (${synced.source}).`,
+      );
       return;
     }
     if (command.type === "set-model") {
       composition.runtimeState.model = command.model;
-      appendSystemMessage(`Model override set to ${command.model}.`);
+      const synced = await composition.refreshContextWindowTokens();
+      appendSystemMessage(
+        `Model override set to ${command.model}. Context window set to ${synced.tokens} tokens (${synced.source}).`,
+      );
       return;
     }
     if (command.type === "set-provider") {
       composition.runtimeState.provider = command.provider;
-      appendSystemMessage(`Provider set to ${command.provider}.`);
+      const synced = await composition.refreshContextWindowTokens();
+      appendSystemMessage(
+        `Provider set to ${command.provider}. Context window set to ${synced.tokens} tokens (${synced.source}).`,
+      );
+      return;
+    }
+    if (command.type === "wait-subagents") {
+      const pending = composition.subagents.list().filter((entry) => entry.status === "running");
+      if (pending.length === 0) {
+        appendSystemMessage("No running subagents.");
+        return;
+      }
+      appendSystemMessage(`Waiting for ${pending.length} subagent(s) to finish...`);
+      const result = await composition.subagents.wait({ mode: "all" });
+      for (const completed of result.completed) {
+        const name = completed.promptName ?? "subagent";
+        if (completed.status === "failed") {
+          appendSystemMessage(
+            `${name} failed (${completed.sessionId ?? completed.id}): ${completed.error ?? "unknown error"}`,
+          );
+        } else {
+          appendSystemMessage(
+            `${name} completed (${completed.sessionId ?? completed.id}): ${completed.summary ?? ""}`.trim(),
+          );
+        }
+      }
+      appendSystemMessage(
+        result.running.length === 0
+          ? "All running subagents completed."
+          : `${result.running.length} subagent(s) still running.`,
+      );
       return;
     }
     if (command.type === "compact") {
@@ -276,6 +333,8 @@ export function App({
         return;
       }
       try {
+        runningRef.current = true;
+        setRunning(true);
         const result = await composition.agent.compactSession(activeSessionId);
         if (!result.compressed) {
           appendSystemMessage("No turns available to compact in this session.");
@@ -287,6 +346,9 @@ export function App({
       } catch (error) {
         const message = error instanceof Error ? error.message : "unknown compact failure";
         appendSystemMessage(`Compact failed: ${message}`);
+      } finally {
+        runningRef.current = false;
+        setRunning(false);
       }
       return;
     }
@@ -364,27 +426,107 @@ export function App({
     }
   }
 
-  function applyStreamEvent(event: StreamEvent): void {
-    // Only render the top-level run's model/tool activity. Subagent runs share
-    // the same stream but carry a different sessionId; their output must not be
-    // spliced into the main assistant transcript.
+  function applyStreamEvent(event: StreamEvent): boolean {
+    const eventSessionId = typeof event.sessionId === "string" ? event.sessionId : undefined;
+    const payloadKind = typeof event.payload.kind === "string" ? event.payload.kind : undefined;
+    const isSubagentStart =
+      event.type === "run.started" && payloadKind === "subagent" && Boolean(eventSessionId);
+    if (isSubagentStart && eventSessionId) {
+      upsertSubagent(eventSessionId, {
+        sessionId: eventSessionId,
+        promptName: String(event.payload.promptName ?? "subagent"),
+        goal: asString(event.payload.goal),
+        status: "running",
+        activity: "starting",
+      });
+      return false;
+    }
+
+    if (
+      eventSessionId &&
+      subagentsRef.current.some((entry) => entry.sessionId === eventSessionId)
+    ) {
+      if (event.type === "model.selected") {
+        upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          promptName: "subagent",
+          status: "running",
+          model: asString(event.payload.model),
+          activity: "model selected",
+        });
+      } else if (event.type === "model.reasoning_delta") {
+        upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          promptName: "subagent",
+          status: "running",
+          activity: "reasoning",
+        });
+      } else if (event.type === "model.output_delta") {
+        upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          promptName: "subagent",
+          status: "running",
+          activity: "responding",
+        });
+      } else if (event.type === "tool.started") {
+        const action = asString(event.payload.action) ?? "tool";
+        upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          promptName: "subagent",
+          status: "running",
+          activity: `tool: ${action}`,
+        });
+      } else if (event.type === "run.completed") {
+        const summary = asString(event.payload.summary);
+        upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          promptName: asString(event.payload.promptName) ?? "subagent",
+          status: "completed",
+          activity: "completed",
+          summary,
+        });
+        if (summary && summary.length > 0) {
+          appendSystemMessage(`subagent completed (${eventSessionId}): ${summary}`);
+        } else {
+          appendSystemMessage(`subagent completed (${eventSessionId}).`);
+        }
+      } else if (event.type === "run.failed") {
+        upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          promptName: asString(event.payload.promptName) ?? "subagent",
+          status: "failed",
+          activity: asString(event.payload.reason) ?? "failed",
+        });
+      }
+      return false;
+    }
+
+    // Only render the top-level run's model/tool activity in the main
+    // transcript. Any unknown foreign session events are ignored.
     const topLevelSession = activeRunSessionRef.current;
-    if (topLevelSession && event.sessionId && event.sessionId !== topLevelSession) {
-      return;
+    if (topLevelSession && eventSessionId && eventSessionId !== topLevelSession) {
+      return false;
     }
 
     if (event.type === "model.reasoning_delta") {
       appendTurnThinking(String(event.payload.delta ?? ""), asNumber(event.payload.iteration));
-      return;
+      return true;
     }
     if (event.type === "model.output_delta") {
       appendTurnAssistant(String(event.payload.delta ?? ""), asNumber(event.payload.iteration));
-      return;
+      return true;
     }
     if (event.type === "tool.started") {
       const action = String(event.payload.action ?? "unknown_tool");
+      if (action === "wait_subagents") {
+        appendTurnSystemMessage(
+          "waiting for subagent result...",
+          asNumber(event.payload.iteration),
+        );
+        return true;
+      }
       appendTurnSystemMessage(`tool started: ${action}`, asNumber(event.payload.iteration));
-      return;
+      return true;
     }
     if (event.type === "tool.blocked") {
       const action = String(event.payload.action ?? "unknown_tool");
@@ -393,7 +535,7 @@ export function App({
         `tool blocked: ${action} (${reason})`,
         asNumber(event.payload.iteration),
       );
-      return;
+      return true;
     }
     if (event.type === "limit.reached") {
       const action = String(event.payload.action ?? "unknown");
@@ -402,12 +544,30 @@ export function App({
         `limit reached: ${action} (${limit})`,
         asNumber(event.payload.iteration),
       );
-      return;
+      return true;
     }
     if (event.type === "run.failed") {
       const reason = String(event.payload.reason ?? "run failed");
       appendSystemMessage(reason);
+      return true;
     }
+    return true;
+  }
+
+  function upsertSubagent(sessionId: string, next: SubagentStatus): void {
+    setSubagents((items) => {
+      const existing = items.find((entry) => entry.sessionId === sessionId);
+      const merged: SubagentStatus = existing
+        ? {
+            ...existing,
+            ...next,
+            promptName: next.promptName === "subagent" ? existing.promptName : next.promptName,
+          }
+        : next;
+      const without = items.filter((entry) => entry.sessionId !== sessionId);
+      const updated = [merged, ...without];
+      return updated.slice(0, 24);
+    });
   }
 
   function appendSystemMessage(text: string): void {
@@ -511,6 +671,7 @@ export function App({
         contextStyle={contextStyle}
         running={running}
         status={status}
+        subagents={subagents}
         shortcutHint={shortcutHint}
         columns={terminalColumns}
       />
@@ -527,9 +688,12 @@ function FooterStatusBar(props: {
   contextStyle: { label: string; color: string };
   running: boolean;
   status: StatusState;
+  subagents: SubagentStatus[];
   shortcutHint: string;
   columns: number;
 }): React.ReactElement {
+  const runningSubagents = props.subagents.filter((entry) => entry.status === "running").length;
+  const finishedSubagents = props.subagents.filter((entry) => entry.status !== "running").length;
   const line1 = trimToColumns(
     [
       `session=${props.sessionId}`,
@@ -547,6 +711,7 @@ function FooterStatusBar(props: {
       `turns=${props.status.turns}`,
       `errors=${props.status.errors}`,
       `limits=${props.status.limitHits}`,
+      `subagents=${runningSubagents} running/${finishedSubagents} done`,
       props.status.compressing ? "COMPRESSING" : "",
       props.running ? "RUNNING" : "",
     ]
@@ -603,6 +768,10 @@ function trimToColumns(text: string, columns: number): string {
   return `${text.slice(0, Math.max(0, columns - 1))}…`;
 }
 
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 interface ChatRenderLine {
   id: string;
   text: string;
@@ -611,6 +780,7 @@ interface ChatRenderLine {
 
 function buildChatLines(
   entries: ChatEntry[],
+  subagents: SubagentStatus[],
   compressing: boolean,
   pendingApproval: ApprovalView | undefined,
   columns: number,
@@ -660,6 +830,47 @@ function buildChatLines(
   }
   if (compressing) {
     pushWrapped(lines, "compressing", "yellow", "Compressing context...", columns);
+  }
+  const runningSubagents = subagents.filter((entry) => entry.status === "running");
+  if (runningSubagents.length > 0) {
+    pushWrapped(
+      lines,
+      "subagents-header",
+      "yellow",
+      `subagents > running ${runningSubagents.length}`,
+      columns,
+    );
+    for (const subagent of runningSubagents) {
+      const activity = subagent.activity ? ` | ${subagent.activity}` : "";
+      const model = subagent.model ? ` | model=${subagent.model}` : "";
+      pushWrapped(
+        lines,
+        `subagent-${subagent.sessionId}`,
+        "yellow",
+        `subagent > [running] ${subagent.promptName} (${subagent.sessionId})${activity}${model}`,
+        columns,
+      );
+    }
+  }
+  const finishedSubagents = subagents.filter((entry) => entry.status !== "running").slice(0, 5);
+  if (finishedSubagents.length > 0) {
+    pushWrapped(
+      lines,
+      "subagents-finished-header",
+      "gray",
+      `subagents > recent finished ${finishedSubagents.length}`,
+      columns,
+    );
+    for (const subagent of finishedSubagents) {
+      const summary = subagent.summary ? ` | ${subagent.summary}` : "";
+      pushWrapped(
+        lines,
+        `subagent-finished-${subagent.sessionId}`,
+        subagent.status === "completed" ? "green" : "yellow",
+        `subagent > [${subagent.status}] ${subagent.promptName} (${subagent.sessionId})${summary}`,
+        columns,
+      );
+    }
   }
   if (pendingApproval) {
     pushWrapped(

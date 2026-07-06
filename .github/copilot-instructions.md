@@ -87,11 +87,12 @@ helper strips backslash / quote splices before matching.
 
 ### Subagents
 
-`InProcessSubagentRunner` (built from a `SubagentRuntimeFactory` in
-composition) runs children in-process. A typical factory uses filtered
-`ToolRegistry`, fresh `ContextManager`, nested session
-(`sessions/<parent>/subagents/<child>/`), `AbortSignal` propagation.
-`spawn_subagent` can be exposed to models by registering the core default tool.
+`InProcessSubagentRunner` runs children in-process and blocks for the final
+summary. `InProcessSubagentSupervisor` uses the same `SubagentRuntimeFactory`
+but tracks async child handles, completion/failure state, abort propagation, and
+deterministic waits. When a supervisor is passed to `createCoreDefaultTools`,
+models get `spawn_subagent` plus `wait_subagents`; the CLI `/wait` command is a
+user-facing wait-all alias over the same supervisor state.
 
 ## Key conventions
 
