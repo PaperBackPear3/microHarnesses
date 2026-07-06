@@ -36,6 +36,8 @@
 
 - `Enter` send prompt
 - `Shift+Tab` cycle mode (Plan → Accept-edits → Autopilot)
+- `Ctrl+T` toggle latest thinking collapse
 - `y / n / a` resolve pending approval (approve / reject / always allow tool)
 - `Esc` or `Ctrl+C` interrupt current run
 - `Ctrl+D` exit
+- `/help` (or `/commands`) shows the complete command + shortcut list

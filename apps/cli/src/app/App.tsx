@@ -23,6 +23,14 @@ import {
   startUserTurn,
   toggleLatestThinkingCollapse as toggleLatestThinkingCollapseInTranscript,
 } from "./transcript";
+import {
+  compactShortcutHintLine,
+  contextBadgeStyle,
+  helpCommandLines,
+  helpShortcutLines,
+  modePromptStyle,
+  modelBadgeLabel,
+} from "./uiMeta";
 
 interface Props {
   composition: CliComposition;
@@ -55,6 +63,10 @@ export function App({
   const runningRef = useRef(false);
 
   const mode = composition.modeController.getMode();
+  const modeStyle = modePromptStyle(mode);
+  const contextStyle = contextBadgeStyle(status);
+  const modelLabel = modelBadgeLabel(composition.runtimeState.model ?? status.model);
+  const shortcutHint = compactShortcutHintLine();
   const modelChoices = useMemo(
     () => availableModelChoices(composition.runtimeState.provider),
     [composition.runtimeState.provider],
@@ -448,16 +460,26 @@ export function App({
 
       {renderApprovalPrompt(pendingApproval)}
 
-      <Box marginTop={1}>
-        <Text color="cyan">› </Text>
-        <TextInput value={input} onChange={setInput} onSubmit={submit} />
-        {running && (
+      <Box marginTop={1} flexDirection="column">
+        <Box>
+          <Text color={modeStyle.color}>[{modeStyle.label}] </Text>
+          <Text color={modeStyle.color}>› </Text>
+          <TextInput value={input} onChange={setInput} onSubmit={submit} />
           <Box marginLeft={1}>
-            <Text color="yellow">
-              <Spinner type="dots" /> running
-            </Text>
+            <Text color="blue">{modelLabel}</Text>
           </Box>
-        )}
+          <Box marginLeft={1}>
+            <Text color={contextStyle.color}>{contextStyle.label}</Text>
+          </Box>
+          {running && (
+            <Box marginLeft={1}>
+              <Text color="yellow">
+                <Spinner type="dots" /> running
+              </Text>
+            </Box>
+          )}
+        </Box>
+        <Text color="gray">{shortcutHint}</Text>
       </Box>
     </Box>
   );
@@ -512,22 +534,14 @@ function Screen({ title, children }: { title: string; children: string }): React
 }
 
 function HelpScreen({ modelChoices }: { modelChoices: string[] }): React.ReactElement {
+  const commandLines = helpCommandLines(modelChoices);
+  const shortcutLines = helpShortcutLines();
   const lines = [
-    "/plan | /edits | /autopilot",
-    "/mode <plan|accept-edits|autopilot>",
-    "/effort <low|medium|high>",
-    `/model <id> (choices: ${modelChoices.join(", ") || "provider defaults"})`,
-    "/provider <openai|anthropic|ollama>",
-    "/new",
-    "/sessions",
-    "/session <id>",
-    "/resume <id>",
-    "/context",
-    "/telemetry",
-    "/chat",
-    "/clear",
-    "/exit",
-    "Ctrl+T toggle latest thinking collapse",
+    "Slash commands:",
+    ...commandLines.map((line) => `  ${line}`),
+    "",
+    "Keyboard shortcuts:",
+    ...shortcutLines.map((line) => `  ${line}`),
   ].join("\n");
-  return <Screen title="Commands">{lines}</Screen>;
+  return <Screen title="Commands & Shortcuts">{lines}</Screen>;
 }
