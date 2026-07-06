@@ -12,6 +12,7 @@ import type { ApprovalView } from "../runtime/approvalHandler";
 import type { CliComposition } from "../runtime/composition";
 import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands";
 import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status";
+import { withModeExecutionContract } from "../runtime/autopilotPrompt";
 import {
   type ChatEntry,
   appendAssistantDelta,
@@ -144,7 +145,11 @@ export function App({
       const runSessionId = activeSessionId;
       activeRunSessionRef.current = runSessionId;
       try {
-        const state = await composition.agent.run(trimmed, {
+        const effectivePrompt = withModeExecutionContract(
+          trimmed,
+          composition.modeController.getMode(),
+        );
+        const state = await composition.agent.run(effectivePrompt, {
           ...composition.runOptions(),
           sessionId: runSessionId,
           resume: true,

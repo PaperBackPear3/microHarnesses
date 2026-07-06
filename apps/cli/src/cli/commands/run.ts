@@ -1,5 +1,6 @@
 import type { StreamEvent } from "@micro-harnesses/core";
 import type { CliComposition } from "../../runtime/composition";
+import { withModeExecutionContract } from "../../runtime/autopilotPrompt";
 
 export async function runHeadlessPrompt(
   composition: CliComposition,
@@ -11,7 +12,8 @@ export async function runHeadlessPrompt(
     printProgress(streamEvent);
   });
   try {
-    const state = await composition.agent.run(prompt, {
+    const effectivePrompt = withModeExecutionContract(prompt, composition.modeController.getMode());
+    const state = await composition.agent.run(effectivePrompt, {
       ...composition.runOptions(),
       sessionId,
       resume: true,
