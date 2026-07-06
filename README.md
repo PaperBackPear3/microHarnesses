@@ -46,6 +46,12 @@ npm test
 npm run lint
 ```
 
+## Install packages
+
+```bash
+npm install @micro-harnesses/core @micro-harnesses/plugin-basic-tools @micro-harnesses/plugin-plan-mode @micro-harnesses/plugin-example-tools @micro-harnesses/cli
+```
+
 ## Plugin capabilities
 
 `"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`

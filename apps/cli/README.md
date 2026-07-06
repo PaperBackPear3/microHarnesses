@@ -3,6 +3,12 @@
 `mh` / `micro-harness` is the v2 interactive development assistant built on
 `@micro-harnesses/core`.
 
+## Install
+
+```bash
+npm install @micro-harnesses/cli
+```
+
 ## UX notes
 
 - Chat input/composer is anchored at the bottom of the terminal.
