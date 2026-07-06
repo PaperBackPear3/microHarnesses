@@ -15,6 +15,7 @@ test("autopilot mode appends execution contract", () => {
   assert.match(result, /Autopilot contract:/);
   assert.match(result, /Continue autonomously/);
   assert.match(result, /path exploration requests/);
+  assert.match(result, /only say the listing is truncated when `truncated: true`/);
 });
 
 test("empty prompt remains unchanged in autopilot mode", () => {
