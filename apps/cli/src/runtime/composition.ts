@@ -72,7 +72,7 @@ export async function buildComposition(
   });
 
   const observability = new DefaultObservabilityProvider({
-    resource: { serviceName: "micro-harness-cli", serviceVersion: "1.0.0" },
+    resource: { serviceName: "micro-harness-cli", serviceVersion: "1.0.6" },
     stream: uiStream,
     traceExporters: [telemetryExporter],
     metricExporters: [telemetryExporter],

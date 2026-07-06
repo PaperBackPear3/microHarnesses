@@ -270,6 +270,26 @@ export function App({
       appendSystemMessage(`Provider set to ${command.provider}.`);
       return;
     }
+    if (command.type === "compact") {
+      if (runningRef.current) {
+        appendSystemMessage("Cannot compact while a run is in progress.");
+        return;
+      }
+      try {
+        const result = await composition.agent.compactSession(activeSessionId);
+        if (!result.compressed) {
+          appendSystemMessage("No turns available to compact in this session.");
+          return;
+        }
+        appendSystemMessage(
+          `Context compacted (${result.deltaTurns} turns, mode=${result.forced ? "forced" : "overflow"}, totalTurns=${result.totalTurns}).`,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown compact failure";
+        appendSystemMessage(`Compact failed: ${message}`);
+      }
+      return;
+    }
     if (command.type === "new-session") {
       const nextId = `s-${randomUUID()}`;
       await switchToSession(nextId, `Started new session ${nextId}.`);

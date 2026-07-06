@@ -27,6 +27,7 @@ const HELP_COMMAND_LINES_BASE = [
   "/session <id>",
   "/resume <id>",
   "/context",
+  "/compact",
   "/telemetry",
   "/chat",
   "/clear",

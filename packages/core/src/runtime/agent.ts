@@ -127,6 +127,40 @@ export class Agent implements AgentHandle {
     this.modelSelector = selector;
   }
 
+  async compactSession(sessionId: string): Promise<{
+    sessionId: string;
+    totalTurns: number;
+    compressed: boolean;
+    forced: boolean;
+    overflowTurns: number;
+    deltaTurns: number;
+    reason?: "no_turns";
+  }> {
+    if (!this.sessionStore) {
+      throw new Error("Manual compaction requires a sessionStore");
+    }
+
+    await this.context.init();
+    const manifest = await this.sessionStore.getSession(sessionId);
+    this.context.setGoal(manifest.goal);
+    const snapshot = await this.sessionStore.loadLatestSnapshot(sessionId);
+    const turns = snapshot?.turns ?? [];
+    const result = await this.context.compactNow(turns);
+    const refinedGoal = result.summary?.refinedGoal?.trim();
+    if (refinedGoal && refinedGoal !== manifest.goal) {
+      await this.sessionStore.updateGoal(sessionId, refinedGoal);
+    }
+    return {
+      sessionId,
+      totalTurns: turns.length,
+      compressed: result.compressed,
+      forced: result.forced,
+      overflowTurns: result.overflowTurns,
+      deltaTurns: result.deltaTurns,
+      ...(result.reason ? { reason: result.reason } : {}),
+    };
+  }
+
   async run(userPrompt: string, options: RunOptions): Promise<RunState> {
     validateRunOptions(options);
     const runId = randomUUID();

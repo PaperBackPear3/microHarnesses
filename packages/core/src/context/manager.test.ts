@@ -116,3 +116,58 @@ test("buildWorkingTurns invokes compression lifecycle hooks for new overflow del
     await rm(stateDir, { recursive: true, force: true });
   }
 });
+
+test("compactNow forces compression even when turns do not overflow the window", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-manual-"));
+  try {
+    let calls = 0;
+    const manager = new ContextManager({
+      stateDir,
+      maxWorkingTurns: 10,
+      compressor: (turns) => {
+        calls += 1;
+        return {
+          summary: `forced ${turns.length}`,
+          highlights: [],
+          supportHistory: [],
+        };
+      },
+    });
+    await manager.init();
+    const result = await manager.compactNow([makeTurn(1, "a", "1"), makeTurn(2, "b", "2")]);
+    assert.equal(result.compressed, true);
+    assert.equal(result.forced, true);
+    assert.equal(result.deltaTurns, 2);
+    assert.equal(calls, 1);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("compactNow uses overflow mode when there are uncompressed overflow turns", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-manual-overflow-"));
+  try {
+    const manager = new ContextManager({
+      stateDir,
+      maxWorkingTurns: 2,
+      compressor: (turns) => ({
+        summary: `overflow ${turns.length}`,
+        highlights: [],
+        supportHistory: [],
+      }),
+    });
+    await manager.init();
+    const result = await manager.compactNow([
+      makeTurn(1, "a", "1"),
+      makeTurn(2, "b", "2"),
+      makeTurn(3, "c", "3"),
+      makeTurn(4, "d", "4"),
+    ]);
+    assert.equal(result.compressed, true);
+    assert.equal(result.forced, false);
+    assert.equal(result.overflowTurns, 2);
+    assert.equal(result.deltaTurns, 2);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});

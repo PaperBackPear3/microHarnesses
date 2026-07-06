@@ -34,6 +34,15 @@ export interface CompressionLifecycleHooks {
   }): Promise<void> | void;
 }
 
+export interface ManualCompressionResult {
+  compressed: boolean;
+  forced: boolean;
+  overflowTurns: number;
+  deltaTurns: number;
+  reason?: "no_turns";
+  summary?: CompressionResult;
+}
+
 /**
  * Owns the working context window: trims turns to `maxWorkingTurns`, compresses
  * overflowed turns exactly once (persisting summaries under
@@ -102,31 +111,9 @@ export class ContextManager {
         goal: this.goal,
         previousSummary: this.latestSummary,
       });
-      this.latestSummary = compression;
+      this.applyCompressionResult(compression);
       compressed = true;
-      // A goals-finder-style compressor may rediscover a more accurate goal
-      // mid-run; adopt it so later compression cycles in this run see it.
-      const refinedGoal = compression.refinedGoal?.trim();
-      if (refinedGoal) {
-        this.setGoal(refinedGoal);
-      }
-      const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
-      await writeFile(
-        summaryFile,
-        JSON.stringify(
-          {
-            goal: this.goal ?? "",
-            summary: compression.summary,
-            highlights: compression.highlights,
-            support_history: compression.supportHistory,
-            turns: delta.length,
-            from: summaryState.compressedTurnCount,
-          },
-          null,
-          2,
-        ),
-        "utf8",
-      );
+      await this.persistSummary(compression, delta.length, summaryState.compressedTurnCount, false);
       await this.writeSummaryState({ compressedTurnCount: overflowCount });
       await hooks?.onCompressionCompleted?.({
         overflowTurns: overflowCount,
@@ -139,6 +126,85 @@ export class ContextManager {
       recentTurns,
       summary: this.latestSummary,
       stats: this.computeStats(turns.length, recentTurns, overflowCount, compressed),
+    };
+  }
+
+  /**
+   * Forces a compression pass against the current session turns.
+   *
+   * - When there is uncompressed overflow (`turns.length > maxWorkingTurns` and
+   *   `overflow > compressedTurnCount`), this behaves like the normal automatic
+   *   compression path and advances summary state.
+   * - Otherwise, it still performs a forced compression over the current
+   *   working window to refresh/produce a summary immediately, but does not
+   *   advance overflow bookkeeping.
+   */
+  async compactNow(
+    turns: Turn[],
+    hooks?: CompressionLifecycleHooks,
+  ): Promise<ManualCompressionResult> {
+    await this.init();
+    if (turns.length === 0) {
+      return {
+        compressed: false,
+        forced: true,
+        overflowTurns: 0,
+        deltaTurns: 0,
+        reason: "no_turns",
+      };
+    }
+
+    const overflowCount = Math.max(0, turns.length - this.maxWorkingTurns);
+    const summaryState = await this.readSummaryState();
+    const newOverflowCount = overflowCount - summaryState.compressedTurnCount;
+    if (newOverflowCount > 0) {
+      await hooks?.onCompressionStarted?.({
+        overflowTurns: overflowCount,
+        deltaTurns: newOverflowCount,
+      });
+      const delta = turns.slice(summaryState.compressedTurnCount, overflowCount);
+      const compression = await this.compressor(delta, {
+        goal: this.goal,
+        previousSummary: this.latestSummary,
+      });
+      this.applyCompressionResult(compression);
+      await this.persistSummary(compression, delta.length, summaryState.compressedTurnCount, false);
+      await this.writeSummaryState({ compressedTurnCount: overflowCount });
+      await hooks?.onCompressionCompleted?.({
+        overflowTurns: overflowCount,
+        deltaTurns: newOverflowCount,
+      });
+      return {
+        compressed: true,
+        forced: false,
+        overflowTurns: overflowCount,
+        deltaTurns: newOverflowCount,
+        summary: compression,
+      };
+    }
+
+    const from = Math.max(0, turns.length - this.maxWorkingTurns);
+    const delta = turns.slice(from);
+    await hooks?.onCompressionStarted?.({
+      overflowTurns: overflowCount,
+      deltaTurns: delta.length,
+    });
+    const compression = await this.compressor(delta, {
+      goal: this.goal,
+      previousSummary: this.latestSummary,
+    });
+    this.applyCompressionResult(compression);
+    await this.persistSummary(compression, delta.length, from, true);
+    await hooks?.onCompressionCompleted?.({
+      overflowTurns: overflowCount,
+      deltaTurns: delta.length,
+    });
+    return {
+      compressed: true,
+      forced: true,
+      overflowTurns: overflowCount,
+      deltaTurns: delta.length,
+      summary: compression,
     };
   }
 
@@ -221,5 +287,41 @@ export class ContextManager {
 
   private async writeSummaryState(state: SummaryState): Promise<void> {
     await writeFile(this.summaryStatePath, JSON.stringify(state, null, 2), "utf8");
+  }
+
+  private applyCompressionResult(compression: CompressionResult): void {
+    this.latestSummary = compression;
+    // A goals-finder-style compressor may rediscover a more accurate goal
+    // mid-run; adopt it so later compression cycles in this run see it.
+    const refinedGoal = compression.refinedGoal?.trim();
+    if (refinedGoal) {
+      this.setGoal(refinedGoal);
+    }
+  }
+
+  private async persistSummary(
+    compression: CompressionResult,
+    turnCount: number,
+    from: number,
+    forced: boolean,
+  ): Promise<void> {
+    const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
+    await writeFile(
+      summaryFile,
+      JSON.stringify(
+        {
+          goal: this.goal ?? "",
+          summary: compression.summary,
+          highlights: compression.highlights,
+          support_history: compression.supportHistory,
+          turns: turnCount,
+          from,
+          forced,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
   }
 }
