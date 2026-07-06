@@ -37,7 +37,7 @@ const HELP_COMMAND_LINES_BASE = [
 const KEYBOARD_SHORTCUTS: readonly Shortcut[] = [
   { keys: "Enter", description: "send prompt" },
   { keys: "Shift+Tab", description: "cycle mode (plan → edits → autopilot)" },
-  { keys: "Ctrl+T", description: "toggle latest thinking collapse" },
+  { keys: "Ctrl+T", description: "toggle collapse for all reasoning" },
   { keys: "Esc / Ctrl+C", description: "interrupt current run" },
   { keys: "Ctrl+D", description: "exit chat" },
   { keys: "y / n / a", description: "approval: approve / reject / always" },

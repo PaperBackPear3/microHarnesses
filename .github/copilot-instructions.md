@@ -103,3 +103,5 @@ composition) runs children in-process. A typical factory uses filtered
 - CLI output for `run` and `sessions show` is JSON — preserve the machine-readable shape.
 - State persistence is filesystem-based, relative to `--state-dir` (default `.micro-harness` in CWD).
 - Cross-package deps use `peerDependencies` (semver ranges) so plugin packages don't duplicate core when installed by users.
+- In the CLI TUI, keep input anchored at terminal bottom; render mode/model/context/usage in footer lines below input rather than inline with the composer.
+- For autopilot flows, prefer prompts/instructions that continue autonomously until the goal is actually complete (not just “next step announced”).

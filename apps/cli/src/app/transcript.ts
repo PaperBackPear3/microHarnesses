@@ -144,29 +144,39 @@ export function updateActiveStep(
   });
 }
 
-export function toggleLatestThinkingCollapse(entries: ChatEntry[]): ChatEntry[] {
-  for (let i = entries.length - 1; i >= 0; i -= 1) {
-    const entry = entries[i];
-    if (entry?.type !== "turn" || !entry.turn) {
-      continue;
-    }
-    const stepIndex = findLastThinkingStepIndex(entry.turn.steps);
-    if (stepIndex < 0) continue;
-    const step = entry.turn.steps[stepIndex];
-    if (!step) continue;
-    const steps = entry.turn.steps.slice();
-    steps[stepIndex] = { ...step, thinkingCollapsed: !step.thinkingCollapsed };
-    const next = entries.slice();
-    next[i] = {
+export function toggleAllThinkingCollapse(entries: ChatEntry[]): ChatEntry[] {
+  const hasThinking = entries.some(
+    (entry) =>
+      entry.type === "turn" && entry.turn?.steps.some((step) => step.thinkingText.length > 0),
+  );
+  if (!hasThinking) return entries;
+
+  const allCollapsed = entries.every(
+    (entry) =>
+      entry.type !== "turn" ||
+      !entry.turn ||
+      entry.turn.steps
+        .filter((step) => step.thinkingText.length > 0)
+        .every((step) => step.thinkingCollapsed),
+  );
+
+  return entries.map((entry) => {
+    if (entry.type !== "turn" || !entry.turn) return entry;
+    const steps = entry.turn.steps.map((step) => {
+      if (step.thinkingText.length === 0) return step;
+      return {
+        ...step,
+        thinkingCollapsed: !allCollapsed,
+      };
+    });
+    return {
       ...entry,
       turn: {
         ...entry.turn,
         steps,
       },
     };
-    return next;
-  }
-  return entries;
+  });
 }
 
 export function asNumber(value: unknown): number | undefined {
@@ -192,12 +202,4 @@ function ensureActiveTurn(
   if (activeTurnId) return { entries, activeTurnId };
   const id = createId();
   return { activeTurnId: id, entries: startUserTurn(entries, id, "") };
-}
-
-function findLastThinkingStepIndex(steps: ChatStep[]): number {
-  for (let i = steps.length - 1; i >= 0; i -= 1) {
-    const step = steps[i];
-    if (step && step.thinkingText.length > 0) return i;
-  }
-  return -1;
 }

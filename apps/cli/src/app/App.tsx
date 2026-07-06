@@ -9,10 +9,10 @@ import type { EffortLevel } from "../config/config";
 import { availableModelChoices } from "../config/providers";
 import type { CliMode } from "../modes/modes";
 import type { ApprovalView } from "../runtime/approvalHandler";
+import { withModeExecutionContract } from "../runtime/autopilotPrompt";
 import type { CliComposition } from "../runtime/composition";
 import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands";
 import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status";
-import { withModeExecutionContract } from "../runtime/autopilotPrompt";
 import {
   type ChatEntry,
   appendAssistantDelta,
@@ -22,7 +22,7 @@ import {
   asNumber,
   formatIteration,
   startUserTurn,
-  toggleLatestThinkingCollapse as toggleLatestThinkingCollapseInTranscript,
+  toggleAllThinkingCollapse as toggleAllThinkingCollapseInTranscript,
 } from "./transcript";
 import {
   compactShortcutHintLine,
@@ -68,6 +68,7 @@ export function App({
   const contextStyle = contextBadgeStyle(status);
   const modelLabel = modelBadgeLabel(composition.runtimeState.model ?? status.model);
   const shortcutHint = compactShortcutHintLine();
+  const terminalColumns = Math.max(process.stdout.columns ?? 120, 40);
   const modelChoices = useMemo(
     () => availableModelChoices(composition.runtimeState.provider),
     [composition.runtimeState.provider],
@@ -116,7 +117,7 @@ export function App({
       return;
     }
     if (key.ctrl && raw.toLowerCase() === "t") {
-      toggleLatestThinkingCollapse();
+      toggleAllThinkingCollapse();
       return;
     }
   });
@@ -387,8 +388,8 @@ export function App({
     );
   }
 
-  function toggleLatestThinkingCollapse(): void {
-    setChatEntries((items) => toggleLatestThinkingCollapseInTranscript(items));
+  function toggleAllThinkingCollapse(): void {
+    setChatEntries((items) => toggleAllThinkingCollapseInTranscript(items));
   }
 
   const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
@@ -396,54 +397,49 @@ export function App({
   return (
     <Box flexDirection="column" height={viewportHeight}>
       <Box flexDirection="column" flexGrow={1}>
-        {screen === "chat" && (
-          <>
-            {chatEntries.slice(-12).map((entry) =>
-              entry.type === "system" ? (
-                <Text key={entry.id}>
-                  <Text color="gray">system &gt; </Text>
-                  {entry.text}
-                </Text>
-              ) : (
-                <Box key={entry.id} flexDirection="column">
-                  {entry.turn?.userText ? (
-                    <Text>
-                      <Text color="cyan">user &gt; </Text>
-                      {entry.turn.userText}
-                    </Text>
-                  ) : null}
-                  {entry.turn?.steps.map((step) => (
-                    <Box key={step.id} flexDirection="column">
-                      {step.thinkingText.length > 0 ? (
-                        <Box flexDirection="column">
-                          <Text color="yellow">
-                            Thinking{formatIteration(step.iteration)} [
-                            {step.thinkingCollapsed ? "collapsed" : "expanded"}]
-                          </Text>
-                          {!step.thinkingCollapsed && <Text>{step.thinkingText}</Text>}
-                        </Box>
-                      ) : null}
-                      {step.assistantText ? (
-                        <Text>
-                          <Text color="green">
-                            assistant{formatIteration(step.iteration)} &gt;{" "}
-                          </Text>
-                          {step.assistantText}
+        {screen === "chat" &&
+          chatEntries.slice(-12).map((entry) =>
+            entry.type === "system" ? (
+              <Text key={entry.id}>
+                <Text color="gray">system &gt; </Text>
+                {entry.text}
+              </Text>
+            ) : (
+              <Box key={entry.id} flexDirection="column">
+                {entry.turn?.userText ? (
+                  <Text>
+                    <Text color="cyan">user &gt; </Text>
+                    {entry.turn.userText}
+                  </Text>
+                ) : null}
+                {entry.turn?.steps.map((step) => (
+                  <Box key={step.id} flexDirection="column">
+                    {step.thinkingText.length > 0 ? (
+                      <Box flexDirection="column">
+                        <Text color="yellow">
+                          Thinking{formatIteration(step.iteration)} [
+                          {step.thinkingCollapsed ? "collapsed" : "expanded"}]
                         </Text>
-                      ) : null}
-                      {step.systemMessages.map((message) => (
-                        <Text key={message.id}>
-                          <Text color="gray">system{formatIteration(step.iteration)} &gt; </Text>
-                          {message.text}
-                        </Text>
-                      ))}
-                    </Box>
-                  ))}
-                </Box>
-              ),
-            )}
-          </>
-        )}
+                        {!step.thinkingCollapsed && <Text>{step.thinkingText}</Text>}
+                      </Box>
+                    ) : null}
+                    {step.assistantText ? (
+                      <Text>
+                        <Text color="green">assistant{formatIteration(step.iteration)} &gt; </Text>
+                        {step.assistantText}
+                      </Text>
+                    ) : null}
+                    {step.systemMessages.map((message) => (
+                      <Text key={message.id}>
+                        <Text color="gray">system{formatIteration(step.iteration)} &gt; </Text>
+                        {message.text}
+                      </Text>
+                    ))}
+                  </Box>
+                ))}
+              </Box>
+            ),
+          )}
 
         {screen === "sessions" && <Screen title="Sessions">{sessionsView}</Screen>}
         {screen === "session-details" && (
@@ -460,7 +456,11 @@ export function App({
         <Box>
           <Text color={modeStyle.color}>[{modeStyle.label}] </Text>
           <Text color={modeStyle.color}>› </Text>
-          <TextInput value={input} onChange={setInput} onSubmit={submit} />
+          {pendingApproval ? (
+            <Text color="yellow">awaiting approval (y/n/a)</Text>
+          ) : (
+            <TextInput value={input} onChange={setInput} onSubmit={submit} />
+          )}
           {running && (
             <Box marginLeft={1}>
               <Text color="yellow">
@@ -481,6 +481,7 @@ export function App({
         running={running}
         status={status}
         shortcutHint={shortcutHint}
+        columns={terminalColumns}
       />
     </Box>
   );
@@ -496,19 +497,37 @@ function FooterStatusBar(props: {
   running: boolean;
   status: StatusState;
   shortcutHint: string;
+  columns: number;
 }): React.ReactElement {
+  const line1 = trimToColumns(
+    [
+      `session=${props.sessionId}`,
+      `mode=${props.mode}`,
+      `effort=${props.effort}`,
+      `provider=${props.provider}`,
+      props.modelLabel,
+      props.contextStyle.label,
+    ].join(" | "),
+    props.columns,
+  );
+  const line2 = trimToColumns(
+    [
+      `tokens=${props.status.tokensIn}/${props.status.tokensOut}`,
+      `turns=${props.status.turns}`,
+      `errors=${props.status.errors}`,
+      `limits=${props.status.limitHits}`,
+      props.status.compressing ? "COMPRESSING" : "",
+      props.running ? "RUNNING" : "",
+    ]
+      .filter(Boolean)
+      .join(" | "),
+    props.columns,
+  );
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text>
-        session={props.sessionId} | mode={props.mode} | effort={props.effort} | provider=
-        {props.provider} | <Text color="blue">{props.modelLabel}</Text> |{" "}
-        <Text color={props.contextStyle.color}>{props.contextStyle.label}</Text> | tokens=
-        {props.status.tokensIn}/{props.status.tokensOut} | turns={props.status.turns} | errors=
-        {props.status.errors} | limits={props.status.limitHits}
-        {props.status.compressing ? " | COMPRESSING" : ""}
-        {props.running ? " | RUNNING" : ""}
-      </Text>
-      <Text color="gray">{props.shortcutHint}</Text>
+      <Text>{line1}</Text>
+      <Text>{line2}</Text>
+      <Text color="gray">{trimToColumns(props.shortcutHint, props.columns)}</Text>
     </Box>
   );
 }
@@ -545,4 +564,10 @@ function HelpScreen({ modelChoices }: { modelChoices: string[] }): React.ReactEl
     ...shortcutLines.map((line) => `  ${line}`),
   ].join("\n");
   return <Screen title="Commands & Shortcuts">{lines}</Screen>;
+}
+
+function trimToColumns(text: string, columns: number): string {
+  if (text.length <= columns) return text;
+  if (columns <= 1) return "…";
+  return `${text.slice(0, Math.max(0, columns - 1))}…`;
 }

@@ -2,6 +2,10 @@
 
 Workspace-scoped filesystem mutation and shell execution plugin for [`@micro-harnesses/core`](../../packages/core).
 
+## Latest updates
+
+- No tool surface changes in this release; this package remains the mutating-tool plugin used by the CLI in non-plan workflows.
+
 ## Ships
 
 | Tool | Description | Risk |

@@ -3,6 +3,10 @@
 Read-only planning and file exploration plugin for [`@micro-harnesses/core`](../core).
 Reusable package-first plugin for library compositions.
 
+## Latest updates
+
+- Works with updated CLI autopilot behavior where exploration goals are expected to run through listing, traversal, and summarization before completion.
+
 Ships three composable tools — **no file writes, no process execution, no network calls**:
 
 | Tool | Description |

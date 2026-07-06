@@ -2,6 +2,10 @@
 
 Package-first reusable runtime library building block for `microHarnesses`. Zero runtime dependencies.
 
+## Latest updates
+
+- Runtime consumers (like the CLI app) now rely on stricter autopilot guidance to keep multi-step exploration running until completion.
+
 ## What's inside
 
 - **Agent loop** — `Agent` iterates model → tools → hooks

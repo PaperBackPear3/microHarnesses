@@ -3,6 +3,12 @@
 `mh` / `micro-harness` is the v2 interactive development assistant built on
 `@micro-harnesses/core`.
 
+## UX notes
+
+- Chat input/composer is anchored at the bottom of the terminal.
+- Runtime status (mode/model/context/usage) is rendered in a footer below input to keep the typing area clean.
+- In autopilot mode, prompts are augmented with an execution contract that pushes the agent to continue until the requested goal is finished.
+
 ## Commands
 
 - `mh` — start chat TUI

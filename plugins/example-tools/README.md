@@ -5,6 +5,10 @@ plugin-authoring example — read the source
 ([`src/exampleToolsPlugin.ts`](src/exampleToolsPlugin.ts)) as a template for
 writing your own.
 
+## Latest updates
+
+- No API/tool changes in this release; the plugin continues to provide low-risk `echo` and `time` reference tools.
+
 ## Ships
 
 | Tool | Description | Risk |

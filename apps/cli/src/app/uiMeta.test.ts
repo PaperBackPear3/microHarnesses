@@ -71,8 +71,17 @@ test("help lines include commands and shortcuts discoverability", () => {
   );
 
   const shortcuts = helpShortcutLines();
-  assert(shortcuts.some((line) => line.startsWith("Shift+Tab")), "expected mode-cycle shortcut");
-  assert(shortcuts.some((line) => line.startsWith("Ctrl+D")), "expected exit shortcut");
-  assert(shortcuts.some((line) => line.startsWith("Esc / Ctrl+C")), "expected interrupt shortcut");
+  assert(
+    shortcuts.some((line) => line.startsWith("Shift+Tab")),
+    "expected mode-cycle shortcut",
+  );
+  assert(
+    shortcuts.some((line) => line.startsWith("Ctrl+D")),
+    "expected exit shortcut",
+  );
+  assert(
+    shortcuts.some((line) => line.startsWith("Esc / Ctrl+C")),
+    "expected interrupt shortcut",
+  );
   assert.match(compactShortcutHintLine(), /\/help commands\+shortcuts/);
 });

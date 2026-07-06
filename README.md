@@ -4,6 +4,11 @@ microHarnesses is a package-first TypeScript ecosystem for building agent runtim
 
 The core package gives you runtime primitives (loop, context, policy, tools, plugins). Plugin packages add focused capabilities you can compose based on your safety model and product needs.
 
+## Latest updates
+
+- CLI chat layout now keeps the composer anchored at the bottom and renders runtime status in a dedicated footer below input.
+- Autopilot mode is now instructed to continue until the goal is actually completed (instead of stopping after announcing a next step).
+
 ## Documentation
 
 - Website: https://paperbackpear3.github.io/microHarnesses/
