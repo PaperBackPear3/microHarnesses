@@ -9,6 +9,32 @@
 npm install @micro-harnesses/cli
 ```
 
+## After install
+
+Run the CLI from the project that installed it:
+
+```bash
+npx mh
+```
+
+Or run a one-off prompt:
+
+```bash
+npx mh -p "list apps/cli/src/app"
+```
+
+If you want the binary on every shell without `npx`, add a script or install it globally.
+
+## Update
+
+If you already installed the CLI, update it with:
+
+```bash
+npm install @micro-harnesses/cli@latest
+```
+
+Then re-run `npx mh` (or your local script) to pick up the new version.
+
 ## UX notes
 
 - Chat input/composer is anchored at the bottom of the terminal.
