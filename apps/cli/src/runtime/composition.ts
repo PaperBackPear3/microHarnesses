@@ -5,40 +5,43 @@ import {
   CompositePolicyEngine,
   ContextManager,
   CredentialsRegistry,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_OLLAMA_CONTEXT_WINDOW_TOKENS,
   DefaultObservabilityProvider,
   DefaultPolicyEngine,
+  type EffortLevel,
+  EffortModelSelector,
   FsPromptSource,
+  FsSkillSource,
   InProcessSubagentSupervisor,
   JsonlObservabilityExporter,
+  ModeController,
   PluginHost,
+  ProviderModelAdapter,
   ProviderRegistry,
   type RunOptions,
   type SessionStore,
+  SkillRegistry,
   type SubagentSupervisor,
   ToolRegistry,
   builtInProviderPlugins,
   createCommandSafetyRule,
   createCoreDefaultTools,
+  createModeAwareApprovalPolicy,
+  detectOllamaContextWindowTokens,
+  modelForEffort,
+  planModeAllowActions,
+  profileForProvider,
   registerCoreDefaults,
 } from "@micro-harnesses/core";
 import { AgenticCompressionPlugin } from "@micro-harnesses/plugin-agentic-compression";
 import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
 import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
-import type { CliConfig, EffortLevel } from "../config/config";
-import { modelForEffort, profileForProvider } from "../config/providers";
-import { ModeController } from "../modes/modes";
+import type { CliConfig } from "../config/config";
 import { SessionService } from "../session/sessionService";
 import { UiStream } from "../streaming/uiStream";
 import { ApprovalController } from "./approvalHandler";
-import { createModeAwareApprovalPolicy, planModeAllowActions } from "./approvalPolicy";
-import {
-  DEFAULT_CONTEXT_WINDOW_TOKENS,
-  DEFAULT_OLLAMA_CONTEXT_WINDOW_TOKENS,
-  detectOllamaContextWindowTokens,
-} from "./contextWindow";
-import { EffortModelSelector } from "./modelSelector";
-import { RuntimeModelAdapter } from "./runtimeModelAdapter";
 
 export interface RuntimeState {
   provider: string;
@@ -134,13 +137,25 @@ export async function buildComposition(
   });
   const prompts = new FsPromptSource({ rootDir: config.promptsDir });
   const modelSelector = new EffortModelSelector(runtimeState.effort);
-  const model = new RuntimeModelAdapter(providers, credentials, () => ({
-    provider: runtimeState.provider,
-    model: runtimeState.model,
-    maxTokens: config.maxTokens,
-  }));
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: credentials,
+    selection: () => ({
+      providerId: runtimeState.provider,
+      model: runtimeState.model,
+      maxTokens: config.maxTokens,
+    }),
+  });
   const sessionService = new SessionService(config.stateDir);
   const sessionStore = sessionService.getStore();
+
+  const skills = new SkillRegistry();
+  const skillSource = new FsSkillSource({
+    rootDir: config.skillsDir ?? path.join(config.stateDir, "skills"),
+  });
+  for (const skill of await skillSource.loadAll()) {
+    skills.register(skill);
+  }
 
   const agent = new Agent({
     promptName: "coder",
@@ -148,6 +163,7 @@ export async function buildComposition(
     modelSelector,
     prompts,
     tools,
+    skills,
     context,
     policy,
     observability,
@@ -182,6 +198,7 @@ export async function buildComposition(
           modelSelector,
           prompts,
           tools: childTools,
+          skills,
           context: childContext,
           policy,
           observability,

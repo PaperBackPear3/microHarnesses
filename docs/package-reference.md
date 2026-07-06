@@ -10,10 +10,13 @@ This page documents package functionality and the concepts each package is respo
 
 - Runtime loop (`Agent`)
 - Tool/skill/channel registries and execution engines
+- Filesystem skills (`FsSkillSource`: `SKILL.md` + optional `skill.meta.json` bundles loaded as executable skills)
+- Harness modes (`HarnessMode`, `ModeController`, mode-aware approval policy, autopilot execution contract)
 - Context + session persistence (`ContextManager`, `SessionStore`)
 - Policy model (`DefaultPolicyEngine`, `CompositePolicyEngine`, `PolicyRule`)
 - Plugin host + capability enforcement (`PluginHost`)
-- Provider + credentials registries
+- Provider + credentials registries, built-in adapters (OpenAI, Anthropic, Ollama) and the generic `OpenAICompatAdapter` / `createOpenAICompatProviderPlugin` for any OpenAI-compatible endpoint
+- Model selection (`DefaultModelSelector`, `EffortModelSelector`, default provider model profiles, Ollama context-window detection)
 - Subagent primitives (`InProcessSubagentRunner`, `InProcessSubagentSupervisor`)
 
 ### Concepts
@@ -67,6 +70,17 @@ This page documents package functionality and the concepts each package is respo
 
 ---
 
+## `@micro-harnesses/plugin-agentic-compression`
+
+**Role**: subagent-driven context compression.
+
+### Concepts
+
+- **Agentic summarization**: spawns a subagent to summarize older turns instead of using a heuristic compressor.
+- **Bounded transcripts**: renders deterministic, size-capped transcripts for the summarizer prompt.
+
+---
+
 ## `@micro-harnesses/plugin-example-tools`
 
 **Role**: minimal reference plugin for authors.
@@ -80,6 +94,17 @@ This page documents package functionality and the concepts each package is respo
 
 - **Authoring template**: smallest complete plugin shape.
 - **Low-risk tool definition**: simple schemas and deterministic outputs.
+
+---
+
+## `@micro-harnesses/cli`
+
+**Role**: agentic coding CLI built on core.
+
+### Concepts
+
+- **Thin composition root**: wires core registries, plugins, providers, modes, skills, and observability in `runtime/composition.ts`.
+- **TUI ownership**: Ink rendering, keybindings, slash commands, interactive approval prompts, and status display stay in the app.
 
 ## Composition recommendation
 

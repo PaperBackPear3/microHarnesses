@@ -1,12 +1,15 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import type {
-  HarnessPlugin,
-  PluginApi,
-  PluginCapability,
-  ToolDefinition,
+import {
+  type HarnessPlugin,
+  type PluginApi,
+  type PluginCapability,
+  type ToolDefinition,
+  clampNumber,
+  safeResolve,
+  truncate,
 } from "@micro-harnesses/core";
-import { clampNumber, listFiles, readTextFileSafely, safeResolve, truncate } from "../utils";
+import { listFiles, readTextFileSafely } from "../utils";
 
 export interface ExplorerPluginOptions {
   /** Root directory that exploration is restricted to. Defaults to `process.cwd()`. */

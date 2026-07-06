@@ -6,11 +6,17 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 
 ## Latest updates
 
-- Core now includes a deterministic subagent supervisor with async spawn and
-  wait/join defaults, so model-facing agents can delegate work and explicitly
-  wait for child summaries.
-- CLI chat layout now keeps the composer anchored at the bottom and renders runtime status in a dedicated footer below input.
-- Autopilot mode is now instructed to continue until the goal is actually completed (instead of stopping after announcing a next step).
+- Core now owns the full harness capability set: harness modes (`plan` /
+  `accept-edits` / `autopilot`) with a mode-aware approval policy and the
+  autopilot execution contract, an effort-based model selector with default
+  provider model profiles, and Ollama context-window detection.
+- New generic `OpenAICompatAdapter` lets you register any OpenAI-compatible
+  endpoint (OpenRouter, Groq, Azure OpenAI, LM Studio, vLLM, …) in one line via
+  `createOpenAICompatProviderPlugin`; the OpenAI and Ollama adapters are now
+  thin presets of it, with hardened SSE parsing and finish-reason mapping.
+- `FsSkillSource` now loads real executable skills from disk (`SKILL.md` +
+  optional `skill.meta.json` and resource files); the CLI wires them up via
+  `--skills-dir` (default `<state-dir>/skills`).
 
 ## Documentation
 
@@ -28,10 +34,12 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 
 | Package | Purpose |
 | --- | --- |
-| [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, session/context system, plugin host, subagent runner/supervisor primitives. |
+| [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, harness modes, session/context system, plugin host, provider adapters (OpenAI/Anthropic/Ollama + generic OpenAI-compatible), subagent runner/supervisor primitives. |
 | [`@micro-harnesses/plugin-basic-tools`](plugins/basic-tools) | Workspace-scoped file mutation tools and shell execution tool. |
 | [`@micro-harnesses/plugin-plan-mode`](plugins/plan-mode) | Read-only planning and code exploration tools. |
+| [`@micro-harnesses/plugin-agentic-compression`](plugins/agentic-compression) | Subagent-driven context compression (summarizes older turns via a spawned agent). |
 | [`@micro-harnesses/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |
+| [`@micro-harnesses/cli`](apps/cli) | Agentic coding CLI (React/Ink TUI) built as a thin composition layer over core and the plugins. |
 
 ## Design principles
 
@@ -57,7 +65,7 @@ npm install @micro-harnesses/core @micro-harnesses/plugin-basic-tools @micro-har
 
 ## Plugin capabilities
 
-`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`
+`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "observability"`
 
 ## License
 

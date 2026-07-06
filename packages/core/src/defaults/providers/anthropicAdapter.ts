@@ -54,6 +54,16 @@ export interface AnthropicAdapterOptions {
 
 const DEFAULT_MODEL = "claude-3-5-sonnet-latest";
 
+/**
+ * Maps an Anthropic `stop_reason` to loop-stop semantics: terminal reasons
+ * (`end_turn`, `max_tokens`, `stop_sequence`, `refusal`) stop the loop, while
+ * `tool_use` expects tool execution and continues.
+ */
+function stopReasonIndicatesStop(reason: string | undefined): boolean {
+  if (!reason) return false;
+  return reason !== "tool_use";
+}
+
 export class AnthropicAdapter implements ProviderAdapter {
   readonly providerId = "anthropic" as const;
   readonly defaultModel: string;
@@ -93,7 +103,14 @@ export class AnthropicAdapter implements ProviderAdapter {
     const toolUses = new Map<number, ToolUseAccumulator>();
 
     for await (const data of readSseData(response)) {
-      const payload = JSON.parse(data) as AnthropicStreamPayload;
+      if (data === "[DONE]") break;
+      let payload: AnthropicStreamPayload;
+      try {
+        payload = JSON.parse(data) as AnthropicStreamPayload;
+      } catch {
+        // Tolerate non-JSON SSE control frames.
+        continue;
+      }
       if (payload.type === "message_start") {
         usage.inputTokens = payload.message?.usage?.input_tokens;
         continue;
@@ -184,7 +201,7 @@ export class AnthropicAdapter implements ProviderAdapter {
         assistantMessage,
         ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
         toolCalls,
-        stop: stopReason === "end_turn",
+        stop: stopReasonIndicatesStop(stopReason || undefined),
         usage,
       },
     };
@@ -228,7 +245,7 @@ export class AnthropicAdapter implements ProviderAdapter {
             name: item.name ?? "unknown",
             input: item.input ?? {},
           })) ?? [],
-      stop: payload.stop_reason === "end_turn",
+      stop: stopReasonIndicatesStop(payload.stop_reason),
       usage: {
         inputTokens: payload.usage?.input_tokens,
         outputTokens: payload.usage?.output_tokens,

@@ -1,4 +1,4 @@
-import type { CliMode } from "../modes/modes";
+import type { HarnessMode } from "@micro-harnesses/core";
 
 export type UiScreen = "chat" | "sessions" | "session-details" | "context" | "telemetry" | "help";
 
@@ -7,7 +7,7 @@ export type SlashCommand =
   | { type: "switch-session"; sessionId: string }
   | { type: "show-sessions" }
   | { type: "show-session-details"; sessionId: string }
-  | { type: "set-mode"; mode: CliMode }
+  | { type: "set-mode"; mode: HarnessMode }
   | { type: "set-effort"; effort: "low" | "medium" | "high" }
   | { type: "set-model"; model: string }
   | { type: "set-provider"; provider: string }
@@ -54,7 +54,7 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
   return undefined;
 }
 
-function normalizeMode(value: string): CliMode | undefined {
+function normalizeMode(value: string): HarnessMode | undefined {
   if (value === "plan") return "plan";
   if (value === "edits" || value === "accept-edits") return "accept-edits";
   if (value === "auto" || value === "autopilot") return "autopilot";

@@ -94,6 +94,7 @@ compressor.
 - `--mode <plan|accept-edits|autopilot>`
 - `--session <id>`
 - `--state-dir <path>`
+- `--skills-dir <path>` — directory of FS skills (`<name>/SKILL.md` bundles); default `<state-dir>/skills`
 - `--iterations <n>`
 - `--snapshot-every <n>`
 - `--max-tokens <n>`

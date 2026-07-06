@@ -1,13 +1,14 @@
 import { spawn } from "node:child_process";
-import type { ToolDefinition, ToolExecutionContext } from "@micro-harnesses/core";
-import type { BasicToolsResolvedOptions } from "../options";
 import {
-  parseOptionalInteger,
-  parseOptionalString,
-  parseRequiredString,
+  type ToolDefinition,
+  type ToolExecutionContext,
+  readOptionalInteger,
+  readOptionalString,
+  readRequiredString,
   relativeToRoot,
   resolveWorkspacePath,
-} from "../utils";
+} from "@micro-harnesses/core";
+import type { BasicToolsResolvedOptions } from "../options";
 
 interface ShellRunResult {
   exitCode: number;
@@ -38,10 +39,10 @@ export function createShellTool(options: BasicToolsResolvedOptions): ToolDefinit
       { field: "cwd", kind: "file_path" },
     ],
     async execute(input, context) {
-      const command = parseRequiredString(input, "command", "shell_exec");
-      const requestedCwd = parseOptionalString(input, "cwd", ".");
+      const command = readRequiredString(input, "command", "shell_exec");
+      const requestedCwd = readOptionalString(input, "cwd", ".");
       const cwd = resolveWorkspacePath(options.rootDir, requestedCwd);
-      const timeoutMs = parseOptionalInteger(
+      const timeoutMs = readOptionalInteger(
         input,
         "timeout_ms",
         options.defaultShellTimeoutMs,

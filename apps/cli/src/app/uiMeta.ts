@@ -1,4 +1,4 @@
-import type { CliMode } from "../modes/modes";
+import type { HarnessMode } from "@micro-harnesses/core";
 import type { StatusState } from "../telemetry/status";
 
 export interface LabeledColor {
@@ -11,7 +11,7 @@ export interface Shortcut {
   description: string;
 }
 
-const MODE_PROMPT_STYLES: Record<CliMode, LabeledColor> = {
+const MODE_PROMPT_STYLES: Record<HarnessMode, LabeledColor> = {
   plan: { label: "PLAN", color: "yellow" },
   "accept-edits": { label: "EDITS", color: "green" },
   autopilot: { label: "AUTO", color: "magenta" },
@@ -47,7 +47,7 @@ const KEYBOARD_SHORTCUTS: readonly Shortcut[] = [
   { keys: "y / n / a", description: "approval: approve / reject / always" },
 ];
 
-export function modePromptStyle(mode: CliMode): LabeledColor {
+export function modePromptStyle(mode: HarnessMode): LabeledColor {
   return MODE_PROMPT_STYLES[mode];
 }
 

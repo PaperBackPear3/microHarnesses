@@ -1,6 +1,9 @@
-import type { ModelProfile } from "@micro-harnesses/core";
-import type { EffortLevel } from "./config";
+import type { ModelProfile } from "../../model/types";
 
+/**
+ * Default fast/default/reasoning model profiles for the built-in providers.
+ * A model override collapses the profile to that single model.
+ */
 export function profileForProvider(provider: string, modelOverride?: string): ModelProfile {
   if (modelOverride) {
     return {
@@ -31,15 +34,10 @@ export function profileForProvider(provider: string, modelOverride?: string): Mo
   };
 }
 
+/** Distinct model names a provider profile offers, fast to reasoning. */
 export function availableModelChoices(provider: string): string[] {
   const profile = profileForProvider(provider);
   return [profile.fastModel, profile.defaultModel, profile.reasoningModel]
     .filter((value): value is string => Boolean(value))
     .filter((value, index, all) => all.indexOf(value) === index);
-}
-
-export function modelForEffort(profile: ModelProfile, effort: EffortLevel): string {
-  if (effort === "low") return profile.fastModel ?? profile.defaultModel;
-  if (effort === "high") return profile.reasoningModel ?? profile.defaultModel;
-  return profile.defaultModel;
 }

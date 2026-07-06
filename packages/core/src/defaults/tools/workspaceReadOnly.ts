@@ -1,6 +1,12 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { safeResolve } from "../../shared/paths";
+import {
+  readOptionalBoolean,
+  readOptionalInteger,
+  readOptionalString,
+  readRequiredString,
+} from "../../shared/inputParsing";
+import { relativeToRoot, resolveWorkspacePath } from "../../shared/paths";
 import { truncate } from "../../shared/text";
 import type { ToolDefinition } from "../../tools/types";
 
@@ -331,53 +337,4 @@ async function findMatchesInFile(
     if (matches.length >= maxMatches) break;
   }
   return matches;
-}
-
-function readRequiredString(input: Record<string, unknown>, key: string, toolName: string): string {
-  const value = input[key];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${toolName}: "${key}" must be a non-empty string`);
-  }
-  return value;
-}
-
-function readOptionalString(input: Record<string, unknown>, key: string, fallback: string): string {
-  const value = input[key];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return fallback;
-  }
-  return value;
-}
-
-function readOptionalBoolean(
-  input: Record<string, unknown>,
-  key: string,
-  fallback: boolean,
-): boolean {
-  const value = input[key];
-  return typeof value === "boolean" ? value : fallback;
-}
-
-function readOptionalInteger(
-  input: Record<string, unknown>,
-  key: string,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const value = Number(input[key]);
-  if (!Number.isFinite(value)) {
-    return fallback;
-  }
-  const parsed = Math.floor(value);
-  return Math.min(max, Math.max(min, parsed));
-}
-
-function resolveWorkspacePath(rootDir: string, requestedPath: string): string {
-  return safeResolve(rootDir, requestedPath);
-}
-
-function relativeToRoot(rootDir: string, absolutePath: string): string {
-  const relative = path.relative(rootDir, absolutePath);
-  return relative.length === 0 ? "." : relative;
 }

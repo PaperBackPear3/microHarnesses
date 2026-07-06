@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { StreamEvent } from "@micro-harnesses/core";
+import type { EffortLevel, HarnessMode } from "@micro-harnesses/core";
+import { availableModelChoices, withModeExecutionContract } from "@micro-harnesses/core";
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
 // biome-ignore lint/style/useImportType: classic JSX runtime requires React as a value import.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { EffortLevel } from "../config/config";
-import { availableModelChoices } from "../config/providers";
-import type { CliMode } from "../modes/modes";
 import type { ApprovalView } from "../runtime/approvalHandler";
-import { withModeExecutionContract } from "../runtime/autopilotPrompt";
 import type { CliComposition } from "../runtime/composition";
 import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands";
 import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status";
@@ -681,7 +679,7 @@ export function App({
 
 function FooterStatusBar(props: {
   sessionId: string;
-  mode: CliMode;
+  mode: HarnessMode;
   effort: EffortLevel;
   provider: string;
   modelLabel: string;

@@ -6,43 +6,63 @@ import { truncate } from "../shared/text";
 import type { ToolDescriptor } from "../tools/types";
 import type { ModelAdapter, StepInput, StepPlan } from "./types";
 
-export interface ProviderModelAdapterOptions {
-  providerRegistry: ProviderRegistry;
-  credentialsRegistry: CredentialsRegistry;
+export interface ProviderModelSelection {
   providerId: ProviderId;
   model?: string;
   maxTokens?: number;
 }
 
+export interface ProviderModelAdapterOptions {
+  providerRegistry: ProviderRegistry;
+  credentialsRegistry: CredentialsRegistry;
+  providerId?: ProviderId;
+  model?: string;
+  maxTokens?: number;
+  /**
+   * Optional dynamic selection, read on every step. When provided it takes
+   * precedence over the static providerId/model/maxTokens options, letting a
+   * long-lived adapter follow runtime provider/model switches.
+   */
+  selection?: () => ProviderModelSelection;
+}
+
 export class ProviderModelAdapter implements ModelAdapter {
   private readonly providerRegistry: ProviderRegistry;
   private readonly credentialsRegistry: CredentialsRegistry;
-  private readonly providerId: ProviderId;
-  private readonly model?: string;
-  private readonly maxTokens: number;
+  private readonly staticSelection?: ProviderModelSelection;
+  private readonly selection?: () => ProviderModelSelection;
 
   constructor(options: ProviderModelAdapterOptions) {
     this.providerRegistry = options.providerRegistry;
     this.credentialsRegistry = options.credentialsRegistry;
-    this.providerId = options.providerId;
-    this.model = options.model;
-    this.maxTokens = options.maxTokens ?? 4096;
+    this.selection = options.selection;
+    if (options.providerId) {
+      this.staticSelection = {
+        providerId: options.providerId,
+        model: options.model,
+        maxTokens: options.maxTokens,
+      };
+    }
+    if (!this.selection && !this.staticSelection) {
+      throw new ConfigError("ProviderModelAdapter requires providerId or a selection getter");
+    }
   }
 
   async nextStep(input: StepInput): Promise<StepPlan> {
-    const adapter = this.providerRegistry.get(this.providerId);
+    const current = this.selection?.() ?? (this.staticSelection as ProviderModelSelection);
+    const adapter = this.providerRegistry.get(current.providerId);
     const supportsStructuredTools = adapter.features?.structuredTools === true;
-    const resolvedModel = input.selectedModel ?? this.model ?? adapter.defaultModel;
+    const resolvedModel = input.selectedModel ?? current.model ?? adapter.defaultModel;
     if (!resolvedModel) {
       throw new ConfigError(
-        `No model specified and provider "${this.providerId}" declares no defaultModel`,
+        `No model specified and provider "${current.providerId}" declares no defaultModel`,
       );
     }
-    const auth = await this.credentialsRegistry.get(this.providerId).resolve();
+    const auth = await this.credentialsRegistry.get(current.providerId).resolve();
     const request: CompletionRequest = {
       model: resolvedModel,
       messages: buildMessages(input, !supportsStructuredTools),
-      maxTokens: this.maxTokens,
+      maxTokens: current.maxTokens ?? 4096,
       tools: input.availableTools,
       signal: input.signal,
     };
@@ -61,7 +81,9 @@ export class ProviderModelAdapter implements ModelAdapter {
         finalResponse = event.response;
       }
       if (!finalResponse) {
-        throw new ConfigError(`Provider "${this.providerId}" stream did not emit a final response`);
+        throw new ConfigError(
+          `Provider "${current.providerId}" stream did not emit a final response`,
+        );
       }
       return toStepPlan(finalResponse);
     }

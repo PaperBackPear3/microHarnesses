@@ -1,5 +1,5 @@
+import { type HarnessMode, parseMode } from "@micro-harnesses/core";
 import { type EffortLevel, parseEffort } from "../config/config";
-import { type CliMode, parseMode } from "../modes/modes";
 
 export interface GlobalCliArgs {
   prompt?: string;
@@ -7,10 +7,11 @@ export interface GlobalCliArgs {
   provider?: string;
   model?: string;
   effort?: EffortLevel;
-  mode?: CliMode;
+  mode?: HarnessMode;
   sessionId?: string;
   stateDir?: string;
   promptsDir?: string;
+  skillsDir?: string;
   noSafety: boolean;
   maxTokens?: number;
   maxIterations?: number;
@@ -34,6 +35,7 @@ const VALUE_FLAGS = new Set([
   "--session-id",
   "--state-dir",
   "--prompts-dir",
+  "--skills-dir",
   "--max-tokens",
   "--iterations",
   "--snapshot-every",
@@ -54,6 +56,7 @@ export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
     sessionId: getValue(args, "--session") ?? getValue(args, "--session-id"),
     stateDir: getValue(args, "--state-dir"),
     promptsDir: getValue(args, "--prompts-dir"),
+    skillsDir: getValue(args, "--skills-dir"),
     noSafety: hasFlag(args, "--no-safety"),
     maxTokens: parseOptionalInt(getValue(args, "--max-tokens"), "--max-tokens"),
     maxIterations: parseOptionalInt(getValue(args, "--iterations"), "--iterations"),

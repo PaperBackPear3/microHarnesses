@@ -3,6 +3,7 @@ export * from "./shared/errors";
 export * from "./shared/nodeError";
 export * from "./shared/paths";
 export * from "./shared/text";
+export * from "./shared/inputParsing";
 
 // Tools
 export * from "./tools/types";
@@ -39,6 +40,7 @@ export * from "./providers/credentialsRegistry";
 // Model
 export * from "./model/types";
 export * from "./model/defaultModelSelector";
+export * from "./model/effortModelSelector";
 export * from "./model/providerModelAdapter";
 
 // Prompts
@@ -75,6 +77,7 @@ export * from "./observability/provider";
 export * from "./runtime/types";
 export * from "./runtime/state";
 export * from "./runtime/agent";
+export * from "./runtime/modes";
 export * from "./runtime/runObserver";
 export * from "./runtime/snapshotCadence";
 

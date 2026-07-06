@@ -1,14 +1,15 @@
 import { appendFile, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { type ToolDefinition, isNodeError } from "@micro-harnesses/core";
-import type { BasicToolsResolvedOptions } from "../options";
 import {
-  parseOptionalBoolean,
-  parseRequiredString,
-  parseRequiredText,
+  type ToolDefinition,
+  isNodeError,
+  readOptionalBoolean,
+  readRequiredString,
+  readRequiredText,
   relativeToRoot,
   resolveWorkspacePath,
-} from "../utils";
+} from "@micro-harnesses/core";
+import type { BasicToolsResolvedOptions } from "../options";
 
 export function createFilesystemTools(options: BasicToolsResolvedOptions): ToolDefinition[] {
   return [
@@ -40,9 +41,9 @@ function createFsWriteTool(options: BasicToolsResolvedOptions): ToolDefinition {
     },
     inputAnnotations: [{ field: "path", kind: "file_path" }],
     async execute(input) {
-      const requestedPath = parseRequiredString(input, "path", "fs_write");
-      const content = parseRequiredText(input, "content", "fs_write");
-      const createParents = parseOptionalBoolean(input, "create_parents", false);
+      const requestedPath = readRequiredString(input, "path", "fs_write");
+      const content = readRequiredText(input, "content", "fs_write");
+      const createParents = readOptionalBoolean(input, "create_parents", false);
       const absolutePath = resolveWorkspacePath(options.rootDir, requestedPath);
       if (createParents) {
         await mkdir(path.dirname(absolutePath), { recursive: true });
@@ -76,9 +77,9 @@ function createFsAppendTool(options: BasicToolsResolvedOptions): ToolDefinition 
     },
     inputAnnotations: [{ field: "path", kind: "file_path" }],
     async execute(input) {
-      const requestedPath = parseRequiredString(input, "path", "fs_append");
-      const content = parseRequiredText(input, "content", "fs_append");
-      const createParents = parseOptionalBoolean(input, "create_parents", false);
+      const requestedPath = readRequiredString(input, "path", "fs_append");
+      const content = readRequiredText(input, "content", "fs_append");
+      const createParents = readOptionalBoolean(input, "create_parents", false);
       const absolutePath = resolveWorkspacePath(options.rootDir, requestedPath);
       if (createParents) {
         await mkdir(path.dirname(absolutePath), { recursive: true });
@@ -114,8 +115,8 @@ function createFsMkdirTool(options: BasicToolsResolvedOptions): ToolDefinition {
     },
     inputAnnotations: [{ field: "path", kind: "file_path" }],
     async execute(input) {
-      const requestedPath = parseRequiredString(input, "path", "fs_mkdir");
-      const recursive = parseOptionalBoolean(input, "recursive", true);
+      const requestedPath = readRequiredString(input, "path", "fs_mkdir");
+      const recursive = readOptionalBoolean(input, "recursive", true);
       const absolutePath = resolveWorkspacePath(options.rootDir, requestedPath);
       await mkdir(absolutePath, { recursive });
       return {
@@ -160,10 +161,10 @@ function createFsMoveTool(options: BasicToolsResolvedOptions): ToolDefinition {
       { field: "dst_path", kind: "file_path" },
     ],
     async execute(input) {
-      const srcPath = parseRequiredString(input, "src_path", "fs_move");
-      const dstPath = parseRequiredString(input, "dst_path", "fs_move");
-      const overwrite = parseOptionalBoolean(input, "overwrite", false);
-      const createParents = parseOptionalBoolean(input, "create_parents", false);
+      const srcPath = readRequiredString(input, "src_path", "fs_move");
+      const dstPath = readRequiredString(input, "dst_path", "fs_move");
+      const overwrite = readOptionalBoolean(input, "overwrite", false);
+      const createParents = readOptionalBoolean(input, "create_parents", false);
       const srcAbsolute = resolveWorkspacePath(options.rootDir, srcPath);
       const dstAbsolute = resolveWorkspacePath(options.rootDir, dstPath);
       if (createParents) {
@@ -217,9 +218,9 @@ function createFsRemoveTool(options: BasicToolsResolvedOptions): ToolDefinition 
     },
     inputAnnotations: [{ field: "path", kind: "file_path" }],
     async execute(input) {
-      const requestedPath = parseRequiredString(input, "path", "fs_remove");
-      const recursive = parseOptionalBoolean(input, "recursive", false);
-      const force = parseOptionalBoolean(input, "force", false);
+      const requestedPath = readRequiredString(input, "path", "fs_remove");
+      const recursive = readOptionalBoolean(input, "recursive", false);
+      const force = readOptionalBoolean(input, "force", false);
       const absolutePath = resolveWorkspacePath(options.rootDir, requestedPath);
       try {
         const info = await stat(absolutePath);

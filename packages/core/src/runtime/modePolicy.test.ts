@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ToolDefinition } from "@micro-harnesses/core";
-import { ModeController } from "../modes/modes";
-import { createModeAwareApprovalPolicy } from "./approvalPolicy";
+import type { ToolDefinition } from "../tools/types";
+import { ModeController, createModeAwareApprovalPolicy } from "./modes";
 
 const writeTool: ToolDefinition = {
   name: "fs_write",

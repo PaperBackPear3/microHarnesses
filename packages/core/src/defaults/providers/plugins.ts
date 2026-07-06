@@ -3,9 +3,16 @@ import type { CredentialsRegistry } from "../../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../../providers/types";
 import { AnthropicAdapter, type AnthropicAdapterOptions } from "./anthropicAdapter";
-import { AnthropicEnvCredentials, OllamaEnvCredentials, OpenAIEnvCredentials } from "./credentials";
+import {
+  AnthropicEnvCredentials,
+  EnvCredentials,
+  type EnvCredentialsOptions,
+  OllamaEnvCredentials,
+  OpenAIEnvCredentials,
+} from "./credentials";
 import { OllamaAdapter, type OllamaAdapterOptions } from "./ollamaAdapter";
 import { OpenAIAdapter, type OpenAIAdapterOptions } from "./openaiAdapter";
+import { OpenAICompatAdapter, type OpenAICompatAdapterOptions } from "./openaiCompatAdapter";
 
 const PROVIDER_CAPABILITIES: PluginCapability[] = ["providers", "credentials"];
 
@@ -66,6 +73,34 @@ export function createOllamaProviderPlugin(
     "ollama-provider",
     new OllamaAdapter(adapterOptions),
     credentials ?? new OllamaEnvCredentials(),
+  );
+}
+
+export interface OpenAICompatProviderPluginOptions extends OpenAICompatAdapterOptions {
+  /**
+   * Credentials for the provider. Either a full resolver or env-var options
+   * for the built-in EnvCredentials resolver.
+   */
+  credentials: CredentialsResolver | EnvCredentialsOptions;
+}
+
+/**
+ * One-line registration for any OpenAI-compatible endpoint, e.g.
+ * `createOpenAICompatProviderPlugin({ providerId: "openrouter", defaultModel: "...",
+ *  defaultBaseUrl: "https://openrouter.ai/api/v1", credentials: { apiKeyEnv: "OPENROUTER_API_KEY" } })`.
+ */
+export function createOpenAICompatProviderPlugin(
+  options: OpenAICompatProviderPluginOptions,
+): HarnessPlugin {
+  const { credentials, ...adapterOptions } = options;
+  const resolver =
+    typeof (credentials as CredentialsResolver).resolve === "function"
+      ? (credentials as CredentialsResolver)
+      : new EnvCredentials(credentials as EnvCredentialsOptions);
+  return createProviderPlugin(
+    `${adapterOptions.providerId}-provider`,
+    new OpenAICompatAdapter(adapterOptions),
+    resolver,
   );
 }
 

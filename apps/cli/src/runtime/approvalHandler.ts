@@ -1,7 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import { type ApprovalHandler, type ApprovalRequest, safeResolve } from "@micro-harnesses/core";
+import type { HarnessMode } from "@micro-harnesses/core";
 import { createPatch } from "diff";
-import type { CliMode } from "../modes/modes";
 
 export interface ApprovalView {
   request: ApprovalRequest;
@@ -32,7 +32,7 @@ export class ApprovalController {
     this.interactive = interactive;
   }
 
-  createHandler(getMode: () => CliMode): ApprovalHandler {
+  createHandler(getMode: () => HarnessMode): ApprovalHandler {
     return async (request) => {
       const mode = getMode();
       if (mode === "autopilot") return true;

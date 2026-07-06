@@ -1,8 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-export { safeResolve, truncate } from "@micro-harnesses/core";
-
 /** Recursively lists files under root up to maxDepth, capped at maxFiles entries. */
 export async function listFiles(
   root: string,
@@ -41,25 +39,4 @@ export async function readTextFileSafely(filePath: string): Promise<string | und
   } catch {
     return undefined;
   }
-}
-
-/** Normalises a string or array value into a trimmed, non-empty string array. */
-export function normalizeStringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-  return [];
-}
-
-/** Clamps a numeric value, falling back to fallback when the value is non-finite. */
-export function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(max, Math.max(min, Math.floor(parsed)));
 }

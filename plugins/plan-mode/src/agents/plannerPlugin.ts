@@ -1,11 +1,12 @@
-import type {
-  HarnessPlugin,
-  PluginApi,
-  PluginCapability,
-  ToolDefinition,
+import {
+  type HarnessPlugin,
+  type PluginApi,
+  type PluginCapability,
+  type ToolDefinition,
+  clampNumber,
+  normalizeStringList,
 } from "@micro-harnesses/core";
 import STEPS from "../steps.json";
-import { clampNumber, normalizeStringList } from "../utils";
 
 type StepTemplate = { title: string; detail: string };
 

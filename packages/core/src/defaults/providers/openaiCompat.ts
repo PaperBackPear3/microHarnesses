@@ -1,5 +1,15 @@
 type OpenAICompatContentPart = { type?: string; text?: string };
 
+/**
+ * Maps an OpenAI-compatible `finish_reason` to loop-stop semantics:
+ * - `stop` / `length` / `content_filter` terminate generation → stop.
+ * - `tool_calls` / `function_call` expect tool execution → continue.
+ */
+export function finishReasonIndicatesStop(reason: string | undefined): boolean {
+  if (!reason) return false;
+  return reason === "stop" || reason === "length" || reason === "content_filter";
+}
+
 export interface ParsedToolCallArgs {
   input: Record<string, unknown>;
   malformed: boolean;
@@ -102,7 +112,7 @@ export function applyOpenAICompatStreamChunk(
   }
   const choice = payload.choices?.[0];
   if (!choice?.delta) {
-    if (choice?.finish_reason === "stop") {
+    if (finishReasonIndicatesStop(choice?.finish_reason)) {
       state.stop = true;
     }
     return { assistantDelta: "", reasoningDelta: "" };
@@ -133,7 +143,7 @@ export function applyOpenAICompatStreamChunk(
     state.toolCalls.set(index, current);
   }
 
-  if (choice.finish_reason === "stop") {
+  if (finishReasonIndicatesStop(choice.finish_reason)) {
     state.stop = true;
   }
 
@@ -181,7 +191,7 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
         ...(parsed.malformed ? { malformedInput: true } : {}),
       };
     }),
-    stop: first.finish_reason === "stop",
+    stop: finishReasonIndicatesStop(first.finish_reason),
     usage: {
       inputTokens:
         payload.usage?.prompt_tokens ??

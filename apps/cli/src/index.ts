@@ -58,6 +58,7 @@ function printHelp(): void {
       "  --mode <plan|accept-edits|autopilot>",
       "  --session <id>",
       "  --state-dir <path>",
+      "  --skills-dir <path>",
       "  --iterations <n>",
       "  --snapshot-every <n>",
       "  --max-tokens <n>",

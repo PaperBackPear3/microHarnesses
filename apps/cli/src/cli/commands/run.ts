@@ -1,5 +1,5 @@
 import type { StreamEvent } from "@micro-harnesses/core";
-import { withModeExecutionContract } from "../../runtime/autopilotPrompt";
+import { withModeExecutionContract } from "@micro-harnesses/core";
 import type { CliComposition } from "../../runtime/composition";
 
 export async function runHeadlessPrompt(

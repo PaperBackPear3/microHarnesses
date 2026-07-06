@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { withModeExecutionContract } from "./autopilotPrompt";
+import { withModeExecutionContract } from "./modes";
 
 test("non-autopilot mode keeps prompt unchanged", () => {
   const prompt = "list apps/cli/src/app";

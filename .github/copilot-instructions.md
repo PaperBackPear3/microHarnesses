@@ -14,9 +14,12 @@ Use npm scripts from the root `package.json`:
 
 Composable, plugin-first library:
 
-- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, policy, subagent primitive; zero runtime deps)
+- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, policy, harness modes, provider adapters, skills, subagent primitive; zero runtime deps)
+- `plugins/basic-tools` — workspace-scoped mutation + shell tools
 - `plugins/plan-mode` — read-only planning + exploration tools
+- `plugins/agentic-compression` — subagent-driven context compression
 - `plugins/example-tools` — reference `echo` / `time` tools
+- `apps/cli` — `@micro-harnesses/cli`, a thin composition + Ink TUI layer over core
 
 ### Runtime loop (`packages/core/src/runtime/agent.ts`)
 
@@ -38,19 +41,21 @@ Per iteration:
 
 Each domain owns its own `types.ts`:
 
-- `shared/` — errors, isNodeError, safeResolve, truncate
+- `shared/` — errors, isNodeError, safeResolve/resolveWorkspacePath/relativeToRoot, truncate, inputParsing (readRequiredString/readOptional*/clampNumber/normalizeStringList — reused by plugins)
 - `tools/` — types (incl. ToolResolver), registry, descriptors
 - `actions/` — executionEngine (`ActionExecutionEngine`: governs tools + skills)
 - `policy/` — types, defaultPolicyEngine, compositePolicyEngine, safety/{commandNormalizer,defaultRules,commandSafetyRule}
 - `providers/` — types, registry, credentialsRegistry
-- `model/` — types, defaultModelSelector, providerModelAdapter
+- `model/` — types, defaultModelSelector, effortModelSelector (`EffortLevel`/`EffortModelSelector`), providerModelAdapter (static or dynamic `selection` getter)
 - `prompts/` — types, fsPromptSource
+- `skills/` — types, registry, asTool, fsSkillSource (loads executable skills from `<root>/<name>/SKILL.md` + optional `skill.meta.json`; prompt-expansion model)
 - `context/` — types, manager, defaultCompressor
 - `session/` — types, sessionStore
 - `observability/` — types, provider (`ObservabilityProvider`/`createObservability`), tracer, metrics, logger, sampler, redaction, tokenCounter, in-memory/console/jsonl exporters (zero-dep, OTel-shaped traces + metrics + logs + `StreamSink`)
-- `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), runObserver (`RunObserver`: run/iteration/model/action span tree + metrics + logs + stream), snapshotCadence
+- `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), modes (`HarnessMode`/`ModeController`/`createModeAwareApprovalPolicy`/`withModeExecutionContract`), runObserver (`RunObserver`: run/iteration/model/action span tree + metrics + logs + stream), snapshotCadence
 - `subagents/` — types, inProcessSubagentRunner
 - `plugins/` — types, host, loader
+- `defaults/` — registerCoreDefaults, createCoreDefaultTools, read-only workspace tools, providers/ (`OpenAICompatAdapter` + OpenAI/Anthropic/Ollama presets, `createOpenAICompatProviderPlugin`, `EnvCredentials`, model profiles, Ollama context-window detection)
 
 ### Plugin API (widened, capability-enforced)
 
@@ -104,5 +109,7 @@ user-facing wait-all alias over the same supervisor state.
 - CLI output for `run` and `sessions show` is JSON — preserve the machine-readable shape.
 - State persistence is filesystem-based, relative to `--state-dir` (default `.micro-harness` in CWD).
 - Cross-package deps use `peerDependencies` (semver ranges) so plugin packages don't duplicate core when installed by users.
+- Generic harness capabilities (modes, model selection, provider adapters, context-window heuristics) live in core; the CLI only composes them and owns TUI concerns (Ink rendering, keybindings, interactive approval prompts, status bar).
+- Providers: prefer `createOpenAICompatProviderPlugin` for new OpenAI-compatible endpoints instead of writing a bespoke adapter.
 - In the CLI TUI, keep input anchored at terminal bottom; render mode/model/context/usage in footer lines below input rather than inline with the composer.
 - For autopilot flows, prefer prompts/instructions that continue autonomously until the goal is actually complete (not just “next step announced”).

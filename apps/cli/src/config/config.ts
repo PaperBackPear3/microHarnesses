@@ -1,17 +1,20 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { type CliMode, parseMode } from "../modes/modes";
+import { type EffortLevel, type HarnessMode, parseEffort, parseMode } from "@micro-harnesses/core";
 
-export type EffortLevel = "low" | "medium" | "high";
+export type { EffortLevel };
+export { parseEffort };
 
 export interface CliConfig {
   stateDir: string;
   promptsDir: string;
+  /** Directory of FS skills (SKILL.md bundles). Defaults to `<stateDir>/skills`. */
+  skillsDir?: string;
   provider: string;
   model?: string;
   effort: EffortLevel;
-  mode: CliMode;
+  mode: HarnessMode;
   maxIterations: number;
   snapshotEvery: number;
   maxTokens?: number;
@@ -23,10 +26,11 @@ export interface CliConfig {
 export interface ConfigOverrides {
   stateDir?: string;
   promptsDir?: string;
+  skillsDir?: string;
   provider?: string;
   model?: string;
   effort?: EffortLevel;
-  mode?: CliMode;
+  mode?: HarnessMode;
   maxIterations?: number;
   snapshotEvery?: number;
   maxTokens?: number;
@@ -38,6 +42,7 @@ export interface ConfigOverrides {
 interface FileConfig {
   stateDir?: string;
   promptsDir?: string;
+  skillsDir?: string;
   provider?: string;
   model?: string;
   effort?: string;
@@ -74,6 +79,7 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
   return {
     stateDir: overrides.stateDir ?? envStateDir ?? fromFile.stateDir ?? defaults.stateDir,
     promptsDir: overrides.promptsDir ?? fromFile.promptsDir ?? defaults.promptsDir,
+    skillsDir: overrides.skillsDir ?? fromFile.skillsDir,
     provider: overrides.provider ?? envProvider ?? fromFile.provider ?? defaults.provider,
     model: overrides.model ?? envModel ?? fromFile.model ?? defaults.model,
     effort: overrides.effort ?? envEffort ?? parseEffort(fromFile.effort) ?? defaults.effort,
@@ -102,13 +108,6 @@ function parseEnvPositiveInt(raw: string | undefined): number | undefined {
     return undefined;
   }
   return parsed;
-}
-
-export function parseEffort(value: string | undefined): EffortLevel | undefined {
-  if (!value) return undefined;
-  if (value === "low" || value === "medium" || value === "high") return value;
-  if (value === "med") return "medium";
-  return undefined;
 }
 
 async function readConfigFile(): Promise<FileConfig> {
