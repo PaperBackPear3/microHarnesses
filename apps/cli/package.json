@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/cli",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Interactive development assistant CLI powered by @micro-harnesses/core.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,11 +20,11 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
-    "@micro-harnesses/core": "^2.0.0",
-    "@micro-harnesses/plugin-agentic-compression": "^2.0.0",
-    "@micro-harnesses/plugin-basic-tools": "^2.0.0",
-    "@micro-harnesses/plugin-example-tools": "^2.0.0",
-    "@micro-harnesses/plugin-plan-mode": "^2.0.0",
+    "@micro-harnesses/core": "^2.1.0",
+    "@micro-harnesses/plugin-agentic-compression": "^2.1.0",
+    "@micro-harnesses/plugin-basic-tools": "^2.1.0",
+    "@micro-harnesses/plugin-example-tools": "^2.1.0",
+    "@micro-harnesses/plugin-plan-mode": "^2.1.0",
     "diff": "^7.0.0",
     "ink": "^3.2.0",
     "ink-spinner": "^4.0.3",
