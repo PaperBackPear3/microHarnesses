@@ -1,9 +1,15 @@
 {
   "name": "@micro-harnesses/plugin-basic-tools",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Workspace-scoped filesystem mutation and shell tools for @micro-harnesses/core.",
   "license": "MIT",
-  "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell"],
+  "keywords": [
+    "micro-harness",
+    "plugin",
+    "tools",
+    "filesystem",
+    "shell"
+  ],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
@@ -22,7 +28,11 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.test.d.ts"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -34,6 +44,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harnesses/core": "^1.0.4"
+    "@micro-harnesses/core": "^1.0.5"
   }
 }

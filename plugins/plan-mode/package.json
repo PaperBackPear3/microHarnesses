@@ -1,9 +1,14 @@
 {
   "name": "@micro-harnesses/plugin-plan-mode",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Read-only planning and exploration plugin for @micro-harnesses/core. Ships a plan_agent and an explore_agent tool.",
   "license": "MIT",
-  "keywords": ["micro-harness", "plugin", "planning", "exploration"],
+  "keywords": [
+    "micro-harness",
+    "plugin",
+    "planning",
+    "exploration"
+  ],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
@@ -22,7 +27,11 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "!dist/**/*.test.*", "!dist/**/*.test.d.ts"],
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.test.d.ts"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -34,6 +43,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harnesses/core": "^1.0.4"
+    "@micro-harnesses/core": "^1.0.5"
   }
 }
