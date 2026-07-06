@@ -391,19 +391,11 @@ export function App({
     setChatEntries((items) => toggleLatestThinkingCollapseInTranscript(items));
   }
 
-  return (
-    <Box flexDirection="column">
-      <StatusBar
-        sessionId={activeSessionId}
-        mode={mode}
-        effort={composition.runtimeState.effort}
-        provider={composition.runtimeState.provider}
-        model={composition.runtimeState.model ?? status.model}
-        running={running}
-        status={status}
-      />
+  const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
 
-      <Box marginTop={1} flexDirection="column">
+  return (
+    <Box flexDirection="column" height={viewportHeight}>
+      <Box flexDirection="column" flexGrow={1}>
         {screen === "chat" && (
           <>
             {chatEntries.slice(-12).map((entry) =>
@@ -450,7 +442,6 @@ export function App({
                 </Box>
               ),
             )}
-            {status.compressing ? <Text color="yellow">Compressing context...</Text> : null}
           </>
         )}
 
@@ -461,21 +452,15 @@ export function App({
         {screen === "context" && <Screen title="Context Window">{contextView}</Screen>}
         {screen === "telemetry" && <Screen title="Telemetry">{telemetryView}</Screen>}
         {screen === "help" && <HelpScreen modelChoices={modelChoices} />}
+        {status.compressing ? <Text color="yellow">Compressing context...</Text> : null}
+        {renderApprovalPrompt(pendingApproval)}
       </Box>
-
-      {renderApprovalPrompt(pendingApproval)}
 
       <Box marginTop={1} flexDirection="column">
         <Box>
           <Text color={modeStyle.color}>[{modeStyle.label}] </Text>
           <Text color={modeStyle.color}>› </Text>
           <TextInput value={input} onChange={setInput} onSubmit={submit} />
-          <Box marginLeft={1}>
-            <Text color="blue">{modelLabel}</Text>
-          </Box>
-          <Box marginLeft={1}>
-            <Text color={contextStyle.color}>{contextStyle.label}</Text>
-          </Box>
           {running && (
             <Box marginLeft={1}>
               <Text color="yellow">
@@ -484,35 +469,46 @@ export function App({
             </Box>
           )}
         </Box>
-        <Text color="gray">{shortcutHint}</Text>
       </Box>
+
+      <FooterStatusBar
+        sessionId={activeSessionId}
+        mode={mode}
+        effort={composition.runtimeState.effort}
+        provider={composition.runtimeState.provider}
+        modelLabel={modelLabel}
+        contextStyle={contextStyle}
+        running={running}
+        status={status}
+        shortcutHint={shortcutHint}
+      />
     </Box>
   );
 }
 
-function StatusBar(props: {
+function FooterStatusBar(props: {
   sessionId: string;
   mode: CliMode;
   effort: EffortLevel;
   provider: string;
-  model?: string;
+  modelLabel: string;
+  contextStyle: { label: string; color: string };
   running: boolean;
   status: StatusState;
+  shortcutHint: string;
 }): React.ReactElement {
-  const utilization =
-    typeof props.status.contextUtilization === "number"
-      ? `${Math.round(props.status.contextUtilization * 100)}%`
-      : "n/a";
   return (
-    <Box>
+    <Box flexDirection="column" marginTop={1}>
       <Text>
         session={props.sessionId} | mode={props.mode} | effort={props.effort} | provider=
-        {props.provider} | model={props.model ?? "-"} | ctx={utilization} | tokens=
+        {props.provider} | <Text color="blue">{props.modelLabel}</Text> |{" "}
+        <Text color={props.contextStyle.color}>{props.contextStyle.label}</Text> | tokens=
         {props.status.tokensIn}/{props.status.tokensOut} | turns={props.status.turns} | errors=
         {props.status.errors} | limits={props.status.limitHits}
         {props.status.compressing ? " | COMPRESSING" : ""}
         {props.running ? " | RUNNING" : ""}
       </Text>
+      <Text color="gray">{props.shortcutHint}</Text>
     </Box>
   );
 }
