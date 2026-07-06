@@ -622,7 +622,7 @@ function buildChatLines(
         pushMultiline(
           lines,
           `${step.id}-assistant`,
-          undefined,
+          "green",
           `assistant${formatIteration(step.iteration)} > ${step.assistantText}`,
           columns,
         );
