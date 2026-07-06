@@ -42,7 +42,11 @@ export class OllamaAdapter implements ProviderAdapter {
     const response = await this.fetchImpl(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...toOllamaBody(request), stream: true }),
+      body: JSON.stringify({
+        ...toOllamaBody(request),
+        stream: true,
+        stream_options: { include_usage: true },
+      }),
       signal: request.signal,
     });
 

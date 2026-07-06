@@ -34,23 +34,23 @@ test("SessionStore persists manifest and snapshots", async () => {
   }
 });
 
-test("initSession omits support history path until history is appended", async () => {
+test("support history is persisted without adding manifest path metadata", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-history-"));
   const store = new SessionStore(stateDir);
 
   try {
     const manifest = await store.initSession({ goal: "track support history" });
-    assert.equal(manifest.supportHistoryPath, undefined);
+    assert.equal("supportHistoryPath" in manifest, false);
 
     await store.appendSupportHistory(manifest.sessionId, { note: "first row" });
     const updated = await store.getSession(manifest.sessionId);
-    assert.equal(updated.supportHistoryPath, "support-history.jsonl");
+    assert.equal("supportHistoryPath" in updated, false);
 
     const historyPath = path.join(
       stateDir,
       "sessions",
       manifest.sessionId,
-      updated.supportHistoryPath ?? "",
+      "support-history.jsonl",
     );
     const historyFile = await stat(historyPath);
     assert.equal(historyFile.isFile(), true);
@@ -119,18 +119,22 @@ test("saveSnapshot stores incremental turn deltas across snapshots", async () =>
     });
 
     const snapshotsDir = path.join(stateDir, "sessions", manifest.sessionId, "snapshots");
-    const files = (await readdir(snapshotsDir)).filter((name) => name.endsWith(".json")).sort();
+    const files = (await readdir(snapshotsDir)).filter((name) => name.endsWith(".json"));
     assert.equal(files.length, 2);
-    const latestName = files[1];
-    assert.ok(latestName);
-    const latestRaw = await readFile(path.join(snapshotsDir, latestName), "utf8");
-    const latest = JSON.parse(latestRaw) as {
-      turnsMode?: string;
-      baseTurnCount?: number;
-      state?: { turns?: Array<{ id?: string }> };
-    };
-    assert.equal(latest.turnsMode, "delta");
-    assert.equal(latest.baseTurnCount, 2);
+    const snapshots = await Promise.all(
+      files.map(async (file) => {
+        const raw = await readFile(path.join(snapshotsDir, file), "utf8");
+        return JSON.parse(raw) as {
+          seq?: number;
+          state?: { turns?: Array<{ id?: string }> };
+        };
+      }),
+    );
+    snapshots.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+    const latest = snapshots.at(-1);
+    assert.ok(latest);
+    assert.equal("turnsMode" in latest, false);
+    assert.equal("baseTurnCount" in latest, false);
     assert.deepEqual(
       (latest.state?.turns ?? []).map((turn) => turn.id),
       ["turn-c"],
@@ -141,6 +145,37 @@ test("saveSnapshot stores incremental turn deltas across snapshots", async () =>
       restored?.turns.map((turn) => turn.id),
       ["turn-a", "turn-b", "turn-c"],
     );
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("saveSnapshot skips no-op snapshots when no new turns were added", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-noop-"));
+  const store = new SessionStore(stateDir);
+
+  try {
+    const manifest = await store.initSession({ goal: "avoid duplicate snapshots" });
+    const turnA = makeTurn("turn-a", "first", "answer-1");
+    const state = {
+      sessionId: manifest.sessionId,
+      runId: "run-1",
+      startedAt: new Date().toISOString(),
+      turns: [turnA],
+    };
+    const firstSnapshotId = await store.saveSnapshot(manifest.sessionId, "run-1", state);
+    const secondSnapshotId = await store.saveSnapshot(manifest.sessionId, "run-2", {
+      ...state,
+      runId: "run-2",
+    });
+
+    const snapshotsDir = path.join(stateDir, "sessions", manifest.sessionId, "snapshots");
+    const files = (await readdir(snapshotsDir)).filter((name) => name.endsWith(".json"));
+    assert.equal(secondSnapshotId, firstSnapshotId);
+    assert.equal(files.length, 1);
+
+    const updated = await store.getSession(manifest.sessionId);
+    assert.equal(updated.latestRunId, "run-2");
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

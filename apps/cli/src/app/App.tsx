@@ -12,21 +12,17 @@ import type { ApprovalView } from "../runtime/approvalHandler";
 import type { CliComposition } from "../runtime/composition";
 import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands";
 import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status";
-
-interface ChatTurn {
-  id: string;
-  userText: string;
-  thinkingText: string;
-  assistantText: string;
-  thinkingCollapsed: boolean;
-}
-
-interface ChatEntry {
-  id: string;
-  type: "system" | "turn";
-  text?: string;
-  turn?: ChatTurn;
-}
+import {
+  type ChatEntry,
+  appendAssistantDelta,
+  appendStepSystemMessage,
+  appendSystemEntry,
+  appendThinkingDelta,
+  asNumber,
+  formatIteration,
+  startUserTurn,
+  toggleLatestThinkingCollapse as toggleLatestThinkingCollapseInTranscript,
+} from "./transcript";
 
 interface Props {
   composition: CliComposition;
@@ -294,32 +290,34 @@ export function App({
     }
 
     if (event.type === "model.reasoning_delta") {
-      appendTurnThinking(String(event.payload.delta ?? ""));
+      appendTurnThinking(String(event.payload.delta ?? ""), asNumber(event.payload.iteration));
       return;
     }
     if (event.type === "model.output_delta") {
-      appendTurnAssistant(String(event.payload.delta ?? ""));
-      return;
-    }
-    if (event.type === "model.output_completed") {
-      activeTurnIdRef.current = undefined;
+      appendTurnAssistant(String(event.payload.delta ?? ""), asNumber(event.payload.iteration));
       return;
     }
     if (event.type === "tool.started") {
       const action = String(event.payload.action ?? "unknown_tool");
-      appendSystemMessage(`tool started: ${action}`);
+      appendTurnSystemMessage(`tool started: ${action}`, asNumber(event.payload.iteration));
       return;
     }
     if (event.type === "tool.blocked") {
       const action = String(event.payload.action ?? "unknown_tool");
       const reason = String(event.payload.reason ?? "blocked");
-      appendSystemMessage(`tool blocked: ${action} (${reason})`);
+      appendTurnSystemMessage(
+        `tool blocked: ${action} (${reason})`,
+        asNumber(event.payload.iteration),
+      );
       return;
     }
     if (event.type === "limit.reached") {
       const action = String(event.payload.action ?? "unknown");
       const limit = Number(event.payload.limit ?? 0);
-      appendSystemMessage(`limit reached: ${action} (${limit})`);
+      appendTurnSystemMessage(
+        `limit reached: ${action} (${limit})`,
+        asNumber(event.payload.iteration),
+      );
       return;
     }
     if (event.type === "run.failed") {
@@ -329,103 +327,51 @@ export function App({
   }
 
   function appendSystemMessage(text: string): void {
-    setChatEntries((items) => [...items, { id: randomUUID(), type: "system", text }]);
+    setChatEntries((items) => appendSystemEntry(items, randomUUID(), text));
   }
 
   function startTurn(userText: string): void {
     const turnId = randomUUID();
     activeTurnIdRef.current = turnId;
-    setChatEntries((items) => [
-      ...items,
-      {
-        id: turnId,
-        type: "turn",
-        turn: {
-          id: turnId,
-          userText,
-          thinkingText: "",
-          assistantText: "",
-          thinkingCollapsed: false,
-        },
-      },
-    ]);
+    setChatEntries((items) => startUserTurn(items, turnId, userText));
   }
 
-  function ensureActiveTurn(): string {
-    const existing = activeTurnIdRef.current;
-    if (existing) return existing;
-    const turnId = randomUUID();
-    activeTurnIdRef.current = turnId;
-    setChatEntries((items) => [
-      ...items,
-      {
-        id: turnId,
-        type: "turn",
-        turn: {
-          id: turnId,
-          userText: "",
-          thinkingText: "",
-          assistantText: "",
-          thinkingCollapsed: false,
-        },
-      },
-    ]);
-    return turnId;
+  function appendTurnThinking(delta: string, iteration: number | undefined): void {
+    setChatEntries((items) => {
+      const next = appendThinkingDelta(
+        items,
+        activeTurnIdRef.current,
+        iteration,
+        randomUUID,
+        delta,
+      );
+      activeTurnIdRef.current = next.activeTurnId;
+      return next.entries;
+    });
   }
 
-  function appendTurnThinking(delta: string): void {
-    if (delta.length === 0) return;
-    const activeTurnId = ensureActiveTurn();
+  function appendTurnAssistant(delta: string, iteration: number | undefined): void {
+    setChatEntries((items) => {
+      const next = appendAssistantDelta(
+        items,
+        activeTurnIdRef.current,
+        iteration,
+        randomUUID,
+        delta,
+      );
+      activeTurnIdRef.current = next.activeTurnId;
+      return next.entries;
+    });
+  }
+
+  function appendTurnSystemMessage(text: string, iteration: number | undefined): void {
     setChatEntries((items) =>
-      items.map((entry) => {
-        if (entry.type !== "turn" || !entry.turn || entry.turn.id !== activeTurnId) return entry;
-        return {
-          ...entry,
-          turn: {
-            ...entry.turn,
-            thinkingText: `${entry.turn.thinkingText}${delta}`,
-          },
-        };
-      }),
-    );
-  }
-
-  function appendTurnAssistant(delta: string): void {
-    if (delta.length === 0) return;
-    const activeTurnId = ensureActiveTurn();
-    setChatEntries((items) =>
-      items.map((entry) => {
-        if (entry.type !== "turn" || !entry.turn || entry.turn.id !== activeTurnId) return entry;
-        return {
-          ...entry,
-          turn: {
-            ...entry.turn,
-            assistantText: `${entry.turn.assistantText}${delta}`,
-          },
-        };
-      }),
+      appendStepSystemMessage(items, activeTurnIdRef.current, iteration, randomUUID, text),
     );
   }
 
   function toggleLatestThinkingCollapse(): void {
-    setChatEntries((items) => {
-      for (let i = items.length - 1; i >= 0; i -= 1) {
-        const entry = items[i];
-        if (entry?.type !== "turn" || !entry.turn || entry.turn.thinkingText.length === 0) {
-          continue;
-        }
-        const next = items.slice();
-        next[i] = {
-          ...entry,
-          turn: {
-            ...entry.turn,
-            thinkingCollapsed: !entry.turn.thinkingCollapsed,
-          },
-        };
-        return next;
-      }
-      return items;
-    });
+    setChatEntries((items) => toggleLatestThinkingCollapseInTranscript(items));
   }
 
   return (
@@ -457,20 +403,33 @@ export function App({
                       {entry.turn.userText}
                     </Text>
                   ) : null}
-                  {entry.turn && entry.turn.thinkingText.length > 0 ? (
-                    <Box flexDirection="column">
-                      <Text color="yellow">
-                        Thinking [{entry.turn.thinkingCollapsed ? "collapsed" : "expanded"}]
-                      </Text>
-                      {!entry.turn.thinkingCollapsed && <Text>{entry.turn.thinkingText}</Text>}
+                  {entry.turn?.steps.map((step) => (
+                    <Box key={step.id} flexDirection="column">
+                      {step.thinkingText.length > 0 ? (
+                        <Box flexDirection="column">
+                          <Text color="yellow">
+                            Thinking{formatIteration(step.iteration)} [
+                            {step.thinkingCollapsed ? "collapsed" : "expanded"}]
+                          </Text>
+                          {!step.thinkingCollapsed && <Text>{step.thinkingText}</Text>}
+                        </Box>
+                      ) : null}
+                      {step.assistantText ? (
+                        <Text>
+                          <Text color="green">
+                            assistant{formatIteration(step.iteration)} &gt;{" "}
+                          </Text>
+                          {step.assistantText}
+                        </Text>
+                      ) : null}
+                      {step.systemMessages.map((message) => (
+                        <Text key={message.id}>
+                          <Text color="gray">system{formatIteration(step.iteration)} &gt; </Text>
+                          {message.text}
+                        </Text>
+                      ))}
                     </Box>
-                  ) : null}
-                  {entry.turn?.assistantText ? (
-                    <Text>
-                      <Text color="green">assistant &gt; </Text>
-                      {entry.turn.assistantText}
-                    </Text>
-                  ) : null}
+                  ))}
                 </Box>
               ),
             )}

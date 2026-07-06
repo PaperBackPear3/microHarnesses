@@ -27,7 +27,11 @@ export interface OpenAICompatResponse {
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
+    prompt_eval_count?: number;
+    eval_count?: number;
   };
+  prompt_eval_count?: number;
+  eval_count?: number;
 }
 
 export interface OpenAICompatStreamChunk {
@@ -44,7 +48,11 @@ export interface OpenAICompatStreamChunk {
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
+    prompt_eval_count?: number;
+    eval_count?: number;
   };
+  prompt_eval_count?: number;
+  eval_count?: number;
 }
 
 interface ToolCallBuffer {
@@ -82,11 +90,15 @@ export function applyOpenAICompatStreamChunk(
   state: OpenAICompatStreamState,
   payload: OpenAICompatStreamChunk,
 ): OpenAICompatStreamDelta {
-  if (payload.usage?.prompt_tokens !== undefined) {
-    state.usage.inputTokens = payload.usage.prompt_tokens;
+  const inputTokens =
+    payload.usage?.prompt_tokens ?? payload.usage?.prompt_eval_count ?? payload.prompt_eval_count;
+  const outputTokens =
+    payload.usage?.completion_tokens ?? payload.usage?.eval_count ?? payload.eval_count;
+  if (inputTokens !== undefined) {
+    state.usage.inputTokens = inputTokens;
   }
-  if (payload.usage?.completion_tokens !== undefined) {
-    state.usage.outputTokens = payload.usage.completion_tokens;
+  if (outputTokens !== undefined) {
+    state.usage.outputTokens = outputTokens;
   }
   const choice = payload.choices?.[0];
   if (!choice?.delta) {
@@ -171,8 +183,12 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
     }),
     stop: first.finish_reason === "stop",
     usage: {
-      inputTokens: payload.usage?.prompt_tokens,
-      outputTokens: payload.usage?.completion_tokens,
+      inputTokens:
+        payload.usage?.prompt_tokens ??
+        payload.usage?.prompt_eval_count ??
+        payload.prompt_eval_count,
+      outputTokens:
+        payload.usage?.completion_tokens ?? payload.usage?.eval_count ?? payload.eval_count,
     },
   };
 }

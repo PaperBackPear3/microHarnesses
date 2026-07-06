@@ -10,8 +10,6 @@ interface SnapshotFile {
   createdAt: string;
   seq: number;
   runId: string;
-  turnsMode?: "full" | "delta";
-  baseTurnCount?: number;
   state: RunState;
 }
 
@@ -61,14 +59,15 @@ export class SessionStore {
 
   async appendSupportHistory(sessionId: string, data: Record<string, unknown>): Promise<void> {
     const manifest = await this.readManifest(sessionId);
-    if (!manifest.supportHistoryPath) {
-      manifest.supportHistoryPath = "support-history.jsonl";
-    }
     const row = {
       timestamp: new Date().toISOString(),
       ...data,
     };
-    await appendFile(this.supportHistoryAbsolutePath(manifest), `${JSON.stringify(row)}\n`, "utf8");
+    await appendFile(
+      this.supportHistoryAbsolutePath(sessionId),
+      `${JSON.stringify(row)}\n`,
+      "utf8",
+    );
     manifest.updatedAt = new Date().toISOString();
     await this.writeManifest(manifest);
   }
@@ -82,13 +81,24 @@ export class SessionStore {
     const previousSnapshotTurnCount = Math.max(0, manifest.lastSnapshotTurnCount ?? 0);
     const previousTurnCount =
       state.turns.length > previousSnapshotTurnCount ? previousSnapshotTurnCount : 0;
+    if (
+      manifest.latestSnapshotId &&
+      manifest.latestSnapshotPath &&
+      state.turns.length === previousSnapshotTurnCount
+    ) {
+      await this.writeManifest({
+        ...manifest,
+        latestRunId: runId,
+        updatedAt: new Date().toISOString(),
+      });
+      return manifest.latestSnapshotId;
+    }
+
     const payload: SnapshotFile = {
       id: snapshotId,
       createdAt: new Date().toISOString(),
       seq: snapshotSeq,
       runId,
-      turnsMode: "delta",
-      baseTurnCount: previousTurnCount,
       state: {
         ...state,
         turns: state.turns.slice(previousTurnCount),
@@ -164,11 +174,8 @@ export class SessionStore {
     return path.join(this.rootDir, sessionId);
   }
 
-  private supportHistoryAbsolutePath(manifest: SessionManifest): string {
-    return path.join(
-      this.sessionDir(manifest.sessionId),
-      manifest.supportHistoryPath ?? "support-history.jsonl",
-    );
+  private supportHistoryAbsolutePath(sessionId: string): string {
+    return path.join(this.sessionDir(sessionId), "support-history.jsonl");
   }
 
   private async readManifest(sessionId: string): Promise<SessionManifest> {
