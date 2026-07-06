@@ -38,6 +38,8 @@ const KEYBOARD_SHORTCUTS: readonly Shortcut[] = [
   { keys: "Enter", description: "send prompt" },
   { keys: "Shift+Tab", description: "cycle mode (plan → edits → autopilot)" },
   { keys: "Ctrl+T", description: "toggle collapse for all reasoning" },
+  { keys: "↑ / ↓", description: "scroll transcript (when input is empty)" },
+  { keys: "PgUp / PgDn", description: "page transcript scroll (when input is empty)" },
   { keys: "Esc / Ctrl+C", description: "interrupt current run" },
   { keys: "Ctrl+D", description: "exit chat" },
   { keys: "y / n / a", description: "approval: approve / reject / always" },
@@ -66,7 +68,7 @@ export function contextBadgeStyle(status: StatusState): LabeledColor {
 }
 
 export function compactShortcutHintLine(): string {
-  return "Shift+Tab mode · Ctrl+T thinking · Esc/Ctrl+C stop · Ctrl+D exit · /help commands+shortcuts";
+  return "Shift+Tab mode · Ctrl+T thinking · ↑/↓ scroll · PgUp/PgDn page · Esc/Ctrl+C stop · /help commands+shortcuts";
 }
 
 export function helpCommandLines(modelChoices: string[]): string[] {

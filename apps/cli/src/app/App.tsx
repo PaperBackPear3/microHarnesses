@@ -32,6 +32,7 @@ import {
   modePromptStyle,
   modelBadgeLabel,
 } from "./uiMeta";
+import { sliceFromBottom } from "./viewport";
 
 interface Props {
   composition: CliComposition;
@@ -50,6 +51,7 @@ export function App({
   const [running, setRunning] = useState(false);
   const [screen, setScreen] = useState<UiScreen>("chat");
   const [status, setStatus] = useState<StatusState>(createStatusState());
+  const [chatScrollOffset, setChatScrollOffset] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState(composition.rootSessionId);
   const [sessionsView, setSessionsView] = useState<string>("No sessions loaded.");
   const [sessionDetailView, setSessionDetailView] = useState<string>("No session selected.");
@@ -74,6 +76,26 @@ export function App({
     [composition.runtimeState.provider],
   );
 
+  const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
+  const composerRows = 1;
+  const footerRows = 3;
+  const contentRows = Math.max(1, viewportHeight - composerRows - footerRows);
+
+  const chatLines = useMemo(
+    () => buildChatLines(chatEntries, status.compressing, pendingApproval, terminalColumns),
+    [chatEntries, status.compressing, pendingApproval, terminalColumns],
+  );
+  const transcriptViewport = useMemo(
+    () => sliceFromBottom(chatLines, contentRows, chatScrollOffset),
+    [chatLines, contentRows, chatScrollOffset],
+  );
+
+  useEffect(() => {
+    if (chatScrollOffset > transcriptViewport.maxOffset) {
+      setChatScrollOffset(transcriptViewport.maxOffset);
+    }
+  }, [chatScrollOffset, transcriptViewport.maxOffset]);
+
   useEffect(() => {
     return composition.uiStream.subscribe(({ streamEvent }) => {
       applyStreamEvent(streamEvent);
@@ -88,6 +110,27 @@ export function App({
   }, [composition.approvalController]);
 
   useInput((raw, key) => {
+    const canScrollTranscript = screen === "chat" && input.length === 0 && !pendingApproval;
+    if (canScrollTranscript) {
+      const pageStep = Math.max(1, Math.floor(contentRows * 0.8));
+      if (key.upArrow) {
+        setChatScrollOffset((offset) => offset + 1);
+        return;
+      }
+      if (key.downArrow) {
+        setChatScrollOffset((offset) => Math.max(0, offset - 1));
+        return;
+      }
+      if (key.pageUp) {
+        setChatScrollOffset((offset) => offset + pageStep);
+        return;
+      }
+      if (key.pageDown) {
+        setChatScrollOffset((offset) => Math.max(0, offset - pageStep));
+        return;
+      }
+    }
+
     if (pendingApproval) {
       const answer = raw.toLowerCase();
       if (answer === "y") {
@@ -139,6 +182,7 @@ export function App({
 
       startTurn(trimmed);
       setScreen("chat");
+      setChatScrollOffset(0);
       runningRef.current = true;
       setRunning(true);
       setInput("");
@@ -189,6 +233,7 @@ export function App({
     setComposition(next);
     setActiveSessionId(next.rootSessionId);
     setChatEntries([{ id: randomUUID(), type: "system", text: notice }]);
+    setChatScrollOffset(0);
     activeTurnIdRef.current = undefined;
     setStatus(createStatusState());
     setScreen("chat");
@@ -295,6 +340,7 @@ export function App({
     }
     if (command.type === "show-chat") {
       setScreen("chat");
+      setChatScrollOffset(0);
     }
   }
 
@@ -392,54 +438,23 @@ export function App({
     setChatEntries((items) => toggleAllThinkingCollapseInTranscript(items));
   }
 
-  const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
-
   return (
     <Box flexDirection="column" height={viewportHeight}>
-      <Box flexDirection="column" flexGrow={1}>
-        {screen === "chat" &&
-          chatEntries.slice(-12).map((entry) =>
-            entry.type === "system" ? (
-              <Text key={entry.id}>
-                <Text color="gray">system &gt; </Text>
-                {entry.text}
+      <Box flexDirection="column" height={contentRows}>
+        {screen === "chat" ? (
+          <>
+            {transcriptViewport.visible.map((line) => (
+              <Text key={line.id} color={line.color}>
+                {line.text}
               </Text>
-            ) : (
-              <Box key={entry.id} flexDirection="column">
-                {entry.turn?.userText ? (
-                  <Text>
-                    <Text color="cyan">user &gt; </Text>
-                    {entry.turn.userText}
-                  </Text>
-                ) : null}
-                {entry.turn?.steps.map((step) => (
-                  <Box key={step.id} flexDirection="column">
-                    {step.thinkingText.length > 0 ? (
-                      <Box flexDirection="column">
-                        <Text color="yellow">
-                          Thinking{formatIteration(step.iteration)} [
-                          {step.thinkingCollapsed ? "collapsed" : "expanded"}]
-                        </Text>
-                        {!step.thinkingCollapsed && <Text>{step.thinkingText}</Text>}
-                      </Box>
-                    ) : null}
-                    {step.assistantText ? (
-                      <Text>
-                        <Text color="green">assistant{formatIteration(step.iteration)} &gt; </Text>
-                        {step.assistantText}
-                      </Text>
-                    ) : null}
-                    {step.systemMessages.map((message) => (
-                      <Text key={message.id}>
-                        <Text color="gray">system{formatIteration(step.iteration)} &gt; </Text>
-                        {message.text}
-                      </Text>
-                    ))}
-                  </Box>
-                ))}
-              </Box>
-            ),
-          )}
+            ))}
+            {transcriptViewport.offset > 0 ? (
+              <Text color="gray">
+                ↑ scrolled {transcriptViewport.offset} lines ({transcriptViewport.maxOffset} max)
+              </Text>
+            ) : null}
+          </>
+        ) : null}
 
         {screen === "sessions" && <Screen title="Sessions">{sessionsView}</Screen>}
         {screen === "session-details" && (
@@ -448,27 +463,23 @@ export function App({
         {screen === "context" && <Screen title="Context Window">{contextView}</Screen>}
         {screen === "telemetry" && <Screen title="Telemetry">{telemetryView}</Screen>}
         {screen === "help" && <HelpScreen modelChoices={modelChoices} />}
-        {status.compressing ? <Text color="yellow">Compressing context...</Text> : null}
-        {renderApprovalPrompt(pendingApproval)}
       </Box>
 
-      <Box marginTop={1} flexDirection="column">
-        <Box>
-          <Text color={modeStyle.color}>[{modeStyle.label}] </Text>
-          <Text color={modeStyle.color}>› </Text>
-          {pendingApproval ? (
-            <Text color="yellow">awaiting approval (y/n/a)</Text>
-          ) : (
-            <TextInput value={input} onChange={setInput} onSubmit={submit} />
-          )}
-          {running && (
-            <Box marginLeft={1}>
-              <Text color="yellow">
-                <Spinner type="dots" /> running
-              </Text>
-            </Box>
-          )}
-        </Box>
+      <Box>
+        <Text color={modeStyle.color}>[{modeStyle.label}] </Text>
+        <Text color={modeStyle.color}>› </Text>
+        {pendingApproval ? (
+          <Text color="yellow">awaiting approval (y/n/a)</Text>
+        ) : (
+          <TextInput value={input} onChange={setInput} onSubmit={submit} />
+        )}
+        {running && (
+          <Box marginLeft={1}>
+            <Text color="yellow">
+              <Spinner type="dots" /> running
+            </Text>
+          </Box>
+        )}
       </Box>
 
       <FooterStatusBar
@@ -570,4 +581,115 @@ function trimToColumns(text: string, columns: number): string {
   if (text.length <= columns) return text;
   if (columns <= 1) return "…";
   return `${text.slice(0, Math.max(0, columns - 1))}…`;
+}
+
+interface ChatRenderLine {
+  id: string;
+  text: string;
+  color?: "gray" | "cyan" | "yellow" | "green";
+}
+
+function buildChatLines(
+  entries: ChatEntry[],
+  compressing: boolean,
+  pendingApproval: ApprovalView | undefined,
+  columns: number,
+): ChatRenderLine[] {
+  const lines: ChatRenderLine[] = [];
+  for (const entry of entries) {
+    if (entry.type === "system") {
+      pushWrapped(lines, entry.id, "gray", `system > ${entry.text ?? ""}`, columns);
+      continue;
+    }
+    if (!entry.turn) continue;
+    if (entry.turn.userText) {
+      pushWrapped(lines, `${entry.id}-user`, "cyan", `user > ${entry.turn.userText}`, columns);
+    }
+    for (const step of entry.turn.steps) {
+      if (step.thinkingText.length > 0) {
+        pushWrapped(
+          lines,
+          `${step.id}-think-header`,
+          "yellow",
+          `Thinking${formatIteration(step.iteration)} [${step.thinkingCollapsed ? "collapsed" : "expanded"}]`,
+          columns,
+        );
+        if (!step.thinkingCollapsed) {
+          pushMultiline(lines, `${step.id}-think`, undefined, step.thinkingText, columns);
+        }
+      }
+      if (step.assistantText.length > 0) {
+        pushMultiline(
+          lines,
+          `${step.id}-assistant`,
+          undefined,
+          `assistant${formatIteration(step.iteration)} > ${step.assistantText}`,
+          columns,
+        );
+      }
+      for (const message of step.systemMessages) {
+        pushWrapped(
+          lines,
+          `${step.id}-sys-${message.id}`,
+          "gray",
+          `system${formatIteration(step.iteration)} > ${message.text}`,
+          columns,
+        );
+      }
+    }
+  }
+  if (compressing) {
+    pushWrapped(lines, "compressing", "yellow", "Compressing context...", columns);
+  }
+  if (pendingApproval) {
+    pushWrapped(
+      lines,
+      "approval-title",
+      "yellow",
+      `Approval required: ${pendingApproval.request.tool.name} (y=approve, n=reject, a=always)`,
+      columns,
+    );
+    pushMultiline(
+      lines,
+      "approval-preview",
+      undefined,
+      pendingApproval.preview.slice(0, 600),
+      columns,
+    );
+  }
+  return lines;
+}
+
+function pushMultiline(
+  lines: ChatRenderLine[],
+  idPrefix: string,
+  color: ChatRenderLine["color"],
+  text: string,
+  columns: number,
+): void {
+  const segments = text.split(/\r?\n/);
+  segments.forEach((segment, index) => {
+    pushWrapped(lines, `${idPrefix}-${index}`, color, segment, columns);
+  });
+}
+
+function pushWrapped(
+  lines: ChatRenderLine[],
+  idPrefix: string,
+  color: ChatRenderLine["color"],
+  text: string,
+  columns: number,
+): void {
+  const safeWidth = Math.max(10, columns);
+  if (text.length === 0) {
+    lines.push({ id: `${idPrefix}-0`, text: "", color });
+    return;
+  }
+  for (let start = 0, index = 0; start < text.length; start += safeWidth, index += 1) {
+    lines.push({
+      id: `${idPrefix}-${index}`,
+      text: text.slice(start, start + safeWidth),
+      color,
+    });
+  }
 }
