@@ -1,8 +1,5 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
-import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
-import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 import {
   Agent,
   CompositePolicyEngine,
@@ -15,14 +12,17 @@ import {
   JsonlObservabilityExporter,
   PluginHost,
   ProviderRegistry,
+  type RunOptions,
+  type SessionStore,
   ToolRegistry,
   builtInProviderPlugins,
   createCommandSafetyRule,
   createCoreDefaultTools,
   registerCoreDefaults,
-  type RunOptions,
-  type SessionStore,
 } from "@micro-harnesses/core";
+import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
+import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
+import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 import type { CliConfig, EffortLevel } from "../config/config";
 import { profileForProvider } from "../config/providers";
 import { ModeController } from "../modes/modes";
@@ -52,8 +52,11 @@ export interface CliComposition {
   sessionStore: SessionStore;
 }
 
-export async function buildComposition(config: CliConfig): Promise<CliComposition> {
-  const rootSessionId = config.sessionId ?? `s-${randomUUID()}`;
+export async function buildComposition(
+  config: CliConfig,
+  sessionIdOverride?: string,
+): Promise<CliComposition> {
+  const rootSessionId = sessionIdOverride ?? config.sessionId ?? `s-${randomUUID()}`;
   const runtimeState: RuntimeState = {
     provider: config.provider,
     model: config.model,
@@ -126,7 +129,7 @@ export async function buildComposition(config: CliConfig): Promise<CliCompositio
     policy,
     observability,
     sessionStore,
-    approvalHandler: approvalController.createHandler(() => modeController.getMode(), process.stdin.isTTY),
+    approvalHandler: approvalController.createHandler(() => modeController.getMode()),
   });
 
   const subagentRunner = new InProcessSubagentRunner(
@@ -155,7 +158,7 @@ export async function buildComposition(config: CliConfig): Promise<CliCompositio
           policy,
           observability,
           sessionStore,
-          approvalHandler: approvalController.createHandler(() => modeController.getMode(), process.stdin.isTTY),
+          approvalHandler: approvalController.createHandler(() => modeController.getMode()),
           kind: "subagent",
         });
         return {

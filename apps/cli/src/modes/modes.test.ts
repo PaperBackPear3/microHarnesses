@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { ModeController } from "./modes";
 
 test("mode controller cycles in expected order", () => {

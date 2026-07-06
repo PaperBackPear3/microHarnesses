@@ -1,8 +1,8 @@
+import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import assert from "node:assert/strict";
 import { SessionStore } from "@micro-harnesses/core";
 import { SessionService } from "./sessionService";
 
@@ -29,7 +29,10 @@ test("session service reads telemetry summary", async () => {
 });
 
 async function mkTmpDir(): Promise<string> {
-  const dir = path.join(os.tmpdir(), `mh-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  const dir = path.join(
+    os.tmpdir(),
+    `mh-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
   await mkdir(dir, { recursive: true });
   return dir;
 }

@@ -23,7 +23,12 @@ export class SessionService {
 
   async listSummaries(): Promise<SessionSummary[]> {
     const sessions = await this.sessionStore.listSessions();
-    return await Promise.all(sessions.map(async (manifest) => ({ manifest, telemetry: await this.readTelemetrySummary(manifest.sessionId) })));
+    return await Promise.all(
+      sessions.map(async (manifest) => ({
+        manifest,
+        telemetry: await this.readTelemetrySummary(manifest.sessionId),
+      })),
+    );
   }
 
   async getDetails(sessionId: string): Promise<SessionSummary> {
@@ -36,7 +41,13 @@ export class SessionService {
   }
 
   private async readTelemetrySummary(sessionId: string): Promise<SessionSummary["telemetry"]> {
-    const metricsPath = path.join(this.stateDir, "sessions", sessionId, "telemetry", "metrics.jsonl");
+    const metricsPath = path.join(
+      this.stateDir,
+      "sessions",
+      sessionId,
+      "telemetry",
+      "metrics.jsonl",
+    );
     try {
       const raw = await readFile(metricsPath, "utf8");
       const lines = raw.split("\n").filter((line) => line.trim().length > 0);

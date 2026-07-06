@@ -1,15 +1,17 @@
 import { randomUUID } from "node:crypto";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import type { StreamEvent } from "@micro-harnesses/core";
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
-import type { StreamEvent } from "@micro-harnesses/core";
+// biome-ignore lint/style/useImportType: classic JSX runtime requires React as a value import.
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EffortLevel } from "../config/config";
 import { availableModelChoices } from "../config/providers";
 import type { CliMode } from "../modes/modes";
-import { parseSlashCommand, type SlashCommand, type UiScreen } from "../slash/commands";
-import { createStatusState, reduceStatus, type StatusState } from "../telemetry/status";
+import type { ApprovalView } from "../runtime/approvalHandler";
 import type { CliComposition } from "../runtime/composition";
+import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands";
+import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status";
 
 interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -18,10 +20,16 @@ interface ChatMessage {
 
 interface Props {
   composition: CliComposition;
+  buildForSession(sessionId: string): Promise<CliComposition>;
   onExit(): void;
 }
 
-export function App({ composition, onExit }: Props): React.ReactElement {
+export function App({
+  composition: initialComposition,
+  buildForSession,
+  onExit,
+}: Props): React.ReactElement {
+  const [composition, setComposition] = useState<CliComposition>(initialComposition);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [assistantDraft, setAssistantDraft] = useState("");
   const [thinking, setThinking] = useState("");
@@ -34,6 +42,13 @@ export function App({ composition, onExit }: Props): React.ReactElement {
   const [sessionDetailView, setSessionDetailView] = useState<string>("No session selected.");
   const [contextView, setContextView] = useState<string>("No context metrics yet.");
   const [telemetryView, setTelemetryView] = useState<string>("No telemetry yet.");
+  const [pendingApproval, setPendingApproval] = useState<ApprovalView | undefined>(undefined);
+
+  // Refs avoid stale-closure bugs in the long-lived stream subscription and
+  // guard against overlapping runs triggered by rapid input.
+  const assistantDraftRef = useRef("");
+  const activeRunSessionRef = useRef<string | undefined>(undefined);
+  const runningRef = useRef(false);
 
   const mode = composition.modeController.getMode();
   const modelChoices = useMemo(
@@ -48,10 +63,29 @@ export function App({ composition, onExit }: Props): React.ReactElement {
     });
   }, [composition.uiStream]);
 
+  useEffect(() => {
+    return composition.approvalController.subscribe((pending) => {
+      setPendingApproval(pending);
+    });
+  }, [composition.approvalController]);
+
   useInput((raw, key) => {
+    if (pendingApproval) {
+      const answer = raw.toLowerCase();
+      if (answer === "y") {
+        composition.approvalController.resolvePending("approve");
+      } else if (answer === "n") {
+        composition.approvalController.resolvePending("reject");
+      } else if (answer === "a") {
+        composition.approvalController.resolvePending("always");
+      }
+      return;
+    }
     if ((key.escape || (key.ctrl && raw === "c")) && running) {
+      composition.approvalController.cancelPending();
       composition.agent.kill("interrupted by user");
       setRunning(false);
+      runningRef.current = false;
       setMessages((items) => [...items, { role: "system", text: "Run interrupted." }]);
       return;
     }
@@ -64,21 +98,12 @@ export function App({ composition, onExit }: Props): React.ReactElement {
       setMessages((items) => [...items, { role: "system", text: `Mode changed to ${next}.` }]);
       return;
     }
-    if (composition.approvalController.getPending()) {
-      if (raw.toLowerCase() === "y") {
-        composition.approvalController.resolvePending("approve");
-      } else if (raw.toLowerCase() === "n") {
-        composition.approvalController.resolvePending("reject");
-      } else if (raw.toLowerCase() === "a") {
-        composition.approvalController.resolvePending("always");
-      }
-    }
   });
 
   const submit = useCallback(
     async (value: string) => {
       const trimmed = value.trim();
-      if (trimmed.length === 0 || running) {
+      if (trimmed.length === 0 || runningRef.current) {
         setInput("");
         return;
       }
@@ -91,16 +116,20 @@ export function App({ composition, onExit }: Props): React.ReactElement {
       }
 
       setMessages((items) => [...items, { role: "user", text: trimmed }]);
+      assistantDraftRef.current = "";
       setAssistantDraft("");
       setThinking("");
       setScreen("chat");
+      runningRef.current = true;
       setRunning(true);
       setInput("");
 
+      const runSessionId = activeSessionId;
+      activeRunSessionRef.current = runSessionId;
       try {
         const state = await composition.agent.run(trimmed, {
           ...composition.runOptions(),
-          sessionId: activeSessionId,
+          sessionId: runSessionId,
           resume: true,
         });
         if (state.sessionId) {
@@ -110,11 +139,41 @@ export function App({ composition, onExit }: Props): React.ReactElement {
         const message = error instanceof Error ? error.message : "unknown run failure";
         setMessages((items) => [...items, { role: "system", text: `Error: ${message}` }]);
       } finally {
+        runningRef.current = false;
         setRunning(false);
+        activeRunSessionRef.current = undefined;
       }
     },
-    [running, composition, activeSessionId],
+    [composition, activeSessionId],
   );
+
+  async function switchToSession(sessionId: string, notice: string): Promise<void> {
+    if (runningRef.current) {
+      setMessages((items) => [
+        ...items,
+        { role: "system", text: "Cannot switch sessions while a run is in progress." },
+      ]);
+      return;
+    }
+    // Rebuild the runtime so context + telemetry are rooted at the new session,
+    // preserving the user's current provider/model/effort/mode selections.
+    const next = await buildForSession(sessionId);
+    next.approvalController.setInteractive(true);
+    next.runtimeState.provider = composition.runtimeState.provider;
+    next.runtimeState.model = composition.runtimeState.model;
+    next.runtimeState.effort = composition.runtimeState.effort;
+    next.modelSelector.setEffort(composition.runtimeState.effort);
+    next.modeController.setMode(composition.modeController.getMode());
+
+    setComposition(next);
+    setActiveSessionId(next.rootSessionId);
+    setMessages([{ role: "system", text: notice }]);
+    setAssistantDraft("");
+    assistantDraftRef.current = "";
+    setThinking("");
+    setStatus(createStatusState());
+    setScreen("chat");
+  }
 
   async function handleSlash(command: SlashCommand): Promise<void> {
     if (command.type === "exit") {
@@ -135,28 +194,35 @@ export function App({ composition, onExit }: Props): React.ReactElement {
     if (command.type === "set-effort") {
       composition.runtimeState.effort = command.effort;
       composition.modelSelector.setEffort(command.effort);
-      setMessages((items) => [...items, { role: "system", text: `Effort set to ${command.effort}.` }]);
+      setMessages((items) => [
+        ...items,
+        { role: "system", text: `Effort set to ${command.effort}.` },
+      ]);
       return;
     }
     if (command.type === "set-model") {
       composition.runtimeState.model = command.model;
-      setMessages((items) => [...items, { role: "system", text: `Model override set to ${command.model}.` }]);
+      setMessages((items) => [
+        ...items,
+        { role: "system", text: `Model override set to ${command.model}.` },
+      ]);
       return;
     }
     if (command.type === "set-provider") {
       composition.runtimeState.provider = command.provider;
-      setMessages((items) => [...items, { role: "system", text: `Provider set to ${command.provider}.` }]);
+      setMessages((items) => [
+        ...items,
+        { role: "system", text: `Provider set to ${command.provider}.` },
+      ]);
       return;
     }
     if (command.type === "new-session") {
       const nextId = `s-${randomUUID()}`;
-      setActiveSessionId(nextId);
-      setMessages((items) => [...items, { role: "system", text: `Started new session ${nextId}.` }]);
+      await switchToSession(nextId, `Started new session ${nextId}.`);
       return;
     }
     if (command.type === "switch-session") {
-      setActiveSessionId(command.sessionId);
-      setMessages((items) => [...items, { role: "system", text: `Switched to session ${command.sessionId}.` }]);
+      await switchToSession(command.sessionId, `Switched to session ${command.sessionId}.`);
       return;
     }
     if (command.type === "show-sessions") {
@@ -222,21 +288,30 @@ export function App({ composition, onExit }: Props): React.ReactElement {
   }
 
   function applyStreamEvent(event: StreamEvent): void {
+    // Only render the top-level run's model/tool activity. Subagent runs share
+    // the same stream but carry a different sessionId; their output must not be
+    // spliced into the main assistant transcript.
+    const topLevelSession = activeRunSessionRef.current;
+    if (topLevelSession && event.sessionId && event.sessionId !== topLevelSession) {
+      return;
+    }
+
     if (event.type === "model.reasoning_delta") {
       setThinking((current) => `${current}${String(event.payload.delta ?? "")}`);
       return;
     }
     if (event.type === "model.output_delta") {
-      setAssistantDraft((current) => `${current}${String(event.payload.delta ?? "")}`);
+      assistantDraftRef.current = `${assistantDraftRef.current}${String(event.payload.delta ?? "")}`;
+      setAssistantDraft(assistantDraftRef.current);
       return;
     }
     if (event.type === "model.output_completed") {
-      setAssistantDraft((draft) => {
-        if (draft.length > 0) {
-          setMessages((items) => [...items, { role: "assistant", text: draft }]);
-        }
-        return "";
-      });
+      const finalText = assistantDraftRef.current;
+      assistantDraftRef.current = "";
+      setAssistantDraft("");
+      if (finalText.length > 0) {
+        setMessages((items) => [...items, { role: "assistant", text: finalText }]);
+      }
       return;
     }
     if (event.type === "tool.started") {
@@ -247,7 +322,10 @@ export function App({ composition, onExit }: Props): React.ReactElement {
     if (event.type === "tool.blocked") {
       const action = String(event.payload.action ?? "unknown_tool");
       const reason = String(event.payload.reason ?? "blocked");
-      setMessages((items) => [...items, { role: "system", text: `tool blocked: ${action} (${reason})` }]);
+      setMessages((items) => [
+        ...items,
+        { role: "system", text: `tool blocked: ${action} (${reason})` },
+      ]);
       return;
     }
     if (event.type === "run.failed") {
@@ -295,9 +373,7 @@ export function App({ composition, onExit }: Props): React.ReactElement {
           </>
         )}
 
-        {screen === "sessions" && (
-          <Screen title="Sessions">{sessionsView}</Screen>
-        )}
+        {screen === "sessions" && <Screen title="Sessions">{sessionsView}</Screen>}
         {screen === "session-details" && (
           <Screen title="Session Details">{sessionDetailView}</Screen>
         )}
@@ -306,7 +382,7 @@ export function App({ composition, onExit }: Props): React.ReactElement {
         {screen === "help" && <HelpScreen modelChoices={modelChoices} />}
       </Box>
 
-      {renderApprovalPrompt(composition)}
+      {renderApprovalPrompt(pendingApproval)}
 
       <Box marginTop={1}>
         <Text color="cyan">› </Text>
@@ -349,8 +425,7 @@ function StatusBar(props: {
   );
 }
 
-function renderApprovalPrompt(composition: CliComposition): React.ReactElement | null {
-  const pending = composition.approvalController.getPending();
+function renderApprovalPrompt(pending: ApprovalView | undefined): React.ReactElement | null {
   if (!pending) return null;
   return (
     <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="yellow">
@@ -372,27 +447,23 @@ function Screen({ title, children }: { title: string; children: string }): React
 }
 
 function HelpScreen({ modelChoices }: { modelChoices: string[] }): React.ReactElement {
-  return (
-    <Screen
-      title="Commands"
-      children={[
-        "/plan | /edits | /autopilot",
-        "/mode <plan|accept-edits|autopilot>",
-        "/effort <low|medium|high>",
-        `/model <id> (choices: ${modelChoices.join(", ") || "provider defaults"})`,
-        "/provider <openai|anthropic|ollama>",
-        "/new",
-        "/sessions",
-        "/session <id>",
-        "/resume <id>",
-        "/context",
-        "/telemetry",
-        "/chat",
-        "/clear",
-        "/exit",
-      ].join("\n")}
-    />
-  );
+  const lines = [
+    "/plan | /edits | /autopilot",
+    "/mode <plan|accept-edits|autopilot>",
+    "/effort <low|medium|high>",
+    `/model <id> (choices: ${modelChoices.join(", ") || "provider defaults"})`,
+    "/provider <openai|anthropic|ollama>",
+    "/new",
+    "/sessions",
+    "/session <id>",
+    "/resume <id>",
+    "/context",
+    "/telemetry",
+    "/chat",
+    "/clear",
+    "/exit",
+  ].join("\n");
+  return <Screen title="Commands">{lines}</Screen>;
 }
 
 function colorForRole(role: ChatMessage["role"]): "cyan" | "green" | "gray" {

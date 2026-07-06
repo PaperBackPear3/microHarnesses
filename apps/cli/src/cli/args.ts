@@ -1,4 +1,4 @@
-import { parseEffort, type EffortLevel } from "../config/config";
+import { type EffortLevel, parseEffort } from "../config/config";
 import { type CliMode, parseMode } from "../modes/modes";
 
 export interface GlobalCliArgs {

@@ -79,9 +79,15 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
     effort: overrides.effort ?? envEffort ?? parseEffort(fromFile.effort) ?? defaults.effort,
     mode: overrides.mode ?? envMode ?? parseMode(fromFile.mode) ?? defaults.mode,
     maxIterations:
-      overrides.maxIterations ?? fromFile.maxIterations ?? envMaxIterations ?? defaults.maxIterations,
+      overrides.maxIterations ??
+      fromFile.maxIterations ??
+      envMaxIterations ??
+      defaults.maxIterations,
     snapshotEvery:
-      overrides.snapshotEvery ?? fromFile.snapshotEvery ?? envSnapshotEvery ?? defaults.snapshotEvery,
+      overrides.snapshotEvery ??
+      fromFile.snapshotEvery ??
+      envSnapshotEvery ??
+      defaults.snapshotEvery,
     maxTokens: overrides.maxTokens ?? fromFile.maxTokens,
     noSafety: overrides.noSafety ?? fromFile.noSafety ?? defaults.noSafety,
     privacyMode: overrides.privacyMode ?? fromFile.privacyMode ?? defaults.privacyMode,

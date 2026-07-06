@@ -1,4 +1,9 @@
-import type { ModelProfile, ModelSelectionDecision, ModelSelectionInput, ModelSelector } from "@micro-harnesses/core";
+import type {
+  ModelProfile,
+  ModelSelectionDecision,
+  ModelSelectionInput,
+  ModelSelector,
+} from "@micro-harnesses/core";
 import type { EffortLevel } from "../config/config";
 
 export class EffortModelSelector implements ModelSelector {

@@ -1,7 +1,14 @@
 import type { PolicyRule } from "@micro-harnesses/core";
 import type { ModeController } from "../modes/modes";
 
-const MUTATING_TOOLS = new Set(["fs_write", "fs_append", "fs_mkdir", "fs_move", "fs_remove", "shell_exec"]);
+const MUTATING_TOOLS = new Set([
+  "fs_write",
+  "fs_append",
+  "fs_mkdir",
+  "fs_move",
+  "fs_remove",
+  "shell_exec",
+]);
 const PLAN_ALLOWED_TOOLS = new Set([
   "fs_list",
   "fs_read",
@@ -26,7 +33,10 @@ export function createModeAwareApprovalPolicy(modeController: ModeController): P
       return { decision: "allow", reason: "Read-only planning tool allowed in plan mode" };
     }
     if (MUTATING_TOOLS.has(tool.name)) {
-      return { decision: "require_approval", reason: `Tool "${tool.name}" requires approval in accept-edits mode` };
+      return {
+        decision: "require_approval",
+        reason: `Tool "${tool.name}" requires approval in accept-edits mode`,
+      };
     }
     return { decision: "allow", reason: "Tool allowed in accept-edits mode" };
   };

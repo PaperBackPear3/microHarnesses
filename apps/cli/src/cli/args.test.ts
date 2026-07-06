@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import { parseGlobalCliArgs, parseSessionsArgs } from "./args";
 
 test("parseGlobalCliArgs parses mode and effort", () => {

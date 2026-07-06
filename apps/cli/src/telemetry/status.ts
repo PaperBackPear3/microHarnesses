@@ -25,7 +25,9 @@ export function reduceStatus(state: StatusState, event: StreamEvent): StatusStat
     return { ...state, model: asString(event.payload.model) };
   }
   if (event.type === "model.usage") {
-    const usage = event.payload.usage as { inputTokens?: number; outputTokens?: number } | undefined;
+    const usage = event.payload.usage as
+      | { inputTokens?: number; outputTokens?: number }
+      | undefined;
     return {
       ...state,
       tokensIn: state.tokensIn + (usage?.inputTokens ?? 0),

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
+import { extractPositionals, parseGlobalCliArgs, parseSessionsArgs } from "./cli/args";
 import { chatCommand } from "./cli/commands/chat";
 import { runHeadlessPrompt } from "./cli/commands/run";
 import { sessionsCommand } from "./cli/commands/sessions";
-import { extractPositionals, parseGlobalCliArgs, parseSessionsArgs } from "./cli/args";
 import { loadCliConfig } from "./config/config";
 import { buildComposition } from "./runtime/composition";
 
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     await runHeadlessPrompt(composition, prompt, sessionId, runtimeArgs.json);
     return;
   }
-  await chatCommand(composition);
+  await chatCommand(composition, config);
 }
 
 function printHelp(): void {
@@ -46,7 +46,7 @@ function printHelp(): void {
       "micro-harness v2",
       "",
       "Usage:",
-      "  mh -p \"prompt\" [--json]",
+      '  mh -p "prompt" [--json]',
       "  mh sessions list",
       "  mh sessions show <session-id>",
       "  mh",
