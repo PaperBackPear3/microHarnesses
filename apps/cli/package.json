@@ -20,10 +20,10 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
-    "@micro-harnesses/core": "^1.0.2",
-    "@micro-harnesses/plugin-basic-tools": "^1.0.2",
-    "@micro-harnesses/plugin-example-tools": "^1.0.2",
-    "@micro-harnesses/plugin-plan-mode": "^1.0.2",
+    "@micro-harnesses/core": "^1.0.4",
+    "@micro-harnesses/plugin-basic-tools": "^1.0.4",
+    "@micro-harnesses/plugin-example-tools": "^1.0.4",
+    "@micro-harnesses/plugin-plan-mode": "^1.0.4",
     "diff": "^7.0.0",
     "ink": "^3.2.0",
     "ink-spinner": "^4.0.3",
