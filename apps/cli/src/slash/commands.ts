@@ -1,4 +1,8 @@
-import type { HarnessMode } from "@micro-harnesses/core";
+import {
+  type HarnessMode,
+  type ModelRoutingPreference,
+  parseModelRoutingPreference,
+} from "@micro-harnesses/core";
 
 export type UiScreen = "chat" | "sessions" | "session-details" | "context" | "telemetry" | "help";
 
@@ -9,8 +13,10 @@ export type SlashCommand =
   | { type: "show-session-details"; sessionId: string }
   | { type: "set-mode"; mode: HarnessMode }
   | { type: "set-effort"; effort: "low" | "medium" | "high" }
-  | { type: "set-model"; model: string }
+  | { type: "list-models" }
+  | { type: "set-model"; model: string | undefined }
   | { type: "set-provider"; provider: string }
+  | { type: "set-routing-preference"; preference: ModelRoutingPreference | undefined }
   | { type: "compact" }
   | { type: "wait-subagents" }
   | { type: "show-context" }
@@ -41,8 +47,19 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
     const effort = normalizeEffort(args[0]);
     if (effort) return { type: "set-effort", effort };
   }
-  if (command === "model" && args[0]) return { type: "set-model", model: args[0] };
+  if (command === "model") {
+    if (!args[0]) return { type: "list-models" };
+    if (args[0].toLowerCase() === "auto") return { type: "set-model", model: undefined };
+    return { type: "set-model", model: args[0] };
+  }
   if (command === "provider" && args[0]) return { type: "set-provider", provider: args[0] };
+  if (command === "route") {
+    if (!args[0] || args[0].toLowerCase() === "off") {
+      return { type: "set-routing-preference", preference: undefined };
+    }
+    const preference = normalizeRoutingPreference(args[0]);
+    if (preference) return { type: "set-routing-preference", preference };
+  }
   if (command === "compact") return { type: "compact" };
   if (command === "wait") return { type: "wait-subagents" };
   if (command === "context") return { type: "show-context" };
@@ -65,4 +82,8 @@ function normalizeEffort(value: string): "low" | "medium" | "high" | undefined {
   if (value === "low" || value === "medium" || value === "high") return value;
   if (value === "med") return "medium";
   return undefined;
+}
+
+function normalizeRoutingPreference(value: string): ModelRoutingPreference | undefined {
+  return parseModelRoutingPreference(value);
 }

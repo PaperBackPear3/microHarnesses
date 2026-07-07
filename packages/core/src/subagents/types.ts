@@ -1,3 +1,4 @@
+import type { ModelRoutingPreference } from "../model/types";
 import type { TraceContext } from "../observability/types";
 import type { RunState } from "../runtime/state";
 import type { AgentHandle, AgentInvokeRequest, RunOptions } from "../runtime/types";
@@ -17,6 +18,16 @@ export interface SubagentRunOptions {
   goal?: string;
   /** Parent span context, so the child run joins the parent's trace. */
   parentTrace?: TraceContext;
+  /**
+   * Per-invocation model/route override for this subagent run, taking
+   * precedence over the agent definition's own routing defaults. Lets a
+   * caller (or an internal helper agent) request a cheaper/faster/more
+   * capable model without the end user having to configure it.
+   */
+  model?: string;
+  providerId?: string;
+  routingPreference?: ModelRoutingPreference;
+  effort?: "low" | "medium" | "high";
 }
 
 export interface SubagentResult {

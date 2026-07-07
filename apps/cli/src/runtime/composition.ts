@@ -7,6 +7,7 @@ import {
   CredentialsRegistry,
   DEFAULT_CONTEXT_WINDOW_TOKENS,
   DEFAULT_OLLAMA_CONTEXT_WINDOW_TOKENS,
+  DefaultModelRouter,
   DefaultObservabilityProvider,
   DefaultPolicyEngine,
   type EffortLevel,
@@ -17,6 +18,8 @@ import {
   InProcessSubagentSupervisor,
   JsonlObservabilityExporter,
   ModeController,
+  type ModelRoute,
+  type ModelRoutingPreference,
   PluginHost,
   ProviderModelAdapter,
   ProviderRegistry,
@@ -33,10 +36,13 @@ import {
   createModeAwareApprovalPolicy,
   defineAgent,
   detectOllamaContextWindowTokens,
+  discoverProviderRoutes,
+  mergeProviderRoutes,
   modelForEffort,
   planModeAllowActions,
   profileForProvider,
   registerCoreDefaults,
+  routesForProviderProfile,
 } from "@micro-harnesses/core";
 import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
@@ -51,6 +57,8 @@ export interface RuntimeState {
   provider: string;
   model?: string;
   effort: EffortLevel;
+  /** When set, the agent routes model selection via `ModelRouter` instead of the static profile. */
+  routingPreference?: ModelRoutingPreference;
 }
 
 export interface CliComposition {
@@ -73,6 +81,10 @@ export interface CliComposition {
   runOptions(): RunOptions;
   sessionStore: SessionStore;
   subagents: SubagentSupervisor;
+  /** Current cached route catalog for the active provider (profile routes merged with discovery). */
+  listModelRoutes(): ModelRoute[];
+  /** Re-discovers routes for the active provider (profile + live discovery when supported) and updates the cache. */
+  refreshModelRoutes(): Promise<ModelRoute[]>;
 }
 
 export async function buildComposition(
@@ -84,6 +96,7 @@ export async function buildComposition(
     provider: config.provider,
     model: config.model,
     effort: config.effort,
+    routingPreference: config.routingPreference,
   };
 
   const modeController = new ModeController(config.mode);
@@ -150,6 +163,31 @@ export async function buildComposition(
   const sessionService = new SessionService(config.stateDir);
   const sessionStore = sessionService.getStore();
 
+  // Model router: opt-in (only used when a run passes `routing`, i.e. when
+  // `runtimeState.routingPreference` is set via `/route` or `--routing-preference`).
+  const modelRouter = new DefaultModelRouter();
+  let routeCatalogCache: ModelRoute[] = routesForProviderProfile(
+    runtimeState.provider,
+    runtimeState.model,
+  );
+  const routeCatalog = () => routeCatalogCache;
+
+  async function refreshModelRoutes(): Promise<ModelRoute[]> {
+    const providerId = runtimeState.provider;
+    const profileRoutes = routesForProviderProfile(providerId, runtimeState.model);
+    try {
+      const adapter = providers.get(providerId);
+      const auth = await credentials.get(providerId).resolve();
+      const discovered = await discoverProviderRoutes(providerId, adapter, auth);
+      routeCatalogCache = mergeProviderRoutes(profileRoutes, discovered);
+    } catch {
+      // Keep profile routes usable even when discovery/credentials fail
+      // (e.g. Ollama server unreachable, missing hosted API key).
+      routeCatalogCache = profileRoutes;
+    }
+    return routeCatalogCache;
+  }
+
   const skills = new SkillRegistry();
   const skillSource = new FsSkillSource({
     rootDir: config.skillsDir ?? path.join(config.stateDir, "skills"),
@@ -172,6 +210,7 @@ export async function buildComposition(
     sessionStore,
     approvalHandler: approvalController.createHandler(() => modeController.getMode()),
   });
+  agent.setModelRouting(modelRouter, routeCatalog);
 
   const subagents = new InProcessSubagentSupervisor(
     {
@@ -213,14 +252,34 @@ export async function buildComposition(
           approvalHandler: approvalController.createHandler(() => modeController.getMode()),
           kind: "subagent",
         });
+        childAgent.setModelRouting(modelRouter, routeCatalog);
+        // Per-invocation routing: a spawn request can ask for a specific
+        // model/provider or a routing preference (e.g. a cheaper/faster
+        // helper agent) without the end user configuring anything.
+        const wantsRouting = Boolean(
+          request.model || request.providerId || request.routingPreference || request.effort,
+        );
+        const routing = wantsRouting
+          ? {
+              preference: request.routingPreference,
+              effort: request.effort,
+              overrideProviderId: request.model
+                ? (request.providerId ?? runtimeState.provider)
+                : undefined,
+              overrideModel: request.model,
+            }
+          : undefined;
         return {
           agent: childAgent,
           prompt: request.prompt,
           runOptions: {
             maxIterations: request.maxIterations ?? Math.min(8, config.maxIterations),
             snapshotEvery: config.snapshotEvery,
-            profile: profileForProvider(runtimeState.provider, runtimeState.model),
-            modelOverride: runtimeState.model,
+            profile: profileForProvider(
+              request.providerId ?? runtimeState.provider,
+              request.model ?? runtimeState.model,
+            ),
+            modelOverride: request.model ?? runtimeState.model,
             sessionId: childSessionId,
             goal: request.goal ?? request.prompt,
             displayName: request.name ?? request.goal ?? childPromptName,
@@ -228,6 +287,7 @@ export async function buildComposition(
             rootSessionId: rootSessionId,
             parentTrace: request.parentTrace,
             depth: 1,
+            routing,
           },
         };
       },
@@ -332,6 +392,7 @@ export async function buildComposition(
 
     contextWindowTokens = tokens;
     agent.setContextWindowTokens(tokens);
+    await refreshModelRoutes();
     return { tokens, provider, model, source, estimator };
   }
 
@@ -348,6 +409,8 @@ export async function buildComposition(
     cliVersion: CLI_VERSION,
     runtimeState,
     refreshContextWindowTokens,
+    listModelRoutes: routeCatalog,
+    refreshModelRoutes,
     sessionStore,
     subagents,
     runOptions() {
@@ -361,6 +424,17 @@ export async function buildComposition(
         sessionId: rootSessionId,
         resume: true,
         capabilityScope: mode === "plan" ? { allowActions: planModeAllowActions() } : undefined,
+        // Only engage the router when the user opted in via `/route` or
+        // `--routing-preference`; otherwise `modelOverride`/`profile` above
+        // drive selection exactly as before, unchanged.
+        routing: runtimeState.routingPreference
+          ? {
+              preference: runtimeState.routingPreference,
+              effort: runtimeState.effort,
+              overrideProviderId: runtimeState.model ? runtimeState.provider : undefined,
+              overrideModel: runtimeState.model,
+            }
+          : undefined,
       };
     },
   };

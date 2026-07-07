@@ -56,6 +56,7 @@ function printHelp(): void {
       "  --provider <id>",
       "  --model <id>",
       "  --effort <low|medium|high>",
+      "  --routing-preference <auto|cost|speed|intelligence|balanced>",
       "  --mode <plan|accept-edits|autopilot>",
       "  --session <id>",
       "  --state-dir <path>",

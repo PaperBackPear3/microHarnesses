@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ModelRoute } from "@micro-harnesses/core";
 import type { CliComposition } from "../runtime/composition.js";
 import type { SlashCommand, UiScreen } from "../slash/commands.js";
 import type { StatusState } from "../telemetry/status.js";
@@ -53,11 +54,53 @@ export async function handleSlashCommand(args: Args): Promise<void> {
     );
     return;
   }
+  if (command.type === "list-models") {
+    const provider = composition.runtimeState.provider;
+    const routes = composition.listModelRoutes().filter((route) => route.providerId === provider);
+    const activeModel = composition.runtimeState.model;
+    if (routes.length === 0) {
+      chatStore.appendSystemMessage(`No known models for provider ${provider}.`);
+      return;
+    }
+    const lines = routes.map((route) => describeModelRoute(route, activeModel));
+    const preferenceLine = composition.runtimeState.routingPreference
+      ? `Routing preference: ${composition.runtimeState.routingPreference}`
+      : "Routing preference: off (using effort-based profile selection)";
+    chatStore.appendSystemMessage(
+      [`Models for provider ${provider}:`, ...lines, preferenceLine].join("\n"),
+    );
+    return;
+  }
   if (command.type === "set-model") {
-    composition.runtimeState.model = command.model;
+    if (command.model === undefined) {
+      composition.runtimeState.model = undefined;
+      const synced = await composition.refreshContextWindowTokens();
+      chatStore.appendSystemMessage(
+        `Cleared model override; using automatic profile selection. ${describeContextSync(synced)}`,
+      );
+      return;
+    }
+    const provider = composition.runtimeState.provider;
+    const routes = composition.listModelRoutes();
+    const resolved = resolveModelSelection(routes, provider, command.model);
+    if (!resolved) {
+      const known = routes
+        .filter((route) => route.providerId === provider)
+        .map((route) => route.model);
+      chatStore.appendSystemMessage(
+        `Model "${command.model}" is not available for provider ${provider}.${
+          known.length > 0 ? ` Known models: ${known.join(", ")}.` : ""
+        } Use /model with no arguments to list available models.`,
+      );
+      return;
+    }
+    if (resolved.providerId !== provider) {
+      composition.runtimeState.provider = resolved.providerId;
+    }
+    composition.runtimeState.model = resolved.model;
     const synced = await composition.refreshContextWindowTokens();
     chatStore.appendSystemMessage(
-      `Model override set to ${command.model}. ${describeContextSync(synced)}`,
+      `Model override set to ${resolved.model}. ${describeContextSync(synced)}`,
     );
     return;
   }
@@ -66,6 +109,15 @@ export async function handleSlashCommand(args: Args): Promise<void> {
     const synced = await composition.refreshContextWindowTokens();
     chatStore.appendSystemMessage(
       `Provider set to ${command.provider}. ${describeContextSync(synced)}`,
+    );
+    return;
+  }
+  if (command.type === "set-routing-preference") {
+    composition.runtimeState.routingPreference = command.preference;
+    chatStore.appendSystemMessage(
+      command.preference
+        ? `Routing preference set to ${command.preference}. The router will pick a route per iteration; explicit /model overrides still win.`
+        : "Routing preference cleared; using effort-based profile selection.",
     );
     return;
   }
@@ -204,4 +256,46 @@ function describeContextSync(synced: {
       ? " Using conservative Ollama fallback until detection succeeds."
       : ""
   }`;
+}
+
+/**
+ * Resolves a `/model` argument against the cached route catalog. Accepts a
+ * bare model name for the active provider, or a `provider/model` qualified
+ * id to switch providers. Falls back to a unique cross-provider model-name
+ * match when unqualified and not found under the active provider.
+ */
+function resolveModelSelection(
+  routes: ModelRoute[],
+  currentProvider: string,
+  input: string,
+): { providerId: string; model: string } | undefined {
+  const slash = input.indexOf("/");
+  if (slash > 0) {
+    const providerId = input.slice(0, slash);
+    const model = input.slice(slash + 1);
+    const match = routes.find((route) => route.providerId === providerId && route.model === model);
+    return match ? { providerId: match.providerId, model: match.model } : undefined;
+  }
+  const sameProvider = routes.find(
+    (route) => route.providerId === currentProvider && route.model === input,
+  );
+  if (sameProvider) return { providerId: sameProvider.providerId, model: sameProvider.model };
+  const crossProvider = routes.filter((route) => route.model === input);
+  if (crossProvider.length === 1) {
+    return { providerId: crossProvider[0].providerId, model: crossProvider[0].model };
+  }
+  return undefined;
+}
+
+function describeModelRoute(route: ModelRoute, activeModel: string | undefined): string {
+  const marker = route.model === activeModel ? "* " : "  ";
+  const meta = route.metadata;
+  const details: string[] = [];
+  if (meta?.cost !== undefined) details.push(`cost=${meta.cost}`);
+  if (meta?.speed !== undefined) details.push(`speed=${meta.speed}`);
+  if (meta?.intelligence !== undefined) details.push(`intelligence=${meta.intelligence}`);
+  if (meta?.tags && meta.tags.length > 0) details.push(`tags=${meta.tags.join(",")}`);
+  const availability = route.available === false ? " (unavailable)" : "";
+  const suffix = details.length > 0 ? ` [${details.join(", ")}]` : "";
+  return `${marker}${route.providerId}/${route.model}${availability}${suffix}`;
 }

@@ -22,6 +22,7 @@ const HELP_COMMAND_LINES_BASE = [
   "/mode <plan|accept-edits|autopilot>",
   "/effort <low|medium|high>",
   "/provider <openai|anthropic|ollama>",
+  "/route <auto|cost|speed|intelligence|balanced|off>",
   "/new",
   "/sessions",
   "/session <id>",
@@ -83,7 +84,7 @@ export function helpCommandLines(modelChoices: string[]): string[] {
     HELP_COMMAND_LINES_BASE[0],
     HELP_COMMAND_LINES_BASE[1],
     HELP_COMMAND_LINES_BASE[2],
-    `/model <id> (choices: ${modelChoices.join(", ") || "provider defaults"})`,
+    `/model [id] (no args lists available models; choices: ${modelChoices.join(", ") || "provider defaults"}; "auto" clears override)`,
     ...HELP_COMMAND_LINES_BASE.slice(3),
   ];
 }

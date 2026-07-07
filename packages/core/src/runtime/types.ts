@@ -1,4 +1,4 @@
-import type { ModelProfile } from "../model/types";
+import type { ModelProfile, ModelRoutingConstraints, ModelRoutingPreference } from "../model/types";
 import type { TraceContext } from "../observability/types";
 import type { SafetyMode } from "../policy/types";
 import type { ToolCall, ToolDefinition } from "../tools/types";
@@ -12,6 +12,22 @@ export interface RuntimeLimits {
 export interface CapabilityScope {
   allowActions?: string[];
   denyActions?: string[];
+}
+
+/**
+ * Per-run routing input for an {@link Agent} configured with a `ModelRouter`.
+ * When omitted, the agent falls back to its `ModelSelector`/`profile` path
+ * unchanged, so existing consumers see no behavior difference.
+ */
+export interface RunRoutingOptions {
+  preference?: ModelRoutingPreference;
+  constraints?: ModelRoutingConstraints;
+  effort?: "low" | "medium" | "high";
+  /** Hard override: select this exact route id, ignoring scoring. */
+  overrideRouteId?: string;
+  overrideProviderId?: string;
+  overrideModel?: string;
+  visibility?: "user-visible" | "internal";
 }
 
 export type BeforeLoopHook = (state: RunState, iteration: number) => Promise<void> | void;
@@ -68,6 +84,11 @@ export interface RunOptions {
    * - false: disable runtime auto-join (model/tool-driven waits only).
    */
   autoJoinSubagents?: boolean;
+  /**
+   * Enables model routing for this run when the agent has a `modelRouter`
+   * and route catalog configured. Omit to keep using `modelSelector`/`profile`.
+   */
+  routing?: RunRoutingOptions;
 }
 
 export interface AgentInvokeRequest {

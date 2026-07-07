@@ -45,6 +45,7 @@ export * from "./model/types";
 export * from "./model/defaultModelSelector";
 export * from "./model/effortModelSelector";
 export * from "./model/providerModelAdapter";
+export * from "./model/modelRouter";
 
 // Prompts
 export * from "./prompts/types";

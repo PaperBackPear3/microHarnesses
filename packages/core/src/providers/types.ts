@@ -64,6 +64,13 @@ export interface CompletionRequest {
   signal?: AbortSignal;
 }
 
+/** Minimal model metadata returned by a provider's live model-list endpoint. */
+export interface ProviderModelInfo {
+  id: string;
+  label?: string;
+  contextWindowTokens?: number;
+}
+
 export interface ProviderAdapter {
   providerId: ProviderId;
   /** Model used when the composition root does not specify one. */
@@ -87,4 +94,13 @@ export interface ProviderAdapter {
     | TokenCounter
     | { counter: TokenCounter; estimator?: string }
     | Promise<TokenCounter | { counter: TokenCounter; estimator?: string }>;
+  /**
+   * Optional live model discovery (e.g. `GET /models`). Used by CLIs/UIs to
+   * list and validate actually-available models (notably for local servers
+   * like Ollama, where availability depends on what the user has pulled).
+   * Not required for normal completion calls; callers should treat a missing
+   * implementation or a thrown error as "discovery unavailable" and fall
+   * back to static/catalog routes.
+   */
+  listModels?(auth: ProviderAuth): Promise<ProviderModelInfo[]>;
 }

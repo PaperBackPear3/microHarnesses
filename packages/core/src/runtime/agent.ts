@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type ActionCallBudget, ActionExecutionEngine } from "../actions/executionEngine";
 import type { ContextManager } from "../context/manager";
-import type { ModelAdapter, ModelSelector } from "../model/types";
+import type { ModelAdapter, ModelRoute, ModelRouter, ModelSelector } from "../model/types";
 import { NoopObservabilityProvider } from "../observability/noop";
 import type { ObservabilityProvider, Span, TokenCounter } from "../observability/types";
 import type { ToolPolicyEngine } from "../policy/types";
@@ -52,6 +52,13 @@ export interface AgentOptions {
   skills?: SkillRegistry;
   subagents?: SubagentSupervisor;
   autoJoinSubagents?: boolean;
+  /**
+   * Optional model router + route catalog provider. Only used when a run
+   * passes `RunOptions.routing`; otherwise `modelSelector`/`profile` behavior
+   * is unchanged, keeping routing fully opt-in.
+   */
+  modelRouter?: ModelRouter;
+  routeCatalog?: () => ModelRoute[];
 }
 
 const DEFAULT_LIMITS: RuntimeLimits = {
@@ -90,6 +97,8 @@ export class Agent implements AgentHandle {
   private readonly skills?: SkillRegistry;
   private subagents?: SubagentSupervisor;
   private autoJoinSubagents: boolean;
+  private modelRouter?: ModelRouter;
+  private routeCatalog?: () => ModelRoute[];
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
   private readonly activeRuns = new Set<RunContext>();
@@ -110,6 +119,8 @@ export class Agent implements AgentHandle {
     this.skills = options.skills;
     this.subagents = options.subagents;
     this.autoJoinSubagents = options.autoJoinSubagents ?? false;
+    this.modelRouter = options.modelRouter;
+    this.routeCatalog = options.routeCatalog;
   }
 
   kill(reason?: string): void {
@@ -133,6 +144,19 @@ export class Agent implements AgentHandle {
 
   setModelSelector(selector: ModelSelector): void {
     this.modelSelector = selector;
+  }
+
+  /**
+   * Configures optional model routing. Routing only takes effect for runs
+   * that explicitly pass `RunOptions.routing`; otherwise `modelSelector`
+   * continues to drive model selection unchanged.
+   */
+  setModelRouting(
+    router: ModelRouter | undefined,
+    routeCatalog: (() => ModelRoute[]) | undefined,
+  ): void {
+    this.modelRouter = router;
+    this.routeCatalog = routeCatalog;
   }
 
   setContextWindowTokens(tokens: number): void {
@@ -508,23 +532,52 @@ export class Agent implements AgentHandle {
 
     contextSpan.end();
 
-    const modelSelection = this.modelSelector.select(
-      {
-        promptName,
-        iteration,
-        taskType,
-        userPrompt,
-        overrideModel: options.modelOverride,
-        promptHintModel: bundle.metadata.modelHint,
-      },
-      options.profile,
-    );
+    const modelSelection: {
+      model: string;
+      reason: string;
+      providerId?: string;
+      maxTokens?: number;
+      routeId?: string;
+      preference?: string;
+    } =
+      options.routing && this.modelRouter && this.routeCatalog
+        ? (() => {
+            const decision = this.modelRouter!.selectRoute(
+              { ...options.routing, taskType, agentName: promptName, agentKind: this.kind },
+              this.routeCatalog!(),
+            );
+            return {
+              model: decision.route.model,
+              reason: decision.reason,
+              providerId: decision.route.providerId,
+              maxTokens: decision.route.maxTokens,
+              routeId: decision.route.id,
+              preference: decision.preference,
+            };
+          })()
+        : this.modelSelector.select(
+            {
+              promptName,
+              iteration,
+              taskType,
+              userPrompt,
+              overrideModel: options.modelOverride,
+              promptHintModel: bundle.metadata.modelHint,
+            },
+            options.profile,
+          );
     iterationSpan.setAttribute("model.selected", modelSelection.model);
+    if (modelSelection.providerId) {
+      iterationSpan.setAttribute("model.provider", modelSelection.providerId);
+    }
     await observer.stream("model.selected", {
       model: modelSelection.model,
       reason: modelSelection.reason,
       iteration,
       taskType: taskType ?? "default",
+      ...(modelSelection.providerId ? { providerId: modelSelection.providerId } : {}),
+      ...(modelSelection.routeId ? { routeId: modelSelection.routeId } : {}),
+      ...(modelSelection.preference ? { preference: modelSelection.preference } : {}),
     });
 
     const modelSpan = observer.startModel(iterationSpan, {
@@ -552,6 +605,8 @@ export class Agent implements AgentHandle {
         summary: working.summary,
         iteration,
         selectedModel: modelSelection.model,
+        selectedProviderId: modelSelection.providerId,
+        selectedMaxTokens: modelSelection.maxTokens,
         availableTools: deriveToolDescriptors(this.tools.list()),
         availableSkills: this.skills?.list().map((skill) => skill.name) ?? [],
         signal: runCtx.controller.signal,

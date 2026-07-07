@@ -4,9 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ContextManager } from "../context/manager";
+import { DefaultModelRouter } from "../model/modelRouter";
 import type {
   ModelAdapter,
   ModelProfile,
+  ModelRoute,
   ModelSelectionDecision,
   ModelSelectionInput,
   ModelSelector,
@@ -72,6 +74,18 @@ class FakeModel implements ModelAdapter {
     this.step = step;
   }
   async nextStep(_input: StepInput): Promise<StepPlan> {
+    return this.step;
+  }
+}
+
+class CapturingModel implements ModelAdapter {
+  seen?: StepInput;
+  private readonly step: StepPlan;
+  constructor(step: StepPlan) {
+    this.step = step;
+  }
+  async nextStep(input: StepInput): Promise<StepPlan> {
+    this.seen = input;
     return this.step;
   }
 }
@@ -608,6 +622,136 @@ test("runtime passes taskType hint into model selector and stream", async () => 
   assert.equal(selector.seen?.taskType, "reasoning");
   const selected = obs.stream.ofType("model.selected")[0];
   assert.equal(selected?.payload.taskType, "reasoning");
+});
+
+test("without routing configured, modelSelector path is unchanged (opt-in routing)", async () => {
+  const obs = makeObs();
+  const selector = new CapturingModelSelector();
+  const model = new CapturingModel({ assistantMessage: "ok", toolCalls: [], stop: true });
+  const runtime = new Agent({
+    promptName: "default",
+    model,
+    modelSelector: selector,
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  // No modelRouter/routeCatalog configured, and no options.routing passed.
+  await runtime.run("hello", options);
+  assert.equal(selector.seen !== undefined, true);
+  assert.equal(model.seen?.selectedModel, "test-model");
+  assert.equal(model.seen?.selectedProviderId, undefined);
+  assert.equal(model.seen?.selectedMaxTokens, undefined);
+});
+
+test("routing is not used when options.routing is omitted, even if a router is configured", async () => {
+  const obs = makeObs();
+  const selector = new CapturingModelSelector();
+  const model = new CapturingModel({ assistantMessage: "ok", toolCalls: [], stop: true });
+  const routes: ModelRoute[] = [
+    { id: "openai:gpt-4.1", providerId: "openai", model: "gpt-4.1" },
+  ];
+  const runtime = new Agent({
+    promptName: "default",
+    model,
+    modelSelector: selector,
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+    modelRouter: new DefaultModelRouter(),
+    routeCatalog: () => routes,
+  });
+
+  await runtime.run("hello", options);
+  // Configuring a router doesn't change behavior unless a run opts in via `options.routing`.
+  assert.equal(model.seen?.selectedModel, "test-model");
+  assert.equal(model.seen?.selectedProviderId, undefined);
+});
+
+test("router selects a route and passes provider/maxTokens through to the model adapter", async () => {
+  const obs = makeObs();
+  const model = new CapturingModel({ assistantMessage: "ok", toolCalls: [], stop: true });
+  const routes: ModelRoute[] = [
+    {
+      id: "openai:gpt-4.1-mini",
+      providerId: "openai",
+      model: "gpt-4.1-mini",
+      maxTokens: 2048,
+      metadata: { cost: 1, speed: 3, intelligence: 1 },
+    },
+    {
+      id: "openai:o4-mini",
+      providerId: "openai",
+      model: "o4-mini",
+      maxTokens: 8192,
+      metadata: { cost: 3, speed: 1, intelligence: 3 },
+    },
+  ];
+  const runtime = new Agent({
+    promptName: "default",
+    model,
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+    modelRouter: new DefaultModelRouter(),
+    routeCatalog: () => routes,
+  });
+
+  const routedOptions: RunOptions = { ...options, routing: { preference: "intelligence" } };
+  await runtime.run("hello", routedOptions);
+
+  assert.equal(model.seen?.selectedModel, "o4-mini");
+  assert.equal(model.seen?.selectedProviderId, "openai");
+  assert.equal(model.seen?.selectedMaxTokens, 8192);
+
+  const selected = obs.stream.ofType("model.selected")[0];
+  assert.equal(selected?.payload.model, "o4-mini");
+  assert.equal(selected?.payload.providerId, "openai");
+  assert.equal(selected?.payload.routeId, "openai:o4-mini");
+  assert.equal(selected?.payload.preference, "intelligence");
+  assert.equal(selected?.payload.reason, "preference");
+});
+
+test("router honors an explicit override even over a routing preference", async () => {
+  const obs = makeObs();
+  const model = new CapturingModel({ assistantMessage: "ok", toolCalls: [], stop: true });
+  const routes: ModelRoute[] = [
+    { id: "openai:gpt-4.1-mini", providerId: "openai", model: "gpt-4.1-mini" },
+    { id: "openai:o4-mini", providerId: "openai", model: "o4-mini" },
+  ];
+  const runtime = new Agent({
+    promptName: "default",
+    model,
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+    modelRouter: new DefaultModelRouter(),
+    routeCatalog: () => routes,
+  });
+
+  const routedOptions: RunOptions = {
+    ...options,
+    routing: {
+      preference: "cost",
+      overrideProviderId: "openai",
+      overrideModel: "gpt-4.1-mini",
+    },
+  };
+  await runtime.run("hello", routedOptions);
+  assert.equal(model.seen?.selectedModel, "gpt-4.1-mini");
+  const selected = obs.stream.ofType("model.selected")[0];
+  assert.equal(selected?.payload.reason, "override");
 });
 
 class ApprovalPolicy implements ToolPolicyEngine {

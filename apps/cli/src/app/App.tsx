@@ -309,6 +309,7 @@ export function App({
         effort={composition.runtimeState.effort}
         provider={composition.runtimeState.provider}
         modelLabel={modelLabel}
+        routingPreference={composition.runtimeState.routingPreference}
         contextStyle={contextStyle}
         running={running}
         status={status}

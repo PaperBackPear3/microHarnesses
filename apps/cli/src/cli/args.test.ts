@@ -37,6 +37,16 @@ test("parseGlobalCliArgs accepts unlimited iterations", () => {
   assert.equal(parsed.maxIterations, "unlimited");
 });
 
+test("parseGlobalCliArgs parses routing preference", () => {
+  const parsed = parseGlobalCliArgs(["--routing-preference", "cost"]);
+  assert.equal(parsed.routingPreference, "cost");
+});
+
+test("parseGlobalCliArgs ignores an unknown routing preference", () => {
+  const parsed = parseGlobalCliArgs(["--routing-preference", "nonsense"]);
+  assert.equal(parsed.routingPreference, undefined);
+});
+
 test("parseSessionsArgs handles show subcommand", () => {
   const parsed = parseSessionsArgs(["show", "s-123"]);
   assert.equal(parsed.sub, "show");

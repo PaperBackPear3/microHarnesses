@@ -11,6 +11,7 @@ export function FooterStatusBar(props: {
   effort: EffortLevel;
   provider: string;
   modelLabel: string;
+  routingPreference?: string;
   contextStyle: { label: string; color: string };
   running: boolean;
   status: StatusState;
@@ -28,8 +29,11 @@ export function FooterStatusBar(props: {
       `effort=${props.effort}`,
       `provider=${props.provider}`,
       props.modelLabel,
+      props.routingPreference ? `route=${props.routingPreference}` : "",
       props.contextStyle.label,
-    ].join(" | "),
+    ]
+      .filter(Boolean)
+      .join(" | "),
     props.columns,
   );
   const line2 = trimToColumns(

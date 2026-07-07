@@ -1,4 +1,9 @@
-import { type HarnessMode, parseMode } from "@micro-harnesses/core";
+import {
+  type HarnessMode,
+  type ModelRoutingPreference,
+  parseMode,
+  parseModelRoutingPreference,
+} from "@micro-harnesses/core";
 import { type EffortLevel, parseEffort } from "../config/config.js";
 
 export interface GlobalCliArgs {
@@ -7,6 +12,7 @@ export interface GlobalCliArgs {
   provider?: string;
   model?: string;
   effort?: EffortLevel;
+  routingPreference?: ModelRoutingPreference;
   mode?: HarnessMode;
   sessionId?: string;
   stateDir?: string;
@@ -34,6 +40,7 @@ const VALUE_FLAGS = new Set([
   "--provider",
   "--model",
   "--effort",
+  "--routing-preference",
   "--mode",
   "--session",
   "--session-id",
@@ -60,6 +67,7 @@ export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
     provider: getValue(args, "--provider"),
     model: getValue(args, "--model"),
     effort: parseEffort(effortRaw),
+    routingPreference: parseModelRoutingPreference(getValue(args, "--routing-preference")),
     mode: parseMode(modeRaw),
     sessionId: getValue(args, "--session") ?? getValue(args, "--session-id"),
     stateDir: getValue(args, "--state-dir"),

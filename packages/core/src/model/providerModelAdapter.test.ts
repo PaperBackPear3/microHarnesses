@@ -107,6 +107,58 @@ test("resolves model precedence: selectedModel > constructor model > defaultMode
   assert.equal(adapter.seenRequest?.model, "ctor");
 });
 
+test("prefers a routed selectedProviderId over the static/dynamic provider selection", async () => {
+  const fakeAdapter = new FakeAdapter("fake-default", {
+    assistantMessage: "from-fake",
+    toolCalls: [],
+    stop: true,
+  });
+  const otherAdapter = new FakeAdapter("other-default", {
+    assistantMessage: "from-other",
+    toolCalls: [],
+    stop: true,
+  });
+  Object.defineProperty(otherAdapter, "providerId", { value: "other" });
+  const providers = new ProviderRegistry();
+  providers.register(fakeAdapter);
+  providers.register(otherAdapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  creds.register("other", new FakeCreds());
+
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(makeInput({ selectedProviderId: "other", selectedModel: "routed-model" }));
+  assert.equal(otherAdapter.seenRequest?.model, "routed-model");
+  assert.equal(fakeAdapter.seenRequest, undefined);
+});
+
+test("prefers a routed selectedMaxTokens over the static/dynamic maxTokens", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+    maxTokens: 4096,
+  });
+
+  await model.nextStep(makeInput({ selectedMaxTokens: 512 }));
+  assert.equal(adapter.seenRequest?.maxTokens, 512);
+});
+
 test("falls back to adapter.defaultModel when no other model is available", async () => {
   const adapter = new FakeAdapter("adapter-default", {
     assistantMessage: "ok",

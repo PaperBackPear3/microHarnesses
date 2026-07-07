@@ -10,6 +10,7 @@ import type {
   CompletionRequest,
   ProviderAdapter,
   ProviderAuth,
+  ProviderModelInfo,
   ProviderResponse,
   ProviderStreamEvent,
 } from "../../providers/types";
@@ -133,6 +134,26 @@ export class OpenAICompatAdapter implements ProviderAdapter {
 
   async createTokenCounter(model: string) {
     return createOpenAICompatibleTokenCounter(model);
+  }
+
+  /**
+   * Lists models via the OpenAI-compatible `GET /models` endpoint. Works for
+   * OpenAI itself as well as any compatible server that implements the same
+   * endpoint (including Ollama's local server). Callers should treat a
+   * thrown error as "discovery unavailable" and fall back to static routes.
+   */
+  async listModels(auth: ProviderAuth): Promise<ProviderModelInfo[]> {
+    try {
+      const client = this.createClient(auth);
+      const page = await client.models.list();
+      const models: ProviderModelInfo[] = [];
+      for await (const model of page) {
+        models.push({ id: model.id });
+      }
+      return models;
+    } catch (error: unknown) {
+      throw this.asProviderError(error);
+    }
   }
 
   private createClient(auth: ProviderAuth): OpenAI {

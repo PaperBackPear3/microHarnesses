@@ -51,19 +51,20 @@ export class ProviderModelAdapter implements ModelAdapter {
 
   async nextStep(input: StepInput): Promise<StepPlan> {
     const current = this.selection?.() ?? (this.staticSelection as ProviderModelSelection);
-    const adapter = this.providerRegistry.get(current.providerId);
+    const providerId = (input.selectedProviderId as ProviderId | undefined) ?? current.providerId;
+    const adapter = this.providerRegistry.get(providerId);
     const supportsStructuredTools = adapter.features?.structuredTools === true;
     const resolvedModel = input.selectedModel ?? current.model ?? adapter.defaultModel;
     if (!resolvedModel) {
       throw new ConfigError(
-        `No model specified and provider "${current.providerId}" declares no defaultModel`,
+        `No model specified and provider "${providerId}" declares no defaultModel`,
       );
     }
-    const auth = await this.credentialsRegistry.get(current.providerId).resolve();
+    const auth = await this.credentialsRegistry.get(providerId).resolve();
     const request: CompletionRequest = {
       model: resolvedModel,
       messages: buildMessages(input, !supportsStructuredTools),
-      maxTokens: current.maxTokens ?? 4096,
+      maxTokens: input.selectedMaxTokens ?? current.maxTokens ?? 4096,
       tools: input.availableTools,
       signal: input.signal,
     };
@@ -82,9 +83,7 @@ export class ProviderModelAdapter implements ModelAdapter {
         finalResponse = event.response;
       }
       if (!finalResponse) {
-        throw new ConfigError(
-          `Provider "${current.providerId}" stream did not emit a final response`,
-        );
+        throw new ConfigError(`Provider "${providerId}" stream did not emit a final response`);
       }
       return toStepPlan(finalResponse);
     }

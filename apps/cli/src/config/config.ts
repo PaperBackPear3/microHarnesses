@@ -2,7 +2,14 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { type EffortLevel, type HarnessMode, parseEffort, parseMode } from "@micro-harnesses/core";
+import {
+  type EffortLevel,
+  type HarnessMode,
+  type ModelRoutingPreference,
+  parseEffort,
+  parseMode,
+  parseModelRoutingPreference,
+} from "@micro-harnesses/core";
 
 export type { EffortLevel };
 export { parseEffort };
@@ -15,6 +22,8 @@ export interface CliConfig {
   provider: string;
   model?: string;
   effort: EffortLevel;
+  /** Optional router preference (`auto|cost|speed|intelligence|balanced`); unset keeps effort-based profile selection. */
+  routingPreference?: ModelRoutingPreference;
   mode: HarnessMode;
   maxIterations: number;
   unlimitedIterations: boolean;
@@ -36,6 +45,7 @@ export interface ConfigOverrides {
   provider?: string;
   model?: string;
   effort?: EffortLevel;
+  routingPreference?: ModelRoutingPreference;
   mode?: HarnessMode;
   maxIterations?: number | "unlimited";
   snapshotEvery?: number;
@@ -56,6 +66,7 @@ interface FileConfig {
   provider?: string;
   model?: string;
   effort?: string;
+  routingPreference?: string;
   mode?: string;
   maxIterations?: number | "unlimited";
   snapshotEvery?: number;
@@ -91,6 +102,9 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
   const envProvider = process.env.MH_PROVIDER || process.env.MICRO_HARNESS_PROVIDER;
   const envModel = process.env.MH_MODEL || process.env.MICRO_HARNESS_MODEL;
   const envEffort = parseEffort(process.env.MH_EFFORT || process.env.MICRO_HARNESS_EFFORT);
+  const envRoutingPreference = parseModelRoutingPreference(
+    process.env.MH_ROUTING_PREFERENCE || process.env.MICRO_HARNESS_ROUTING_PREFERENCE,
+  );
   const envMode = parseMode(process.env.MH_MODE || process.env.MICRO_HARNESS_MODE);
   const envMaxIterations =
     parseEnvIterationLimit(process.env.MH_MAX_ITERATIONS) ??
@@ -114,6 +128,10 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
     provider: overrides.provider ?? envProvider ?? fromFile.provider ?? defaults.provider,
     model: overrides.model ?? envModel ?? fromFile.model ?? defaults.model,
     effort: overrides.effort ?? envEffort ?? parseEffort(fromFile.effort) ?? defaults.effort,
+    routingPreference:
+      overrides.routingPreference ??
+      envRoutingPreference ??
+      parseModelRoutingPreference(fromFile.routingPreference),
     mode: overrides.mode ?? envMode ?? parseMode(fromFile.mode) ?? defaults.mode,
     maxIterations:
       resolvedIterationSetting === "unlimited" ? defaults.maxIterations : resolvedIterationSetting,

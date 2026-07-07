@@ -7,4 +7,5 @@ export * from "./ollamaAdapter";
 export * from "./credentials";
 export * from "./plugins";
 export * from "./modelProfiles";
+export * from "./modelRoutes";
 export * from "./contextWindow";

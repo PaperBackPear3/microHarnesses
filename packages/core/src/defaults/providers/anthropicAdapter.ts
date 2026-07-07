@@ -13,6 +13,7 @@ import type {
   CompletionRequest,
   ProviderAdapter,
   ProviderAuth,
+  ProviderModelInfo,
   ProviderResponse,
   ProviderStreamEvent,
 } from "../../providers/types";
@@ -92,6 +93,24 @@ export class AnthropicAdapter implements ProviderAdapter {
         },
       );
       return this.toProviderResponse(response);
+    } catch (error: unknown) {
+      throw this.asProviderError(error);
+    }
+  }
+
+  /**
+   * Lists models via the Anthropic Models API. Callers should treat a thrown
+   * error as "discovery unavailable" and fall back to static routes.
+   */
+  async listModels(auth: ProviderAuth): Promise<ProviderModelInfo[]> {
+    try {
+      const client = this.createClient(auth);
+      const page = await client.models.list();
+      const models: ProviderModelInfo[] = [];
+      for await (const model of page) {
+        models.push({ id: model.id, label: model.display_name });
+      }
+      return models;
     } catch (error: unknown) {
       throw this.asProviderError(error);
     }
