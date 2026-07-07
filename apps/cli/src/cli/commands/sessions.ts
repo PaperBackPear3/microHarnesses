@@ -1,5 +1,5 @@
 import { SessionStore } from "@micro-harnesses/core";
-import type { SessionsArgs } from "../args";
+import type { SessionsArgs } from "../args.js";
 
 export async function sessionsCommand(args: SessionsArgs): Promise<void> {
   const stateDir = args.stateDir ?? `${process.cwd()}/.micro-harness`;

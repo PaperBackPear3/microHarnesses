@@ -5,12 +5,12 @@ import { availableModelChoices, withModeExecutionContract } from "@micro-harness
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import TextInput from "ink-text-input";
-// biome-ignore lint/style/useImportType: classic JSX runtime requires React as a value import.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ApprovalView } from "../runtime/approvalHandler";
-import type { CliComposition } from "../runtime/composition";
-import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands";
-import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement } from "react";
+import type { ApprovalView } from "../runtime/approvalHandler.js";
+import type { CliComposition } from "../runtime/composition.js";
+import { type SlashCommand, type UiScreen, parseSlashCommand } from "../slash/commands.js";
+import { type StatusState, createStatusState, reduceStatus } from "../telemetry/status.js";
 import {
   type ChatEntry,
   appendAssistantDelta,
@@ -21,7 +21,7 @@ import {
   formatIteration,
   startUserTurn,
   toggleAllThinkingCollapse as toggleAllThinkingCollapseInTranscript,
-} from "./transcript";
+} from "./transcript.js";
 import {
   compactShortcutHintLine,
   contextBadgeStyle,
@@ -29,8 +29,8 @@ import {
   helpShortcutLines,
   modePromptStyle,
   modelBadgeLabel,
-} from "./uiMeta";
-import { sliceFromBottom } from "./viewport";
+} from "./uiMeta.js";
+import { sliceFromBottom } from "./viewport.js";
 
 interface Props {
   composition: CliComposition;
@@ -52,7 +52,7 @@ export function App({
   composition: initialComposition,
   buildForSession,
   onExit,
-}: Props): React.ReactElement {
+}: Props): ReactElement {
   const [composition, setComposition] = useState<CliComposition>(initialComposition);
   const [chatEntries, setChatEntries] = useState<ChatEntry[]>(() =>
     appendSystemEntry([], randomUUID(), `micro-harness CLI v${initialComposition.cliVersion}`),
@@ -702,7 +702,7 @@ function FooterStatusBar(props: {
   subagents: SubagentStatus[];
   shortcutHint: string;
   columns: number;
-}): React.ReactElement {
+}): ReactElement {
   const runningSubagents = props.subagents.filter((entry) => entry.status === "running").length;
   const finishedSubagents = props.subagents.filter((entry) => entry.status !== "running").length;
   const line1 = trimToColumns(
@@ -740,7 +740,7 @@ function FooterStatusBar(props: {
   );
 }
 
-function renderApprovalPrompt(pending: ApprovalView | undefined): React.ReactElement | null {
+function renderApprovalPrompt(pending: ApprovalView | undefined): ReactElement | null {
   if (!pending) return null;
   return (
     <Box marginTop={1} flexDirection="column" borderStyle="round" borderColor="yellow">
@@ -752,7 +752,7 @@ function renderApprovalPrompt(pending: ApprovalView | undefined): React.ReactEle
   );
 }
 
-function Screen({ title, children }: { title: string; children: string }): React.ReactElement {
+function Screen({ title, children }: { title: string; children: string }): ReactElement {
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="cyan">
       <Text color="cyan">{title}</Text>
@@ -767,7 +767,7 @@ function HelpScreen({
 }: {
   modelChoices: string[];
   cliVersion: string;
-}): React.ReactElement {
+}): ReactElement {
   const commandLines = helpCommandLines(modelChoices);
   const shortcutLines = helpShortcutLines();
   const lines = [

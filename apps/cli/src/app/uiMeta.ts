@@ -1,5 +1,5 @@
 import type { HarnessMode } from "@micro-harnesses/core";
-import type { StatusState } from "../telemetry/status";
+import type { StatusState } from "../telemetry/status.js";
 
 export interface LabeledColor {
   label: string;

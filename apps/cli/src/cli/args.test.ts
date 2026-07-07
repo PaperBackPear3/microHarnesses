@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseGlobalCliArgs, parseSessionsArgs } from "./args";
+import { parseGlobalCliArgs, parseSessionsArgs } from "./args.js";
 
 test("parseGlobalCliArgs parses mode and effort", () => {
   const parsed = parseGlobalCliArgs([

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
-import { extractPositionals, parseGlobalCliArgs, parseSessionsArgs } from "./cli/args";
-import { chatCommand } from "./cli/commands/chat";
-import { runHeadlessPrompt } from "./cli/commands/run";
-import { sessionsCommand } from "./cli/commands/sessions";
-import { loadCliConfig } from "./config/config";
-import { buildComposition } from "./runtime/composition";
-import { CLI_VERSION } from "./version";
+import { extractPositionals, parseGlobalCliArgs, parseSessionsArgs } from "./cli/args.js";
+import { chatCommand } from "./cli/commands/chat.js";
+import { runHeadlessPrompt } from "./cli/commands/run.js";
+import { sessionsCommand } from "./cli/commands/sessions.js";
+import { loadCliConfig } from "./config/config.js";
+import { buildComposition } from "./runtime/composition.js";
+import { CLI_VERSION } from "./version.js";
 
 async function main(): Promise<void> {
   const rawArgv = process.argv.slice(2);

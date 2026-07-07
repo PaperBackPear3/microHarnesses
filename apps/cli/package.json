@@ -12,8 +12,9 @@
     "mh": "dist/index.js",
     "micro-harness": "dist/index.js"
   },
+  "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
@@ -26,13 +27,13 @@
     "@micro-harnesses/plugin-example-tools": "^2.1.1",
     "@micro-harnesses/plugin-plan-mode": "^2.1.1",
     "diff": "^9.0.0",
-    "ink": "^3.2.0",
-    "ink-spinner": "^4.0.3",
-    "ink-text-input": "^4.0.3",
-    "react": "^17.0.2"
+    "ink": "^7.1.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
-    "@types/react": "^17.0.86"
+    "@types/react": "^19.2.0"
   }
 }

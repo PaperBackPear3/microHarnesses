@@ -40,11 +40,11 @@ import { AgenticCompressionPlugin } from "@micro-harnesses/plugin-agentic-compre
 import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
 import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
-import type { CliConfig } from "../config/config";
-import { SessionService } from "../session/sessionService";
-import { UiStream } from "../streaming/uiStream";
-import { CLI_VERSION } from "../version";
-import { ApprovalController } from "./approvalHandler";
+import type { CliConfig } from "../config/config.js";
+import { SessionService } from "../session/sessionService.js";
+import { UiStream } from "../streaming/uiStream.js";
+import { CLI_VERSION } from "../version.js";
+import { ApprovalController } from "./approvalHandler.js";
 
 export interface RuntimeState {
   provider: string;

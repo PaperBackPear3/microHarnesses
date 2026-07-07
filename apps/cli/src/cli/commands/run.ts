@@ -1,6 +1,6 @@
 import type { StreamEvent } from "@micro-harnesses/core";
 import { withModeExecutionContract } from "@micro-harnesses/core";
-import type { CliComposition } from "../../runtime/composition";
+import type { CliComposition } from "../../runtime/composition.js";
 
 export async function runHeadlessPrompt(
   composition: CliComposition,

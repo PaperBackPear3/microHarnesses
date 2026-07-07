@@ -11,11 +11,22 @@
   "bugs": {
     "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
   },
-  "keywords": ["micro-harness", "llm", "ai-agent", "typescript", "plugin-system", "tool-calling"],
+  "keywords": [
+    "micro-harness",
+    "llm",
+    "ai-agent",
+    "typescript",
+    "plugin-system",
+    "tool-calling"
+  ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
-  "workspaces": ["packages/*", "plugins/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "plugins/*",
+    "apps/*"
+  ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present",

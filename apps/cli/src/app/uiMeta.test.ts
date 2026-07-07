@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { StatusState } from "../telemetry/status";
+import type { StatusState } from "../telemetry/status.js";
 import {
   compactShortcutHintLine,
   contextBadgeStyle,
@@ -8,7 +8,7 @@ import {
   helpShortcutLines,
   modePromptStyle,
   modelBadgeLabel,
-} from "./uiMeta";
+} from "./uiMeta.js";
 
 function baseStatus(): StatusState {
   return {

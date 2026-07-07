@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { type EffortLevel, type HarnessMode, parseEffort, parseMode } from "@micro-harnesses/core";
 
 export type { EffortLevel };
@@ -70,7 +71,7 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
   const fromFile = await readConfigFile();
   const defaults: CliConfig = {
     stateDir: path.join(process.cwd(), ".micro-harness"),
-    promptsDir: path.resolve(__dirname, "../../prompts"),
+    promptsDir: fileURLToPath(new URL("../../prompts", import.meta.url)),
     provider: "openai",
     effort: "medium",
     mode: "accept-edits",

@@ -1,5 +1,5 @@
 import { type HarnessMode, parseMode } from "@micro-harnesses/core";
-import { type EffortLevel, parseEffort } from "../config/config";
+import { type EffortLevel, parseEffort } from "../config/config.js";
 
 export interface GlobalCliArgs {
   prompt?: string;

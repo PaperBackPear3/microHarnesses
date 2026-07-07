@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { SessionStore } from "@micro-harnesses/core";
-import { SessionService } from "./sessionService";
+import { SessionService } from "./sessionService.js";
 
 test("session service reads telemetry summary", async () => {
   const stateDir = await mkTmpDir();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sliceFromBottom } from "./viewport";
+import { sliceFromBottom } from "./viewport.js";
 
 test("sliceFromBottom returns tail when offset is zero", () => {
   const lines = ["1", "2", "3", "4", "5"];

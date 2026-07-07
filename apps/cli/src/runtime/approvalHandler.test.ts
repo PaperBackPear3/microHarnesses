@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ApprovalRequest, ToolDefinition } from "@micro-harnesses/core";
-import { ApprovalController, type ApprovalView } from "./approvalHandler";
+import { ApprovalController, type ApprovalView } from "./approvalHandler.js";
 
 const tool: ToolDefinition = {
   name: "shell_exec",

@@ -7,7 +7,7 @@ import {
   appendThinkingDelta,
   startUserTurn,
   toggleAllThinkingCollapse,
-} from "./transcript";
+} from "./transcript.js";
 
 test("keeps multi-iteration thinking and assistant output in step order", () => {
   let entries: ChatEntry[] = startUserTurn([], "turn-1", "solve this");
