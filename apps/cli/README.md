@@ -1,6 +1,6 @@
 # @micro-harnesses/cli
 
-`mh` / `micro-harness` is the v2 interactive development assistant built on
+`mh` / `micro-harness` is the interactive development assistant built on
 `@micro-harnesses/core`.
 
 The running version is shown in the TUI footer and via:
@@ -54,6 +54,8 @@ npx @micro-harnesses/cli@latest
 - Runtime status (mode/model/context/usage/subagents/compression) is rendered in a footer below input to keep the typing area clean.
 - Running and recently completed subagents are shown in the transcript so delegated work is not hidden.
 - In autopilot mode, prompts are augmented with an execution contract that pushes the agent to continue until the requested goal is finished.
+- `/model` lists routes across configured providers; `/route` or
+  `--routing-preference` opts into router-based provider/model selection.
 
 ## Context compression
 
@@ -103,6 +105,7 @@ compressor.
 ## Commands
 
 - `mh` — start chat TUI
+- `mh run "prompt"` / `mh chat "prompt"` — command aliases that accept the same runtime flags
 - `mh -p "prompt"` — headless single prompt
 - `mh -p "prompt" --json` — machine-readable output
 - `mh sessions list` — list saved sessions (JSON)
@@ -113,11 +116,13 @@ compressor.
 - `--provider <openai|anthropic|ollama>`
 - `--model <model-id>`
 - `--effort <low|medium|high>`
+- `--routing-preference <auto|cost|speed|intelligence|balanced>`
 - `--mode <plan|accept-edits|autopilot>`
 - `--session <id>`
 - `--state-dir <path>`
+- `--prompts-dir <path>`
 - `--skills-dir <path>` — directory of FS skills (`<name>/SKILL.md` bundles); default `<state-dir>/skills`
-- `--iterations <n>`
+- `--iterations <n|unlimited>`
 - `--snapshot-every <n>`
 - `--max-tokens <n>`
 - `--compaction-trigger <0..1>`
@@ -129,7 +134,7 @@ compressor.
 ## TUI slash commands
 
 - Modes: `/plan`, `/edits`, `/autopilot`, `/mode <...>`
-- Model/provider: `/model <id>`, `/provider <id>`, `/effort <...>`
+- Model/provider: `/model [id]`, `/provider <id>`, `/effort <...>`, `/route <auto|cost|speed|intelligence|balanced|off>`
 - Sessions: `/new`, `/sessions`, `/session <id>`, `/resume <id>`
 - Screens: `/chat`, `/context`, `/telemetry`, `/help` (or `/commands`)
 - Compression: `/compact` (force a compaction pass for the active session)
@@ -139,8 +144,12 @@ compressor.
 ## Keybindings
 
 - `Enter` send prompt
+- `Option+Enter` insert newline
+- Arrow keys move through multi-line composer text; when input is empty, arrows scroll transcript
 - `Shift+Tab` cycle mode (Plan → Accept-edits → Autopilot)
-- `Ctrl+T` toggle latest thinking collapse
+- `Ctrl+T` toggle reasoning collapse
+- `Ctrl+Y` toggle diagnostics
+- `PgUp` / `PgDn` page transcript scroll
 - `y / n / a` resolve pending approval (approve / reject / always allow tool)
 - `Esc` or `Ctrl+C` interrupt current run
 - `Ctrl+D` exit

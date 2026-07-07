@@ -10,6 +10,8 @@ This guide is for teams building apps on top of `@micro-harnesses/core`.
 | Platform team supporting many agents | `PluginHost` + capability-declared plugins | custom policy rules, custom provider plugins, governance rules |
 | Security-sensitive deployment | `CompositePolicyEngine` + `createCommandSafetyRule()` | strict safety mode, approval UX, audited high-risk tools |
 | Local/offline-first workflow | built-in `ollama` provider registration + local models | custom provider adapters for internal gateways |
+| Multi-provider workflow | route catalog + `DefaultModelRouter` | live discovery, pricing/context catalog updates, `list_model_routes` |
+| Reusable agent library | `defineAgent()` / `defineAgentAsync()` | declarative subagents, skills, MCP toolsets |
 
 ## Composition choices
 
@@ -27,6 +29,7 @@ This guide is for teams building apps on top of `@micro-harnesses/core`.
 
 - Use a **single runtime** for straightforward tasks.
 - Use **subagents** when one task needs isolated delegated runs with limited tool scope.
+- Use **async supervised subagents** when a parent should spawn multiple children, continue planning, then join with `wait_subagents`.
 
 ### 4) Prompt source choice
 
@@ -54,6 +57,16 @@ For `FsPromptSource` prompt packs:
 - Start with built-in providers for speed.
 - Keep provider choice in composition, not in core logic.
 - Use environment-based credentials for local/dev and pluggable resolvers for production.
+- Use `createOpenAICompatProviderPlugin` for OpenAI-compatible gateways instead
+  of writing a bespoke adapter.
+- Use model routing when cost/speed/intelligence tradeoffs matter across
+  multiple configured providers.
+
+## Declarative agents and MCP
+
+- Use `defineAgent()` when prompts/tools/providers are known locally.
+- Use `promptFromFile()` for markdown prompts with frontmatter and `{{variable}}` templating.
+- Use `defineAgentAsync()` when the agent includes MCP servers; MCP tools are exposed as `mcp__<server>__<tool>` and treated as high-risk by default.
 
 ## Common anti-patterns to avoid
 
@@ -61,3 +74,5 @@ For `FsPromptSource` prompt packs:
 - Using one huge plugin instead of focused capability plugins.
 - Relying on command safety screening as if it were a sandbox.
 - Treating `developer.md` as optional when you require consistent review or output shape.
+- Duplicating provider/model decisions inside tools instead of using model
+  profiles or routing at the composition boundary.

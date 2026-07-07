@@ -14,7 +14,7 @@ Use npm scripts from the root `package.json`:
 
 Composable, plugin-first library:
 
-- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, default + agentic compression, policy, harness modes, provider adapters, skills, subagent primitive; extensible provider-aware capabilities)
+- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, default + agentic compression, policy, harness modes, provider adapters, skills, channels, MCP, model routing, declarative agents, subagent primitive; extensible provider-aware capabilities)
 - `plugins/basic-tools` — workspace-scoped mutation + shell tools
 - `plugins/example-tools` — reference `echo` / `time` tools
 - `apps/cli` — `@micro-harnesses/cli`, a thin composition + Ink TUI layer over core
@@ -44,22 +44,25 @@ Each domain owns its own `types.ts`:
 - `actions/` — executionEngine (`ActionExecutionEngine`: governs tools + skills)
 - `policy/` — types, defaultPolicyEngine, compositePolicyEngine, safety/{commandNormalizer,defaultRules,commandSafetyRule}
 - `providers/` — types, registry, credentialsRegistry
-- `model/` — types, defaultModelSelector, effortModelSelector (`EffortLevel`/`EffortModelSelector`), providerModelAdapter (static or dynamic `selection` getter)
+- `model/` — types, defaultModelSelector, effortModelSelector (`EffortLevel`/`EffortModelSelector`), providerModelAdapter (static or dynamic `selection` getter), modelRouter (`DefaultModelRouter` + route scoring)
+- `mcp/` — stdio/HTTP client plus `createMcpToolset` wrapping MCP tools as high-risk runtime tools
 - `prompts/` — types, fsPromptSource
 - `skills/` — types, registry, asTool, fsSkillSource (loads executable skills from `<root>/<name>/SKILL.md` + optional `skill.meta.json`; prompt-expansion model)
 - `context/` — types, manager, defaultCompressor
 - `session/` — types, sessionStore
 - `observability/` — types, provider (`ObservabilityProvider`/`createObservability`), tracer, metrics, logger, sampler, redaction, tokenCounter, in-memory/console/jsonl exporters (OTel-shaped traces + metrics + logs + `StreamSink`)
-- `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), modes (`HarnessMode`/`ModeController`/`createModeAwareApprovalPolicy`/`withModeExecutionContract`), runObserver (`RunObserver`: run/iteration/model/action span tree + metrics + logs + stream), snapshotCadence
+- `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), defineAgent (`defineAgent`/`defineAgentAsync`/`promptFromFile`), modes (`HarnessMode`/`ModeController`/`createModeAwareApprovalPolicy`/`withModeExecutionContract`), runObserver (`RunObserver`: run/iteration/model/action span tree + metrics + logs + stream), snapshotCadence
 - `subagents/` — types, inProcessSubagentRunner
 - `plugins/` — types, host, loader
-- `defaults/` — registerCoreDefaults, createCoreDefaultTools, read-only workspace + plan-mode tools, providers/ (`OpenAICompatAdapter` + OpenAI/Anthropic/Ollama presets, `createOpenAICompatProviderPlugin`, `EnvCredentials`, model profiles, Ollama context-window detection)
+- `defaults/` — registerCoreDefaults, createCoreDefaultTools, tool_output_read, read-only workspace + plan-mode + channel + subagent + list_model_routes tools, providers/ (`OpenAICompatAdapter` + OpenAI/Anthropic/Ollama presets, `createOpenAICompatProviderPlugin`, `EnvCredentials`, model profiles/routes/catalog, Ollama context-window detection)
 
 ### Plugin API (widened, capability-enforced)
 
 ```ts
 interface PluginApi {
   registerTool(tool);
+  registerChannel(adapter);
+  registerSkill(skill);
   onBeforeLoop(hook); onAfterLoop(hook);
   setCompressor(fn);
   registerProvider(adapter);
@@ -97,6 +100,20 @@ deterministic waits. When a supervisor is passed to `createCoreDefaultTools`,
 models get `spawn_subagent` plus `wait_subagents`; the CLI `/wait` command is a
 user-facing wait-all alias over the same supervisor state.
 
+### Model routing and declarative agents
+
+`DefaultModelRouter` is opt-in: `Agent` only routes when `setModelRouting()` is
+called and `RunOptions.routing` is present. CLI `/route` and
+`--routing-preference` enable this path; otherwise existing model/profile
+selection is preserved. The `list_model_routes` tool exposes the current route
+catalog with provider/model ids, relative cost/speed/intelligence, known prices,
+and context windows.
+
+`defineAgent()` is the concise package-consumer API for local prompts, tools,
+skills, declarative subagents, providers, policy, observability, and sessions.
+Use `defineAgentAsync()` when MCP servers are included; MCP tools are named
+`mcp__<server>__<tool>` and are high risk by default.
+
 ## Key conventions
 
 - Keep contracts in per-domain `types.ts`; new subsystems reuse existing interfaces before adding new shapes.
@@ -110,5 +127,6 @@ user-facing wait-all alias over the same supervisor state.
 - Generic harness capabilities (modes, model selection, provider adapters, context-window heuristics) live in core; the CLI only composes them and owns TUI concerns (Ink rendering, keybindings, interactive approval prompts, status bar).
 - Providers: prefer `createOpenAICompatProviderPlugin` for new OpenAI-compatible endpoints instead of writing a bespoke adapter.
 - Provider adapters may implement `createTokenCounter(model, auth?)`; prefer best-available provider/model-specific tokenization over generic heuristics.
+- Model routing is a composition concern: use route catalogs/router metadata instead of hard-coding cost/speed/intelligence choices in tools.
 - In the CLI TUI, keep input anchored at terminal bottom; render mode/model/context/usage in footer lines below input rather than inline with the composer.
 - For autopilot flows, prefer prompts/instructions that continue autonomously until the goal is actually complete (not just “next step announced”).

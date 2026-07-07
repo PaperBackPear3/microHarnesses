@@ -2,24 +2,21 @@
 
 microHarnesses is a package-first TypeScript ecosystem for building agent runtimes.
 
-The core package gives you runtime primitives (loop, context, policy, tools, plugins). Plugin packages add focused capabilities you can compose based on your safety model and product needs.
+The core package gives you runtime primitives (loop, context, policy, tools, plugins, providers, skills, channels, subagents, MCP, observability, and model routing). Plugin packages add focused capabilities you can compose based on your safety model and product needs.
 
 ## Latest updates
 
-- Core now owns the full harness capability set: harness modes (`plan` /
-  `accept-edits` / `autopilot`) with a mode-aware approval policy and the
-  autopilot execution contract, an effort-based model selector with default
-  provider model profiles, and Ollama context-window detection.
-- New generic `OpenAICompatAdapter` lets you register any OpenAI-compatible
-  endpoint (OpenRouter, Groq, Azure OpenAI, LM Studio, vLLM, …) in one line via
-  `createOpenAICompatProviderPlugin`; the OpenAI and Ollama adapters are now
-  thin presets of it, with hardened SSE parsing and finish-reason mapping.
-- `FsSkillSource` now loads real executable skills from disk (`SKILL.md` +
-  optional `skill.meta.json` and resource files); the CLI wires them up via
-  `--skills-dir` (default `<state-dir>/skills`).
-- Context-window token estimation is now provider-aware: built-in OpenAI-compatible
-  providers use `js-tiktoken`, adapters can expose custom token counters, and
-  runtime usage is fed back to calibrate compaction/utilization over time.
+- Declarative agents: `defineAgent()` / `defineAgentAsync()` compose prompts,
+  providers, tools, skills, subagents, and MCP servers with less boilerplate.
+- Model routing: `DefaultModelRouter`, model route catalogs, live provider
+  discovery, known pricing/context metadata, `list_model_routes`, CLI `/route`,
+  and `--routing-preference`.
+- Provider stack: OpenAI, Anthropic, Ollama, and generic OpenAI-compatible
+  adapters, with provider-aware token counters and Ollama context-window
+  detection.
+- Agent capabilities: filesystem skills, channels, async subagent supervisor,
+  tool-output artifacts, default/agentic compression, harness modes, and
+  OTel-shaped observability.
 
 ## Documentation
 
@@ -30,14 +27,13 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 - Package concepts + functionality: [`docs/package-reference.md`](docs/package-reference.md)
 - Runtime interfaces reference: [`docs/reference-runtime-interfaces.md`](docs/reference-runtime-interfaces.md)
 - Getting started: [`docs/how-to-get-started.md`](docs/how-to-get-started.md)
-- Tutorial (build a sample app): [`docs/tutorial-build-sample-app.md`](docs/tutorial-build-sample-app.md)
 - Plugin composition: [`docs/how-to-compose-plugins.md`](docs/how-to-compose-plugins.md)
 
 ## Packages
 
 | Package | Purpose |
 | --- | --- |
-| [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, harness modes, session/context system, compression (default + agentic subagent compressor), plugin host, provider adapters (OpenAI/Anthropic/Ollama + generic OpenAI-compatible), subagent runner/supervisor primitives. |
+| [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, MCP tools, policy engine, harness modes, session/context system, compression (default + agentic), plugin host, provider adapters (OpenAI/Anthropic/Ollama + generic OpenAI-compatible), model routing, declarative agents, and subagent runner/supervisor primitives. |
 | [`@micro-harnesses/plugin-basic-tools`](plugins/basic-tools) | Workspace-scoped file mutation tools and shell execution tool. |
 | [`@micro-harnesses/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |
 | [`@micro-harnesses/cli`](apps/cli) | Agentic coding CLI (React/Ink TUI) built as a thin composition layer over core and plugins. |

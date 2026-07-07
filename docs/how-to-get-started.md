@@ -1,13 +1,10 @@
-# Getting started: local code review agent (Ollama + gemma4:latest)
+# Getting started: build a local code review agent
 
 ## Which guide should you use?
 
-Use this page if you want the **fastest path** to a working runtime focused on
-one concrete use case (local code review).
-
-If you want a broader end-to-end walkthrough of a generic Node app structure
-and plugin wiring, use **Tutorial: build a sample application**
-(`docs/tutorial-build-sample-app.md`).
+Use this page as the canonical hands-on guide. It starts with the fastest path
+to a working local code review runtime, then shows expansion points for plugin
+tools, declarative agents, routing, filesystem skills, and MCP.
 
 ## Goal
 
@@ -15,7 +12,8 @@ Build a small **local code review agent** that runs with:
 
 - provider: `ollama`
 - model: `gemma4:latest`
-- tools: read-only workspace tools (`fs_list`, `fs_read`, `grep_search`)
+- tools: read-only workspace tools (`fs_list`, `fs_read`, `grep_search`) plus
+  `tool_output_read`
 
 The agent reviews a target file/path and returns findings.
 
@@ -30,7 +28,7 @@ You will create:
 
 ---
 
-## 1. Install Ollama and pull Gemma
+## 1. Install Ollama and pull a model
 
 Install Ollama (https://ollama.com/download), then pull the model:
 
@@ -361,6 +359,57 @@ export OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
 3. It can call read-only tools to inspect files.
 4. `Agent` appends turns and snapshots session state locally.
 5. Final assistant output is printed as the review report.
+
+## Expansion paths
+
+### Add mutating plugin tools
+
+Install `@micro-harnesses/plugin-basic-tools` when your agent needs workspace
+writes or shell commands. It provides high-risk `fs_write`, `fs_append`,
+`fs_mkdir`, `fs_move`, `fs_remove`, and `shell_exec` tools, so compose it with
+`CompositePolicyEngine` and an approval handler for production use.
+
+### Use declarative agents
+
+For lower-boilerplate apps, replace explicit `new Agent(...)` wiring with
+`defineAgent()`:
+
+```ts
+import { createCoreDefaultTools, defineAgent, promptFromFile } from "@micro-harnesses/core";
+
+const agent = defineAgent({
+  name: "code-review",
+  prompt: promptFromFile("prompts/code-review/system.md"),
+  model: { providerId: "ollama", model: "gemma4:latest" },
+  tools: createCoreDefaultTools({
+    workspaceTools: { rootDir: process.cwd() },
+  }),
+  stateDir: ".micro-harness/code-review",
+});
+```
+
+Use `defineAgentAsync()` when you include MCP servers; discovered tools are
+registered as `mcp__<server>__<tool>`.
+
+### Add routing and model discovery
+
+Use `DefaultModelRouter` plus a route catalog when you have multiple providers
+and want to bias selection by `cost`, `speed`, `intelligence`, or `balanced`.
+Expose the same catalog to the model with
+`createCoreDefaultTools({ listModelRoutes: { routeCatalog } })`.
+
+### Add filesystem skills
+
+Point `FsSkillSource` at a skills directory where every skill is:
+
+```text
+skills/<name>/SKILL.md
+skills/<name>/skill.meta.json   # optional
+skills/<name>/*                 # optional resources
+```
+
+The CLI uses the same format via `--skills-dir`, defaulting to
+`<state-dir>/skills`.
 
 ---
 

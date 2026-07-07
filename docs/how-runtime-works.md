@@ -10,11 +10,14 @@ For each iteration, `Agent` does:
 2. Build working turns via `ContextManager`.
 3. Select model with `ModelSelector`.
 4. Ask `ModelAdapter.nextStep(...)` for a `StepPlan`.
-5. Execute skill/tool calls through execution engines.
-6. Apply policy decisions (`allow`, `deny`, `require_approval`) before each tool call.
-7. Append a `Turn` to runtime state.
-8. Snapshot to `SessionStore` based on `snapshotEvery`.
-9. Run after-hooks.
+5. Route/select the model. If runtime routing is configured, `ModelRouter`
+   chooses a provider/model route; otherwise `ModelSelector` chooses from the
+   profile.
+6. Execute skill/tool calls through execution engines.
+7. Apply policy decisions (`allow`, `deny`, `require_approval`) before each tool call.
+8. Append a `Turn` to runtime state.
+9. Snapshot to `SessionStore` based on `snapshotEvery`.
+10. Run after-hooks.
 
 The loop stops when:
 
@@ -24,10 +27,13 @@ The loop stops when:
 
 ## Execution planes
 
-- **Model plane**: turns prompts + context into the next step plan.
+- **Model plane**: turns prompts + context into the next step plan; can use
+  static selection or explicit model routing.
 - **Policy plane**: evaluates safety/governance of each tool call.
 - **Execution plane**: runs tools with timeout + abort signal.
 - **State plane**: persists events, turns, and snapshots.
+- **Observability plane**: emits spans, metrics, logs, stream deltas, usage, and
+  context-window telemetry.
 
 ## Prompt loading (`PromptSource` / `FsPromptSource`)
 
@@ -62,6 +68,9 @@ Important: command safety is screening, not sandboxing.
   It uses provider-specific token counters when available and calibrates
   estimates from observed model usage.
 - `goal` is stored with session metadata and propagated through runs/subagents.
+- Oversized tool outputs can be captured as artifacts and read later with
+  `tool_output_read`, keeping model feedback bounded while preserving access to
+  full output.
 
 ## Subagents
 
@@ -77,6 +86,24 @@ Typical usage:
 - record parent-child session linkage
 - register `spawn_subagent` and `wait_subagents` from `createCoreDefaultTools`
   when the model should delegate and then wait for child summaries
+
+## Channels, skills, and MCP
+
+- `FsSkillSource` loads `<skills>/<name>/SKILL.md`, optional
+  `skill.meta.json`, and bundled resource files as executable prompt-expansion
+  skills.
+- `ChannelRegistry` stores `ChannelAdapter`s; `createChannelTools` exposes
+  `channel_list` and `channel_send` when a composition opts into channels.
+- `createMcpToolset()` wraps stdio or HTTP MCP servers as high-risk tools named
+  `mcp__<server>__<tool>`. Use `defineAgentAsync()` for declarative MCP setup.
+
+## Model routing
+
+Model routing is opt-in. Compositions call `Agent.setModelRouting()` with a
+router, a route catalog, and routing request defaults. When enabled,
+`DefaultModelRouter` filters available routes, honors explicit overrides, then
+scores candidates by `cost`, `speed`, `intelligence`, `balanced`, or `auto`.
+The same route catalog can be exposed to models with `list_model_routes`.
 
 ## Why this design
 

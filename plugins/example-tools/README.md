@@ -1,13 +1,15 @@
 # @micro-harnesses/plugin-example-tools
 
-Reference tool plugin for [`@micro-harnesses/core`](../core). Doubles as a
-plugin-authoring example — read the source
-([`src/exampleToolsPlugin.ts`](src/exampleToolsPlugin.ts)) as a template for
+Reference tool/channel plugins for [`@micro-harnesses/core`](../../packages/core). Doubles
+as plugin-authoring examples — read
+[`src/exampleToolsPlugin.ts`](src/exampleToolsPlugin.ts) and
+[`src/exampleChannelsPlugin.ts`](src/exampleChannelsPlugin.ts) as templates for
 writing your own.
 
 ## Latest updates
 
-- No API/tool changes in this release; the plugin continues to provide low-risk `echo` and `time` reference tools.
+- Provides low-risk `echo` and `time` reference tools plus a webhook-backed
+  example channel plugin.
 
 ## Ships
 
@@ -15,6 +17,12 @@ writing your own.
 |---|---|---|
 | `echo` | Returns input text as-is | low |
 | `time` | Returns current ISO time | low |
+
+## Channel plugin
+
+`ExampleWebhookChannelPlugin` registers a `ChannelAdapter` with transport
+`http`, dry-run support, and optional delivery through `endpointUrl` or
+`MH_EXAMPLE_WEBHOOK_URL`.
 
 ## Install
 
@@ -25,9 +33,12 @@ npm install @micro-harnesses/core @micro-harnesses/plugin-example-tools
 ## Usage
 
 ```ts
-import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
+import {
+  exampleToolsPlugin,
+  exampleWebhookChannelPlugin,
+} from "@micro-harnesses/plugin-example-tools";
 
-await pluginHost.register([exampleToolsPlugin]);
+await pluginHost.register([exampleToolsPlugin, exampleWebhookChannelPlugin]);
 ```
 
 Or grab the raw tools:
@@ -41,7 +52,9 @@ toolRegistry.register(timeTool);
 
 ## Capabilities
 
-`["tools"]`.
+`exampleToolsPlugin`: `["tools"]`.
+
+`exampleWebhookChannelPlugin`: `["channels"]`.
 
 ## License
 

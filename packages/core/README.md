@@ -1,13 +1,15 @@
 # @micro-harnesses/core
 
-Package-first reusable runtime library building block for `microHarnesses`. Zero runtime dependencies.
+Package-first reusable runtime library building block for `microHarnesses`.
 
 ## Latest updates
 
 - Core now ships `InProcessSubagentSupervisor` plus default
   `spawn_subagent`/`wait_subagents` tools for deterministic async delegation and
   model-facing join behavior.
-- Runtime consumers (like the CLI app) now rely on stricter autopilot guidance to keep multi-step exploration running until completion.
+- Core also includes declarative agents, MCP tool wrapping, model routing,
+  provider-aware token counting, OpenAI/Anthropic/Ollama providers, channels,
+  filesystem skills, tool-output artifacts, and agentic compression.
 
 ## What's inside
 
@@ -18,7 +20,12 @@ Package-first reusable runtime library building block for `microHarnesses`. Zero
 - **Command-safety rule** — `createCommandSafetyRule()` screens tool inputs annotated with `{ field, kind: "shell_command" | "file_path" }`; heuristic fallback for tools matching `/bash|shell|exec|cmd/i`
 - **Approval seam** — `AgentOptions.approvalHandler` + `action.approval_requested / approved / denied` events
 - **Provider & credentials registries** — `ProviderRegistry`, `CredentialsRegistry`, `ProviderModelAdapter`
+- **Built-in providers** — OpenAI, Anthropic, Ollama, and generic OpenAI-compatible endpoints
+- **Model routing** — `DefaultModelRouter`, route catalogs, live discovery, pricing/context metadata, `list_model_routes`
 - **Prompt source** — `FsPromptSource` (Markdown-based prompt packs)
+- **Declarative agents** — `defineAgent()`, `defineAgentAsync()`, `promptFromFile()`
+- **MCP** — stdio/HTTP `McpClient` and `createMcpToolset()`
+- **Skills and channels** — `FsSkillSource`, `SkillRegistry`, `ChannelRegistry`, `channel_list`, `channel_send`
 - **Plugin host** — `PluginHost` with capability enforcement; `PluginLoader` for dynamic loading
 - **Subagent primitives** — `InProcessSubagentRunner` runs blocking children; `InProcessSubagentSupervisor` tracks async children and deterministic waits
 
@@ -182,6 +189,34 @@ When `createCoreDefaultTools` receives a `SubagentSupervisor`, it registers:
 The blocking `SubagentRunner.run` contract remains available for plugins and
 composition code that need an immediate child result.
 
+## Declarative agent shortcut
+
+```ts
+import { createCoreDefaultTools, defineAgent, promptFromFile } from "@micro-harnesses/core";
+
+const agent = defineAgent({
+  name: "coder",
+  role: "concise software engineering assistant",
+  prompt: promptFromFile("prompts/coder.md", {
+    variables: { project: "my-app" },
+  }),
+  model: { providerId: "openai" },
+  tools: createCoreDefaultTools({
+    workspaceTools: { rootDir: process.cwd() },
+  }),
+});
+```
+
+Use `defineAgentAsync()` when `mcp` servers are configured; discovered tools are
+registered as `mcp__<server>__<tool>`.
+
+## Model routing
+
+Routing is opt-in. Provide `Agent.setModelRouting(...)` with a router and route
+catalog to choose a provider/model route per run. `DefaultModelRouter` supports
+`auto`, `cost`, `speed`, `intelligence`, and `balanced` preferences. The
+`list_model_routes` default tool exposes the same catalog to models.
+
 ## Command-safety rule
 
 The included rule is **best-effort screening, not a sandbox**. The starter
@@ -203,7 +238,7 @@ Severity × `safetyMode` mapping:
 
 Plugins declare which surfaces they use:
 
-`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`
+`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "observability"`
 
 The host throws `PluginCapabilityError` when a plugin uses an undeclared
 surface.

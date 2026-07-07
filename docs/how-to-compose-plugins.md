@@ -8,7 +8,7 @@ You compose plugins at your application composition root so runtime behavior sta
 
 Each plugin must declare the surfaces it uses:
 
-`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents"`
+`"tools" | "hooks" | "compressor" | "providers" | "credentials" | "policy" | "model-selector" | "channels" | "skills" | "agents" | "observability"`
 
 `PluginHost` enforces capabilities and throws `PluginCapabilityError` when a plugin touches an undeclared surface.
 
@@ -31,6 +31,8 @@ import {
   ToolRegistry,
   ProviderRegistry,
   CredentialsRegistry,
+  ChannelRegistry,
+  createObservability,
 } from "@micro-harnesses/core";
 import { basicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 
@@ -38,6 +40,8 @@ const tools = new ToolRegistry();
 const providers = new ProviderRegistry();
 const credentials = new CredentialsRegistry();
 const policy = new CompositePolicyEngine(new DefaultPolicyEngine());
+const channels = new ChannelRegistry();
+const observability = createObservability();
 
 registerCoreDefaults({
   providerRegistry: providers,
@@ -47,6 +51,7 @@ registerCoreDefaults({
   tools: createCoreDefaultTools({
     workspaceTools: { rootDir: process.cwd() },
     planModeTools: { rootDir: process.cwd(), maxExploreFiles: 30, maxDepth: 6 },
+    channelTools: { registry: channels },
   }),
 });
 
@@ -59,9 +64,14 @@ const pluginHost = new PluginHost({
   onAfterLoop: () => {},
   setCompressor: () => {},
   setModelSelector: () => {},
-  subagents: {
-    async run() {
-      throw new Error("Subagent runner not configured");
+  channels,
+  observability,
+  agents: {
+    async spawn() {
+      throw new Error("Agent service not configured");
+    },
+    async invoke() {
+      throw new Error("Agent service not configured");
     },
   },
 });
@@ -104,3 +114,7 @@ export const myPlugin: HarnessPlugin = {
 - Put environment-specific behavior in plugins.
 - Prefer many focused plugins over one large plugin.
 - Declare only the capabilities a plugin truly needs.
+- Use the `"observability"` capability for exporters/instrumentation and the
+  `"channels"` capability for communication adapters.
+- Prefer core provider helpers (`createOpenAICompatProviderPlugin`) over custom
+  provider code for OpenAI-compatible endpoints.

@@ -37,7 +37,23 @@ Execution expectations:
 
 Use tools for direct task execution, skills for reusable behavior bundles, and channels when your architecture needs explicit message pathways.
 
-## 4) SessionStore filesystem model
+## 4) Declarative agents
+
+`defineAgent(options)` builds an `Agent` from common runtime parts:
+
+- `name`, `role`, `prompt`, `model`
+- optional `tools`, `skills`, `prompts`, `context`, `policy`, `modelSelector`,
+  `observability`, `sessionStore`, `approvalHandler`
+- optional declarative `subagents`
+
+Use `promptFromFile(path, { variables, strictVariables })` to load a markdown
+prompt with optional frontmatter (`role`, `modelHint`, `taskTypeHint`,
+`safetyMode`) and `{{variable}}` substitution.
+
+Use `defineAgentAsync(options)` when `mcp` servers are configured. MCP tools are
+discovered and registered as `mcp__<server>__<tool>` high-risk tools.
+
+## 5) SessionStore filesystem model
 
 State root:
 
@@ -52,7 +68,7 @@ Important files:
 
 `loadLatestSnapshot(...)` merges turns across snapshots by turn id to reconstruct latest state.
 
-## 5) Prompt metadata + templating (`FsPromptSource`)
+## 6) Prompt metadata + templating (`FsPromptSource`)
 
 Prompt pack directory:
 
@@ -78,7 +94,7 @@ Templating:
 - `strictVariables: true` throws on missing variables
 - `strictVariables: false` emits warning and replaces with empty string
 
-## 6) Provider setup matrix
+## 7) Provider setup matrix
 
 | Provider | Required env | Optional env | Default base URL |
 |---|---|---|---|
@@ -92,7 +108,19 @@ Provider adapters may optionally implement `createTokenCounter(model, auth?)`
 to supply high-quality model-specific token estimation for context-window
 metrics and compaction thresholds.
 
-## 7) Subagent lifecycle
+## 8) Model routing contracts
+
+`ModelRoute` describes a provider/model candidate with optional availability,
+max tokens, context window, pricing, and relative cost/speed/intelligence
+metadata. `DefaultModelRouter` honors explicit provider/model overrides, filters
+available routes and constraints, then scores by `cost`, `speed`,
+`intelligence`, `balanced`, or `auto`.
+
+Compositions can expose the catalog to models with `list_model_routes`, which
+returns only currently available routes and includes real pricing/context fields
+when known.
+
+## 9) Subagent lifecycle
 
 Core exposes two in-process delegation contracts:
 
@@ -106,3 +134,10 @@ Core exposes two in-process delegation contracts:
 parent run stays open, receives one completed child result, and can decide
 whether to wait again. `wait({ mode: "all" })` joins the selected running
 snapshot, which is useful for user-facing commands such as CLI `/wait`.
+
+## 10) Tool output artifacts
+
+Large tool output can be stored outside the inline model feedback. Tools use
+`captureToolText(...)` to return a truncated preview plus artifact metadata.
+The default `tool_output_read` tool reads an artifact by id/path with
+offset/max-char or line-range controls.
