@@ -10,6 +10,7 @@ export interface BasicToolsPluginOptions {
   defaultShellTimeoutMs?: number;
   maxShellTimeoutMs?: number;
   maxShellOutputChars?: number;
+  maxShellStoredChars?: number;
 }
 
 export interface BasicToolsResolvedOptions {
@@ -22,6 +23,7 @@ export interface BasicToolsResolvedOptions {
   defaultShellTimeoutMs: number;
   maxShellTimeoutMs: number;
   maxShellOutputChars: number;
+  maxShellStoredChars: number;
 }
 
 const DEFAULTS = {
@@ -33,6 +35,7 @@ const DEFAULTS = {
   defaultShellTimeoutMs: 20_000,
   maxShellTimeoutMs: 120_000,
   maxShellOutputChars: 80_000,
+  maxShellStoredChars: 500_000,
 } as const;
 
 export function resolveOptions(options: BasicToolsPluginOptions = {}): BasicToolsResolvedOptions {
@@ -60,6 +63,12 @@ export function resolveOptions(options: BasicToolsPluginOptions = {}): BasicTool
       1_000,
       2_000_000,
       DEFAULTS.maxShellOutputChars,
+    ),
+    maxShellStoredChars: clampInt(
+      options.maxShellStoredChars,
+      1_000,
+      5_000_000,
+      DEFAULTS.maxShellStoredChars,
     ),
   };
 }

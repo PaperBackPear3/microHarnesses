@@ -175,6 +175,10 @@ export class SessionStore {
     return this.readManifestIfExists(manifestPath);
   }
 
+  toolOutputDir(sessionId: string): string {
+    return path.join(this.sessionDir(sessionId), "artifacts", "tool-output");
+  }
+
   private sessionDir(sessionId: string): string {
     return path.join(this.rootDir, sessionId);
   }

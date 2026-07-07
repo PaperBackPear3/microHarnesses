@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import {
+  captureToolText,
   type ToolDefinition,
+  type ToolOutputArtifactRef,
   type ToolExecutionContext,
   readOptionalInteger,
   readOptionalString,
@@ -17,6 +19,15 @@ interface ShellRunResult {
   stderr: string;
   truncated: boolean;
   timedOut: boolean;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+  stdoutTotalChars: number;
+  stderrTotalChars: number;
+  stdoutOmittedChars: number;
+  stderrOmittedChars: number;
+  stdoutArtifact?: ToolOutputArtifactRef;
+  stderrArtifact?: ToolOutputArtifactRef;
+  outputStorageTruncated: boolean;
 }
 
 export function createShellTool(options: BasicToolsResolvedOptions): ToolDefinition {
@@ -55,6 +66,7 @@ export function createShellTool(options: BasicToolsResolvedOptions): ToolDefinit
         cwd,
         timeoutMs,
         options.maxShellOutputChars,
+        options.maxShellStoredChars,
         context,
       );
       return {
@@ -72,6 +84,7 @@ async function runShellCommand(
   cwd: string,
   timeoutMs: number,
   maxOutputChars: number,
+  maxStoredChars: number,
   context?: ToolExecutionContext,
 ): Promise<ShellRunResult> {
   return new Promise((resolve, reject) => {
@@ -81,30 +94,28 @@ async function runShellCommand(
       stdio: ["ignore", "pipe", "pipe"],
       ...(context?.signal ? { signal: context.signal } : {}),
     });
-    let stdout = "";
-    let stderr = "";
-    let truncated = false;
+    const streams = {
+      stdout: { content: "", totalChars: 0, storageTruncated: false },
+      stderr: { content: "", totalChars: 0, storageTruncated: false },
+    };
     let timedOut = false;
     let timedOutKillTimer: NodeJS.Timeout | undefined;
 
     const appendChunk = (target: "stdout" | "stderr", chunk: Buffer | string): void => {
-      const current = target === "stdout" ? stdout : stderr;
-      const value = current + chunk.toString("utf8");
-      if (value.length > maxOutputChars) {
-        const capped = value.slice(0, maxOutputChars);
-        if (target === "stdout") {
-          stdout = capped;
-        } else {
-          stderr = capped;
-        }
-        truncated = true;
+      const text = chunk.toString("utf8");
+      const stream = streams[target];
+      stream.totalChars += text.length;
+      if (stream.content.length >= maxStoredChars) {
+        stream.storageTruncated = true;
         return;
       }
-      if (target === "stdout") {
-        stdout = value;
-      } else {
-        stderr = value;
+      const remaining = maxStoredChars - stream.content.length;
+      if (text.length > remaining) {
+        stream.content += text.slice(0, remaining);
+        stream.storageTruncated = true;
+        return;
       }
+      stream.content += text;
     };
 
     child.stdout?.on("data", (chunk) => appendChunk("stdout", chunk));
@@ -126,19 +137,50 @@ async function runShellCommand(
       reject(error);
     });
 
-    child.once("close", (code, signal) => {
+    child.once("close", async (code, signal) => {
       clearTimeout(timeout);
       if (timedOutKillTimer) {
         clearTimeout(timedOutKillTimer);
       }
-      resolve({
-        exitCode: code ?? -1,
-        signal,
-        stdout,
-        stderr,
-        truncated,
-        timedOut,
-      });
+      try {
+        const stdoutCapture = await captureToolText({
+          toolName: "shell_exec",
+          field: "stdout",
+          content: streams.stdout.content,
+          totalChars: streams.stdout.totalChars,
+          maxInlineChars: maxOutputChars,
+          artifacts: context?.outputArtifacts,
+        });
+        const stderrCapture = await captureToolText({
+          toolName: "shell_exec",
+          field: "stderr",
+          content: streams.stderr.content,
+          totalChars: streams.stderr.totalChars,
+          maxInlineChars: maxOutputChars,
+          artifacts: context?.outputArtifacts,
+        });
+        const stdoutTruncated = streams.stdout.totalChars > maxOutputChars;
+        const stderrTruncated = streams.stderr.totalChars > maxOutputChars;
+        resolve({
+          exitCode: code ?? -1,
+          signal,
+          stdout: stdoutCapture.text,
+          stderr: stderrCapture.text,
+          truncated: stdoutTruncated || stderrTruncated,
+          timedOut,
+          stdoutTruncated,
+          stderrTruncated,
+          stdoutTotalChars: streams.stdout.totalChars,
+          stderrTotalChars: streams.stderr.totalChars,
+          stdoutOmittedChars: stdoutCapture.omittedChars,
+          stderrOmittedChars: stderrCapture.omittedChars,
+          ...(stdoutCapture.artifact ? { stdoutArtifact: stdoutCapture.artifact } : {}),
+          ...(stderrCapture.artifact ? { stderrArtifact: stderrCapture.artifact } : {}),
+          outputStorageTruncated: streams.stdout.storageTruncated || streams.stderr.storageTruncated,
+        });
+      } catch (error: unknown) {
+        reject(error);
+      }
     });
   });
 }

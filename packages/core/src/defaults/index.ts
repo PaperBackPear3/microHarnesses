@@ -17,11 +17,13 @@ import {
   type ReadOnlyWorkspaceToolsOptions,
   createReadOnlyWorkspaceTools,
 } from "./tools/workspaceReadOnly";
+import { createToolOutputReadTool } from "./tools/toolOutputRead";
 
 export * from "./providers";
 export * from "./tools/planMode";
 export * from "./tools/workspaceReadOnly";
 export * from "./tools/spawnSubagentTool";
+export * from "./tools/toolOutputRead";
 
 export interface LoopHookRegistrar {
   onBeforeLoop(hook: BeforeLoopHook): void;
@@ -60,7 +62,7 @@ export interface CreateCoreDefaultToolsOptions {
 }
 
 export function createCoreDefaultTools(options: CreateCoreDefaultToolsOptions): ToolDefinition[] {
-  const tools: ToolDefinition[] = [];
+  const tools: ToolDefinition[] = [createToolOutputReadTool()];
   if (options.workspaceTools) {
     tools.push(...createReadOnlyWorkspaceTools(options.workspaceTools));
   }

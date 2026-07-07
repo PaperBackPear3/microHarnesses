@@ -94,6 +94,7 @@ test("createCoreDefaultTools composes optional bundles", () => {
   });
   const names = tools.map((tool) => tool.name);
   assert.deepEqual(names, [
+    "tool_output_read",
     "fs_list",
     "fs_read",
     "grep_search",
@@ -123,7 +124,7 @@ test("createCoreDefaultTools registers wait tool for subagent supervisors", () =
 
   assert.deepEqual(
     tools.map((tool) => tool.name),
-    ["spawn_subagent", "wait_subagents"],
+    ["tool_output_read", "spawn_subagent", "wait_subagents"],
   );
 });
 

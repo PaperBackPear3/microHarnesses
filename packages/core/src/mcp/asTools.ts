@@ -1,4 +1,6 @@
 import type { ToolDefinition } from "../tools/types";
+import { captureToolText } from "../tools/outputArtifacts";
+import type { ToolOutputArtifacts } from "../tools/outputArtifacts";
 import { McpClient } from "./client";
 import type { McpServerConfig } from "./types";
 
@@ -21,16 +23,12 @@ export async function createMcpToolset(config: McpServerConfig): Promise<McpTool
         type: "object",
         additionalProperties: true,
       },
-      async execute(input) {
+      async execute(input, context) {
         const result = await withClient(
           config,
           async (client) => await client.callTool(tool.name, input),
         );
-        return {
-          server: config.name,
-          tool: tool.name,
-          result,
-        };
+        return await formatMcpToolResult(config.name, tool.name, result, context?.outputArtifacts);
       },
     };
   });
@@ -38,6 +36,38 @@ export async function createMcpToolset(config: McpServerConfig): Promise<McpTool
     serverName: config.name,
     tools,
     close() {},
+  };
+}
+
+export async function formatMcpToolResult(
+  serverName: string,
+  toolName: string,
+  result: unknown,
+  outputArtifacts?: ToolOutputArtifacts,
+): Promise<Record<string, unknown>> {
+  const serialized = safeJson(result);
+  const captured = await captureToolText({
+    toolName: `mcp__${serverName}__${toolName}`,
+    field: "result",
+    content: serialized,
+    maxInlineChars: 80_000,
+    artifacts: outputArtifacts,
+  });
+  if (!captured.truncated) {
+    return {
+      server: serverName,
+      tool: toolName,
+      result,
+    };
+  }
+  return {
+    server: serverName,
+    tool: toolName,
+    result: captured.text,
+    resultTruncated: true,
+    totalResultChars: captured.totalChars,
+    omittedResultChars: captured.omittedChars,
+    ...(captured.artifact ? { resultArtifact: captured.artifact } : {}),
   };
 }
 
@@ -55,5 +85,13 @@ async function withClient<T>(
     return await run(client);
   } finally {
     client.close();
+  }
+}
+
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
   }
 }

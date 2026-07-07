@@ -183,12 +183,23 @@ export class ChatStore {
       } else if (event.type === "tool.completed") {
         const action = asString(event.payload.action) ?? "tool";
         const ok = event.payload.ok === true;
+        const outputTruncated = event.payload.outputTruncated === true;
+        const outputArtifactCount = asNumber(event.payload.outputArtifactCount) ?? 0;
         const existing = this.getSubagent(eventSessionId);
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
           status: "running",
           activity: `tool: ${action}`,
-          recentTools: pushToolLog(existing?.recentTools ?? [], `${action} ${ok ? "ok" : "error"}`),
+          recentTools: pushToolLog(
+            existing?.recentTools ?? [],
+            `${action} ${ok ? "ok" : "error"}${
+              outputTruncated
+                ? outputArtifactCount > 0
+                  ? ` (truncated; ${outputArtifactCount} artifact${outputArtifactCount === 1 ? "" : "s"})`
+                  : " (truncated)"
+                : ""
+            }`,
+          ),
         });
       } else if (event.type === "tool.blocked") {
         const action = asString(event.payload.action) ?? "tool";

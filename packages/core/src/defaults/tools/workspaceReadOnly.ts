@@ -8,6 +8,7 @@ import {
 } from "../../shared/inputParsing";
 import { relativeToRoot, resolveWorkspacePath } from "../../shared/paths";
 import { truncate } from "../../shared/text";
+import { captureToolText } from "../../tools/outputArtifacts";
 import type { ToolDefinition } from "../../tools/types";
 
 export interface ReadOnlyWorkspaceToolsOptions {
@@ -65,7 +66,7 @@ function createFsListTool(options: ResolvedOptions): ToolDefinition {
       additionalProperties: false,
     },
     inputAnnotations: [{ field: "path", kind: "file_path" }],
-    async execute(input) {
+    async execute(input, context) {
       const requestedPath = readOptionalString(input, "path", ".");
       const recursive = readOptionalBoolean(input, "recursive", false);
       const maxEntries = readOptionalInteger(
@@ -146,7 +147,7 @@ function createFsReadTool(options: ResolvedOptions): ToolDefinition {
       additionalProperties: false,
     },
     inputAnnotations: [{ field: "path", kind: "file_path" }],
-    async execute(input) {
+    async execute(input, context) {
       const requestedPath = readRequiredString(input, "path", "fs_read");
       const absolutePath = resolveWorkspacePath(options.rootDir, requestedPath);
       const info = await stat(absolutePath);
@@ -176,14 +177,27 @@ function createFsReadTool(options: ResolvedOptions): ToolDefinition {
         options.maxReadChars,
       );
       const content = selected.join("\n");
-      const truncatedFlag = content.length > maxChars;
+      const captured = await captureToolText({
+        toolName: "fs_read",
+        field: "content",
+        content,
+        maxInlineChars: maxChars,
+        artifacts: context?.outputArtifacts,
+      });
       return {
         path: relativeToRoot(options.rootDir, absolutePath),
         startLine,
         endLine,
         totalLines,
-        truncated: truncatedFlag,
-        content: truncatedFlag ? content.slice(0, maxChars) : content,
+        truncated: captured.truncated,
+        content: captured.text,
+        ...(captured.truncated
+          ? {
+              omittedChars: captured.omittedChars,
+              totalChars: captured.totalChars,
+              ...(captured.artifact ? { contentArtifact: captured.artifact } : {}),
+            }
+          : {}),
       };
     },
   };

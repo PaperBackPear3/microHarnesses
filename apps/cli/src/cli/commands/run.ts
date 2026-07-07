@@ -58,6 +58,16 @@ function printProgress(event: StreamEvent): void {
     process.stderr.write(`[tool] ${String(event.payload.action ?? "unknown")}\n`);
     return;
   }
+  if (event.type === "tool.completed") {
+    if (event.payload.outputTruncated === true) {
+      const action = String(event.payload.action ?? "unknown");
+      const artifacts = Number(event.payload.outputArtifactCount ?? 0);
+      process.stderr.write(
+        `[tool] ${action}: output truncated${artifacts > 0 ? ` (${artifacts} artifact${artifacts === 1 ? "" : "s"})` : ""}\n`,
+      );
+    }
+    return;
+  }
   if (event.type === "tool.blocked") {
     process.stderr.write(
       `[blocked] ${String(event.payload.action ?? "unknown")}: ${String(event.payload.reason ?? "")}\n`,

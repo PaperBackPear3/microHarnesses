@@ -9,6 +9,7 @@ export * from "./shared/inputParsing";
 export * from "./tools/types";
 export * from "./tools/registry";
 export * from "./tools/descriptors";
+export * from "./tools/outputArtifacts";
 
 // Actions (governed execution of tools + skills)
 export * from "./actions/executionEngine";

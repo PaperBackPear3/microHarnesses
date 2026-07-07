@@ -3,6 +3,7 @@ import type { SafetyMode, ToolPolicyEngine } from "../policy/types";
 import type { RunObserver } from "../runtime/runObserver";
 import type { ApprovalHandler, CapabilityScope, RuntimeLimits } from "../runtime/types";
 import { ToolTimeoutError } from "../shared/errors";
+import type { ToolOutputArtifacts } from "../tools/outputArtifacts";
 import type { ToolCall, ToolDefinition, ToolResolver, ToolResult } from "../tools/types";
 
 export interface ActionExecutionEngineDeps {
@@ -24,6 +25,8 @@ export interface ActionCallBudget {
 }
 
 export interface ActionExecutionContext {
+  runId: string;
+  sessionId?: string;
   promptName: string;
   iteration: number;
   safetyMode?: SafetyMode;
@@ -33,6 +36,7 @@ export interface ActionExecutionContext {
   capabilityScope?: CapabilityScope;
   /** Aborted when the run is killed; propagated into every tool execution. */
   signal?: AbortSignal;
+  outputArtifacts?: ToolOutputArtifacts;
   /** Shared allowance decremented per executed call. */
   budget?: ActionCallBudget;
   lineage?: {
@@ -227,7 +231,14 @@ export class ActionExecutionEngine {
     try {
       const timeoutMs = resolveToolTimeoutMs(tool, this.limits.toolTimeoutMs);
       const output = await withTimeout(
-        (signal) => tool.execute(call.input, { signal, traceContext: span.context }),
+        (signal) =>
+          tool.execute(call.input, {
+            signal,
+            runId: ctx.runId,
+            sessionId: ctx.sessionId,
+            traceContext: span.context,
+            outputArtifacts: ctx.outputArtifacts,
+          }),
         timeoutMs,
         ctx.signal,
       );
@@ -238,7 +249,14 @@ export class ActionExecutionEngine {
       span.setAttributes(ctx.observer.content({ output: safeJson(output) }));
       await ctx.observer.stream(
         "tool.completed",
-        { action: call.name, kind: this.kind, ok: true, durationMs, iteration: ctx.iteration },
+        {
+          action: call.name,
+          kind: this.kind,
+          ok: true,
+          durationMs,
+          iteration: ctx.iteration,
+          ...summarizeToolOutput(output),
+        },
         span,
       );
       return { result: { ok: true, output }, executed: true };
@@ -392,6 +410,18 @@ function safeJson(value: unknown): string {
   } catch {
     return "<unserializable>";
   }
+}
+
+function summarizeToolOutput(output: Record<string, unknown>): Record<string, unknown> {
+  const keys = Object.keys(output);
+  const artifactFields = keys.filter((key) => key.toLowerCase().includes("artifact"));
+  const truncatedFields = keys.filter((key) => /truncated/i.test(key));
+  const hasExplicitTruncated = truncatedFields.some((key) => output[key] === true);
+  return {
+    outputKeys: keys.slice(0, 20),
+    outputArtifactCount: artifactFields.length,
+    outputTruncated: hasExplicitTruncated,
+  };
 }
 
 /**

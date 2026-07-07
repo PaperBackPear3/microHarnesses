@@ -13,6 +13,7 @@ import { skillsAsToolResolver } from "../skills/asTool";
 import type { SkillRegistry } from "../skills/registry";
 import type { SubagentSupervisor } from "../subagents/types";
 import { deriveToolDescriptors } from "../tools/descriptors";
+import { ToolOutputArtifacts } from "../tools/outputArtifacts";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolResult } from "../tools/types";
 import { RunObserver } from "./runObserver";
@@ -247,6 +248,10 @@ export class Agent implements AgentHandle {
         goal,
         sessionId,
         runId,
+        outputArtifacts:
+          this.sessionStore && sessionId
+            ? new ToolOutputArtifacts({ rootDir: this.sessionStore.toolOutputDir(sessionId) })
+            : undefined,
       });
 
       observer.countRun("ok");
@@ -293,9 +298,15 @@ export class Agent implements AgentHandle {
     observer: RunObserver,
     userPrompt: string,
     options: RunOptions,
-    resolved: { limits: RuntimeLimits; goal: string; sessionId?: string; runId: string },
+    resolved: {
+      limits: RuntimeLimits;
+      goal: string;
+      sessionId?: string;
+      runId: string;
+      outputArtifacts?: ToolOutputArtifacts;
+    },
   ): Promise<RunState> {
-    const { limits, goal, sessionId, runId } = resolved;
+    const { limits, goal, sessionId, runId, outputArtifacts } = resolved;
     const promptName = this.promptName;
 
     let state: RunState = {
@@ -387,6 +398,7 @@ export class Agent implements AgentHandle {
           state,
           sessionId,
           runId,
+          outputArtifacts,
         });
         iterationSpan.setStatus({ code: "ok" });
         if (stop) break;
@@ -438,6 +450,7 @@ export class Agent implements AgentHandle {
     state: RunState;
     sessionId?: string;
     runId: string;
+    outputArtifacts?: ToolOutputArtifacts;
   }): Promise<boolean> {
     const {
       iteration,
@@ -455,6 +468,7 @@ export class Agent implements AgentHandle {
       state,
       sessionId,
       runId,
+      outputArtifacts,
     } = args;
 
     for (const hook of this.beforeHooks) {
@@ -620,6 +634,8 @@ export class Agent implements AgentHandle {
     }
 
     const executionCtx = {
+      runId,
+      sessionId,
       promptName,
       iteration,
       safetyMode: bundle.metadata.safetyMode,
@@ -628,6 +644,7 @@ export class Agent implements AgentHandle {
       isCancelled: () => runCtx.cancelled,
       signal: runCtx.controller.signal,
       budget,
+      outputArtifacts,
       capabilityScope: options.capabilityScope,
       lineage: {
         parentSessionId: options.parentSessionId,

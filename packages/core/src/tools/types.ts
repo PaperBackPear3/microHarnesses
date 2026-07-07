@@ -1,4 +1,5 @@
 import type { TraceContext } from "../observability/types";
+import type { ToolOutputArtifacts } from "./outputArtifacts";
 
 export interface ToolCall {
   name: string;
@@ -77,11 +78,18 @@ export interface ToolInputAnnotation {
  */
 export interface ToolExecutionContext {
   signal: AbortSignal;
+  runId?: string;
+  sessionId?: string;
   /**
    * Trace context of the action span, so tools that spawn nested work (e.g.
    * subagents) can link their traces to the parent.
    */
   traceContext?: TraceContext;
+  /**
+   * Optional store for persisting oversized tool output and reading it back in
+   * follow-up calls.
+   */
+  outputArtifacts?: ToolOutputArtifacts;
 }
 
 export interface ToolDescriptor {

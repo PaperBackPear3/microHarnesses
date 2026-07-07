@@ -59,6 +59,7 @@ export const DEFAULT_MUTATING_TOOLS = [
 
 /** Read-only / planning tools allowed while in plan mode. */
 export const DEFAULT_PLAN_ALLOWED_TOOLS = [
+  "tool_output_read",
   "fs_list",
   "fs_read",
   "grep_search",
