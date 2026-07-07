@@ -6,7 +6,7 @@ export interface SubagentRunOptions {
   /** Human-friendly display name for UI/status surfaces. */
   name?: string;
   prompt: string;
-  /** Prompt-pack persona the child agent runs; defaults to the parent's persona. */
+  /** Prompt-pack persona the child agent runs; default is runtime-specific (CLI defaults to `coder`). */
   promptName?: string;
   maxIterations?: number;
   /** Tools the child may use; defaults to all parent tools except spawn tools. */
