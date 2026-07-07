@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
-  Agent,
+  type Agent,
   CompositePolicyEngine,
   ContextManager,
   CredentialsRegistry,
@@ -30,6 +30,7 @@ import {
   createCommandSafetyRule,
   createCoreDefaultTools,
   createModeAwareApprovalPolicy,
+  defineAgent,
   detectOllamaContextWindowTokens,
   modelForEffort,
   planModeAllowActions,
@@ -157,8 +158,9 @@ export async function buildComposition(
     skills.register(skill);
   }
 
-  const agent = new Agent({
-    promptName: "coder",
+  const agent = defineAgent({
+    name: "coder",
+    prompt: "",
     model,
     modelSelector,
     prompts,
@@ -192,8 +194,9 @@ export async function buildComposition(
           turnCompactionTargetRatio: config.turnCompactionTargetRatio,
           nonTurnTokenReserve: config.nonTurnTokenReserve,
         });
-        const childAgent = new Agent({
-          promptName: request.promptName ?? "coder",
+        const childAgent = defineAgent({
+          name: request.promptName ?? "coder",
+          prompt: "",
           model,
           modelSelector,
           prompts,

@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ChannelRegistry } from "../channels/registry";
 import { InMemoryObservabilityExporter } from "../observability/inMemoryExporter";
 import { DefaultObservabilityProvider } from "../observability/provider";
 import { CompositePolicyEngine } from "../policy/compositePolicyEngine";
 import { DefaultPolicyEngine } from "../policy/defaultPolicyEngine";
 import { CredentialsRegistry } from "../providers/credentialsRegistry";
 import { ProviderRegistry } from "../providers/registry";
-import { PluginCapabilityError, PluginLoadError } from "../shared/errors";
+import { PluginLoadError } from "../shared/errors";
 import { SkillRegistry } from "../skills/registry";
 import { ToolRegistry } from "../tools/registry";
 import { PluginHost } from "./host";
@@ -18,7 +17,6 @@ function buildHost() {
   const providers = new ProviderRegistry();
   const credentials = new CredentialsRegistry();
   const policy = new CompositePolicyEngine(new DefaultPolicyEngine());
-  const channels = new ChannelRegistry();
   const skills = new SkillRegistry();
   const beforeHooks: unknown[] = [];
   const afterHooks: unknown[] = [];
@@ -27,7 +25,6 @@ function buildHost() {
     providers,
     credentials,
     policy,
-    channels,
     skills,
     beforeHooks,
     afterHooks,
@@ -36,7 +33,6 @@ function buildHost() {
       providers,
       credentials,
       policy,
-      channels,
       skills,
       onBeforeLoop: (hook) => beforeHooks.push(hook),
       onAfterLoop: (hook) => afterHooks.push(hook),
@@ -46,11 +42,10 @@ function buildHost() {
   };
 }
 
-test("plugin registers a tool when it declares the tools capability", async () => {
+test("plugin registers a tool", async () => {
   const { host, tools } = buildHost();
   const plugin: HarnessPlugin = {
     name: "p",
-    capabilities: ["tools"],
     register(api: PluginApi) {
       api.registerTool({
         name: "t",
@@ -67,43 +62,20 @@ test("plugin registers a tool when it declares the tools capability", async () =
   assert.deepEqual([...host.plugins().keys()], ["p"]);
 });
 
-test("host throws when plugin uses a capability it did not declare", async () => {
-  const { host } = buildHost();
-  const plugin: HarnessPlugin = {
-    name: "p",
-    capabilities: ["tools"],
-    register(api: PluginApi) {
-      api.registerPolicyRule(() => undefined);
-    },
-  };
-  await assert.rejects(() => host.register([plugin]), PluginCapabilityError);
-});
-
-test("host throws PluginLoadError when a plugin lacks capabilities array", async () => {
-  const { host } = buildHost();
-  const plugin = {
-    name: "bad",
-    register() {},
-  } as unknown as HarnessPlugin;
-  await assert.rejects(() => host.register([plugin]), PluginLoadError);
-});
-
 test("host rejects duplicate plugin names", async () => {
   const { host } = buildHost();
   const plugin: HarnessPlugin = {
     name: "dup",
-    capabilities: [],
     register() {},
   };
   await host.register([plugin]);
   await assert.rejects(() => host.register([plugin]), PluginLoadError);
 });
 
-test("hooks capability enables onBeforeLoop / onAfterLoop", async () => {
+test("hooks registration attaches before/after hooks", async () => {
   const { host, beforeHooks, afterHooks } = buildHost();
   const plugin: HarnessPlugin = {
     name: "hooks",
-    capabilities: ["hooks"],
     register(api: PluginApi) {
       api.onBeforeLoop(async () => {});
       api.onAfterLoop(async () => {});
@@ -114,41 +86,10 @@ test("hooks capability enables onBeforeLoop / onAfterLoop", async () => {
   assert.equal(afterHooks.length, 1);
 });
 
-test("channels and skills capabilities register definitions", async () => {
-  const { host, channels, skills } = buildHost();
-  const plugin: HarnessPlugin = {
-    name: "cs",
-    capabilities: ["channels", "skills"],
-    register(api: PluginApi) {
-      api.registerChannel({
-        id: "in-memory",
-        description: "test",
-        async handle(_request, context) {
-          return context.invoke({
-            input: "p",
-            runOptions: { maxIterations: 1, snapshotEvery: 1, profile: { defaultModel: "m" } },
-          });
-        },
-      });
-      api.registerSkill({
-        name: "s",
-        description: "skill",
-        async execute() {
-          return { ok: true };
-        },
-      });
-    },
-  };
-  await host.register([plugin]);
-  assert.equal(channels.get("in-memory").id, "in-memory");
-  assert.equal(skills.get("s").name, "s");
-});
-
-test("registration is atomic: a plugin that throws commits nothing it staged", async () => {
+test("registration is atomic when plugin register throws", async () => {
   const { host, tools } = buildHost();
   const plugin: HarnessPlugin = {
     name: "boom",
-    capabilities: ["tools"],
     register(api: PluginApi) {
       api.registerTool({
         name: "t",
@@ -162,7 +103,7 @@ test("registration is atomic: a plugin that throws commits nothing it staged", a
     },
   };
   await assert.rejects(() => host.register([plugin]), /registration failed/);
-  assert.equal(tools.has("t"), false, "staged tool must not be committed");
+  assert.equal(tools.has("t"), false);
   assert.equal(host.plugins().has("boom"), false);
 });
 
@@ -170,7 +111,6 @@ test("host rejects two plugins claiming the model selector", async () => {
   const { host } = buildHost();
   const makeSelectorPlugin = (name: string): HarnessPlugin => ({
     name,
-    capabilities: ["model-selector"],
     register(api: PluginApi) {
       api.setModelSelector({ select: () => ({ model: "m", reason: "profile" }) });
     },
@@ -179,19 +119,68 @@ test("host rejects two plugins claiming the model selector", async () => {
   await assert.rejects(() => host.register([makeSelectorPlugin("b")]), PluginLoadError);
 });
 
-test("host throws when a plugin uses observability without declaring it", async () => {
+test("host rejects two plugins claiming the compressor", async () => {
+  const { host } = buildHost();
+  const makeCompressorPlugin = (name: string): HarnessPlugin => ({
+    name,
+    register(api: PluginApi) {
+      api.setCompressor(async () => ({
+        summary: "s",
+        highlights: [],
+        supportHistory: [],
+        overflowTurns: 0,
+        compressed: false,
+        forced: false,
+        deltaTurns: 0,
+      }));
+    },
+  });
+  await host.register([makeCompressorPlugin("a")]);
+  await assert.rejects(() => host.register([makeCompressorPlugin("b")]), PluginLoadError);
+});
+
+test("host throws when plugin requests skills without a configured skill registry", async () => {
+  const tools = new ToolRegistry();
+  const providers = new ProviderRegistry();
+  const credentials = new CredentialsRegistry();
+  const policy = new CompositePolicyEngine(new DefaultPolicyEngine());
+  const host = new PluginHost({
+    tools,
+    providers,
+    credentials,
+    policy,
+    onBeforeLoop: () => {},
+    onAfterLoop: () => {},
+    setCompressor: () => {},
+    setModelSelector: () => {},
+  });
+  const plugin: HarnessPlugin = {
+    name: "skills",
+    register(api: PluginApi) {
+      api.registerSkill({
+        name: "s",
+        description: "skill",
+        async execute() {
+          return { ok: true };
+        },
+      });
+    },
+  };
+  await assert.rejects(() => host.register([plugin]), PluginLoadError);
+});
+
+test("host throws when plugin uses observability without a configured provider", async () => {
   const { host } = buildHost();
   const plugin: HarnessPlugin = {
-    name: "obs-undeclared",
-    capabilities: ["tools"],
+    name: "obs-missing",
     register(api: PluginApi) {
       api.observability.registerTraceExporter({ export() {} });
     },
   };
-  await assert.rejects(() => host.register([plugin]), PluginCapabilityError);
+  await assert.rejects(() => host.register([plugin]), PluginLoadError);
 });
 
-test("plugin registers observability exporters when it declares the capability", async () => {
+test("plugin registers observability exporters when provider exists", async () => {
   const tools = new ToolRegistry();
   const providers = new ProviderRegistry();
   const credentials = new CredentialsRegistry();
@@ -219,7 +208,6 @@ test("plugin registers observability exporters when it declares the capability",
   const memory = new InMemoryObservabilityExporter();
   const plugin: HarnessPlugin = {
     name: "otel-ish",
-    capabilities: ["observability"],
     register(api: PluginApi) {
       api.observability.registerTraceExporter(memory);
     },

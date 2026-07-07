@@ -1,7 +1,6 @@
 import {
   type HarnessPlugin,
   type PluginApi,
-  type PluginCapability,
   type ToolDefinition,
   clampNumber,
   normalizeStringList,
@@ -12,7 +11,7 @@ type StepTemplate = { title: string; detail: string };
 
 export class PlannerPlugin implements HarnessPlugin {
   readonly name = "planner-plugin";
-  readonly capabilities: PluginCapability[] = ["tools"];
+  readonly capabilities = ["tools"];
 
   register(api: PluginApi): void {
     api.registerTool(this.planAgentTool());

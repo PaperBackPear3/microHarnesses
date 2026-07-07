@@ -13,7 +13,6 @@ function makeApi(tools: Map<string, ToolDefinition>): PluginApi {
     registerTool(tool) {
       tools.set(tool.name, tool);
     },
-    registerChannel() {},
     registerSkill() {},
     onBeforeLoop() {},
     onAfterLoop() {},

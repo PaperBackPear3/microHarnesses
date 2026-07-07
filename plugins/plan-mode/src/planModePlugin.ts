@@ -1,9 +1,4 @@
-import type {
-  HarnessPlugin,
-  PluginApi,
-  PluginCapability,
-  ToolDefinition,
-} from "@micro-harnesses/core";
+import type { HarnessPlugin, PluginApi, ToolDefinition } from "@micro-harnesses/core";
 import { ExplorerPlugin, type ExplorerPluginOptions } from "./agents/explorerPlugin";
 import { PlannerPlugin } from "./agents/plannerPlugin";
 
@@ -18,7 +13,7 @@ export type PlanModePluginOptions = ExplorerPluginOptions;
  */
 export class PlanModePlugin implements HarnessPlugin {
   readonly name = "plan-mode-plugin";
-  readonly capabilities: PluginCapability[] = ["tools"];
+  readonly capabilities = ["tools"];
   private readonly planner: PlannerPlugin;
   private readonly explorer: ExplorerPlugin;
 

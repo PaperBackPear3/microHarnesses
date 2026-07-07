@@ -1,8 +1,4 @@
-import type {
-  SubagentRunner,
-  SubagentSupervisor,
-  SubagentWaitOptions,
-} from "../../subagents/types";
+import type { SubagentService, SubagentWaitOptions } from "../../subagents/types";
 import type { ToolDefinition } from "../../tools/types";
 
 export interface SpawnSubagentToolOptions {
@@ -15,7 +11,7 @@ const SPAWN_TOOL_NAME = "spawn_subagent";
 const WAIT_TOOL_NAME = "wait_subagents";
 
 export function createSpawnSubagentTool(
-  runner: SubagentRunner,
+  subagents: SubagentService,
   options: SpawnSubagentToolOptions = {},
 ): ToolDefinition {
   const toolName = options.toolName ?? SPAWN_TOOL_NAME;
@@ -24,8 +20,7 @@ export function createSpawnSubagentTool(
 
   return {
     name: toolName,
-    description:
-      "Delegate a task to a fresh child agent. With a subagent supervisor, returns a handle immediately; otherwise runs the child to completion and returns a summary.",
+    description: "Delegate a task to a fresh child agent and return a running subagent handle.",
     risk: "high",
     capabilities: ["agent.spawn", "subagent.invoke"],
     tags: ["subagent", "delegation"],
@@ -61,25 +56,7 @@ export function createSpawnSubagentTool(
           : maxIterations;
       const goal = typeof input.goal === "string" ? input.goal : undefined;
 
-      if (isSubagentSupervisor(runner)) {
-        const spawned = await runner.spawn({
-          prompt,
-          promptName: requestedAgent,
-          allowedTools: requestedTools,
-          maxIterations: requestedMaxIterations,
-          goal,
-          signal: context?.signal,
-          ...(context?.traceContext ? { parentTrace: context.traceContext } : {}),
-        });
-        return {
-          subagentId: spawned.id,
-          launchIndex: spawned.launchIndex,
-          status: spawned.status,
-          ...(spawned.sessionId ? { sessionId: spawned.sessionId } : {}),
-        };
-      }
-
-      const result = await runner.run({
+      const spawned = await subagents.spawn({
         prompt,
         promptName: requestedAgent,
         allowedTools: requestedTools,
@@ -89,9 +66,10 @@ export function createSpawnSubagentTool(
         ...(context?.traceContext ? { parentTrace: context.traceContext } : {}),
       });
       return {
-        summary: result.summary,
-        turns: result.state.turns.length,
-        sessionId: result.state.sessionId,
+        subagentId: spawned.id,
+        launchIndex: spawned.launchIndex,
+        status: spawned.status,
+        ...(spawned.sessionId ? { sessionId: spawned.sessionId } : {}),
       };
     },
   };
@@ -102,7 +80,7 @@ export interface WaitSubagentsToolOptions {
 }
 
 export function createWaitSubagentsTool(
-  supervisor: SubagentSupervisor,
+  subagents: SubagentService,
   options: WaitSubagentsToolOptions = {},
 ): ToolDefinition {
   const toolName = options.toolName ?? WAIT_TOOL_NAME;
@@ -131,7 +109,7 @@ export function createWaitSubagentsTool(
         signal: context?.signal,
         ...(ids && ids.length > 0 ? { ids } : {}),
       };
-      const result = await supervisor.wait(waitOptions);
+      const result = await subagents.wait(waitOptions);
       return {
         completed: result.completed,
         running: result.running,
@@ -139,13 +117,4 @@ export function createWaitSubagentsTool(
       };
     },
   };
-}
-
-export function isSubagentSupervisor(runner: SubagentRunner): runner is SubagentSupervisor {
-  const candidate = runner as Partial<SubagentSupervisor>;
-  return (
-    typeof candidate.spawn === "function" &&
-    typeof candidate.wait === "function" &&
-    typeof candidate.list === "function"
-  );
 }

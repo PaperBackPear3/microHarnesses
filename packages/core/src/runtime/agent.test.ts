@@ -747,19 +747,3 @@ test("run streams run.failed and rethrows when a step throws", async () => {
     true,
   );
 });
-
-test("handleChannel maps channel request to runtime invoke", async () => {
-  const obs = makeObs();
-  const runtime = new Agent({
-    promptName: "default",
-    model: new FakeModel({ assistantMessage: "channel result", toolCalls: [], stop: true }),
-    modelSelector: new FakeModelSelector(),
-    prompts: new FakePromptSource(),
-    tools: new ToolRegistry(),
-    context: new FakeContextManager() as never,
-    policy: new AllowPolicy(),
-    observability: obs.provider,
-  });
-  const response = await runtime.handleChannel({ input: "hello", runOptions: options });
-  assert.equal(response.finalMessage, "channel result");
-});

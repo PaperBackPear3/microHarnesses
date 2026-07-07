@@ -1,4 +1,4 @@
-import type { HarnessPlugin, PluginApi, PluginCapability } from "@micro-harnesses/core";
+import type { HarnessPlugin, PluginApi } from "@micro-harnesses/core";
 import { type AgenticCompressorOptions, createAgenticCompressor } from "./agenticCompressor";
 
 export type AgenticCompressionPluginOptions = Omit<AgenticCompressorOptions, "spawn">;
@@ -12,7 +12,7 @@ export type AgenticCompressionPluginOptions = Omit<AgenticCompressorOptions, "sp
  */
 export class AgenticCompressionPlugin implements HarnessPlugin {
   readonly name = "agentic-compression-plugin";
-  readonly capabilities: PluginCapability[] = ["compressor", "agents"];
+  readonly capabilities = ["compressor", "agents"];
   private readonly options: AgenticCompressionPluginOptions;
 
   constructor(options: AgenticCompressionPluginOptions = {}) {

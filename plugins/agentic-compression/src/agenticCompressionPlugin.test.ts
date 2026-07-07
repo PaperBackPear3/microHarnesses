@@ -12,7 +12,6 @@ function makeApi(
   let compressor: CompressorFn | undefined;
   const api: PluginApi = {
     registerTool() {},
-    registerChannel() {},
     registerSkill() {},
     onBeforeLoop() {},
     onAfterLoop() {},

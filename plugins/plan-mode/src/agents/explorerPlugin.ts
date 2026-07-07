@@ -3,7 +3,6 @@ import path from "node:path";
 import {
   type HarnessPlugin,
   type PluginApi,
-  type PluginCapability,
   type ToolDefinition,
   clampNumber,
   safeResolve,
@@ -24,7 +23,7 @@ export interface ExplorerPluginOptions {
 
 export class ExplorerPlugin implements HarnessPlugin {
   readonly name = "explorer-plugin";
-  readonly capabilities: PluginCapability[] = ["tools"];
+  readonly capabilities = ["tools"];
   private readonly rootDir: string;
   private readonly maxExploreFiles: number;
   private readonly maxDepth: number;

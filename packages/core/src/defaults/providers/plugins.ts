@@ -1,4 +1,4 @@
-import type { HarnessPlugin, PluginApi, PluginCapability } from "../../plugins/types";
+import type { HarnessPlugin, PluginApi } from "../../plugins/types";
 import type { CredentialsRegistry } from "../../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../../providers/types";
@@ -14,8 +14,6 @@ import { OllamaAdapter, type OllamaAdapterOptions } from "./ollamaAdapter";
 import { OpenAIAdapter, type OpenAIAdapterOptions } from "./openaiAdapter";
 import { OpenAICompatAdapter, type OpenAICompatAdapterOptions } from "./openaiCompatAdapter";
 
-const PROVIDER_CAPABILITIES: PluginCapability[] = ["providers", "credentials"];
-
 export function createProviderPlugin(
   name: string,
   adapter: ProviderAdapter,
@@ -23,7 +21,6 @@ export function createProviderPlugin(
 ): HarnessPlugin {
   return {
     name,
-    capabilities: PROVIDER_CAPABILITIES,
     register(api: PluginApi) {
       api.registerProvider(adapter);
       api.registerCredentialsResolver(adapter.providerId, credentials);

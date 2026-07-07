@@ -66,15 +66,14 @@ export interface SubagentWaitResult {
   running: SubagentSnapshot[];
 }
 
-export interface SubagentRunner {
+export interface SubagentService {
   run(options: SubagentRunOptions): Promise<SubagentResult>;
-}
-
-export interface SubagentSupervisor extends SubagentRunner {
   spawn(options: SubagentRunOptions): Promise<SubagentSpawnResult>;
   wait(options?: SubagentWaitOptions): Promise<SubagentWaitResult>;
   list(): SubagentSnapshot[];
 }
+export type SubagentRunner = SubagentService;
+export type SubagentSupervisor = SubagentService;
 
 /**
  * Composition-root callback that builds a child agent for a subagent run.

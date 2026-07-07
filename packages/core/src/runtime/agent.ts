@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { type ActionCallBudget, ActionExecutionEngine } from "../actions/executionEngine";
-import type { ChannelRequest, ChannelResponse } from "../channels/types";
 import type { ContextManager } from "../context/manager";
 import type { ModelAdapter, ModelSelector } from "../model/types";
 import { NoopObservabilityProvider } from "../observability/noop";
@@ -674,20 +673,6 @@ export class Agent implements AgentHandle {
       state,
       runId: state.runId,
       sessionId: state.sessionId,
-    };
-  }
-
-  async handleChannel(request: ChannelRequest): Promise<ChannelResponse> {
-    const result = await this.invoke({
-      prompt: request.input,
-      execution: {
-        ...request.runOptions,
-        ...(request.sessionId ? { sessionId: request.sessionId } : {}),
-      },
-    });
-    return {
-      state: result.state,
-      finalMessage: result.summary,
     };
   }
 }
