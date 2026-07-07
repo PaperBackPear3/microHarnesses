@@ -1,3 +1,4 @@
+import type { ModelRoutingPreference } from "../../model/types";
 import type { SubagentService, SubagentWaitOptions } from "../../subagents/types";
 import type { ToolDefinition } from "../../tools/types";
 
@@ -10,6 +11,22 @@ export interface SpawnSubagentToolOptions {
 const SPAWN_TOOL_NAME = "spawn_subagent";
 const WAIT_TOOL_NAME = "wait_subagents";
 
+const ROUTING_PREFERENCES = ["auto", "cost", "speed", "intelligence", "balanced"] as const;
+const EFFORT_LEVELS = ["low", "medium", "high"] as const;
+
+/**
+ * Parses a provider-qualified model id of the form `provider/model` (e.g.
+ * `ollama/lfm2.5:8b`, `anthropic/claude-haiku-4-5`) into a
+ * `{ providerId, model }` pair. Only the first `/` is treated as the
+ * separator so model tags like `:8b` are preserved untouched. Returns
+ * `{ model }` when no `/` is present.
+ */
+export function parseModelInput(raw: string): { model: string; providerId?: string } {
+  const slash = raw.indexOf("/");
+  if (slash === -1) return { model: raw };
+  return { providerId: raw.slice(0, slash), model: raw.slice(slash + 1) };
+}
+
 export function createSpawnSubagentTool(
   subagents: SubagentService,
   options: SpawnSubagentToolOptions = {},
@@ -21,16 +38,45 @@ export function createSpawnSubagentTool(
   return {
     name: toolName,
     description:
-      "Delegate a task to a fresh child agent and return a running subagent handle. Use name for UI label, promptName for installed prompt-pack persona.",
+      "Delegate a task to a fresh child agent and return a running subagent handle. " +
+      "Use 'name' for UI display labels. " +
+      "Use 'model' for model selection — supports plain ids ('gpt-5.4-mini') and " +
+      "provider-qualified ids ('ollama/lfm2.5:8b', 'anthropic/claude-haiku-4-5'). " +
+      "Use 'providerId' to override the provider when 'model' is not provider-qualified. " +
+      "Use 'promptName' only for installed prompt-pack persona ids ('coder', 'planner', etc.) — " +
+      "not for model names or display labels.",
     risk: "high",
     capabilities: ["agent.spawn", "subagent.invoke"],
     tags: ["subagent", "delegation"],
     inputSchema: {
       type: "object",
       properties: {
-        name: { type: "string" },
-        prompt: { type: "string" },
-        promptName: { type: "string" },
+        name: { type: "string", description: "UI display label for this subagent." },
+        prompt: { type: "string", description: "Task or instructions for the child agent." },
+        promptName: {
+          type: "string",
+          description:
+            "Prompt-pack persona id (e.g. 'coder', 'planner'). Not for model names — use 'model' instead.",
+        },
+        model: {
+          type: "string",
+          description:
+            "Model to use. Accepts plain ids ('gpt-5.4-mini') or provider-qualified ids ('ollama/lfm2.5:8b').",
+        },
+        providerId: {
+          type: "string",
+          description: "Provider id override when 'model' is not provider-qualified.",
+        },
+        routingPreference: {
+          type: "string",
+          enum: [...ROUTING_PREFERENCES],
+          description: "Router preference: auto, cost, speed, intelligence, or balanced.",
+        },
+        effort: {
+          type: "string",
+          enum: [...EFFORT_LEVELS],
+          description: "Effort level: low, medium, or high.",
+        },
         allowedTools: { type: "array", items: { type: "string" } },
         maxIterations: { type: "number" },
         goal: { type: "string" },
@@ -43,10 +89,41 @@ export function createSpawnSubagentTool(
       if (!prompt) {
         throw new Error(`${toolName}: "prompt" is required`);
       }
-      const requestedAgent =
-        typeof input.promptName === "string" && input.promptName.trim().length > 0
-          ? input.promptName
-          : defaultPromptName;
+
+      // Resolve model/providerId — supports provider-qualified shorthand.
+      let resolvedModel: string | undefined;
+      let resolvedProviderId: string | undefined;
+      if (typeof input.model === "string" && input.model.trim().length > 0) {
+        const parsed = parseModelInput(input.model.trim());
+        resolvedModel = parsed.model;
+        resolvedProviderId = parsed.providerId;
+      }
+      // Explicit providerId wins over what was parsed from the model string.
+      if (typeof input.providerId === "string" && input.providerId.trim().length > 0) {
+        resolvedProviderId = input.providerId.trim();
+      }
+
+      // Resolve promptName / compatibility shim.
+      // If promptName looks like "provider/model" (contains a slash) and no
+      // explicit model was given, treat it as a model override and fall back
+      // to the default persona — this handles the common mistake of passing a
+      // model id where a persona id belongs.
+      let requestedAgent: string | undefined;
+      const rawPromptName =
+        typeof input.promptName === "string" ? input.promptName.trim() : undefined;
+      if (rawPromptName) {
+        if (rawPromptName.includes("/") && !resolvedModel) {
+          const parsed = parseModelInput(rawPromptName);
+          resolvedModel = parsed.model;
+          resolvedProviderId = parsed.providerId;
+          requestedAgent = defaultPromptName;
+        } else {
+          requestedAgent = rawPromptName;
+        }
+      } else {
+        requestedAgent = defaultPromptName;
+      }
+
       const requestedName = typeof input.name === "string" ? input.name.trim() : "";
       const requestedTools = Array.isArray(input.allowedTools)
         ? input.allowedTools.filter(
@@ -59,10 +136,27 @@ export function createSpawnSubagentTool(
           : maxIterations;
       const goal = typeof input.goal === "string" ? input.goal : undefined;
 
+      const rawPreference =
+        typeof input.routingPreference === "string" ? input.routingPreference : undefined;
+      const routingPreference =
+        rawPreference && (ROUTING_PREFERENCES as readonly string[]).includes(rawPreference)
+          ? (rawPreference as ModelRoutingPreference)
+          : undefined;
+
+      const rawEffort = typeof input.effort === "string" ? input.effort : undefined;
+      const effort =
+        rawEffort && (EFFORT_LEVELS as readonly string[]).includes(rawEffort)
+          ? (rawEffort as "low" | "medium" | "high")
+          : undefined;
+
       const spawned = await subagents.spawn({
         ...(requestedName.length > 0 ? { name: requestedName } : {}),
         prompt,
         promptName: requestedAgent,
+        ...(resolvedModel ? { model: resolvedModel } : {}),
+        ...(resolvedProviderId ? { providerId: resolvedProviderId } : {}),
+        ...(routingPreference ? { routingPreference } : {}),
+        ...(effort ? { effort } : {}),
         allowedTools: requestedTools,
         maxIterations: requestedMaxIterations,
         goal,
