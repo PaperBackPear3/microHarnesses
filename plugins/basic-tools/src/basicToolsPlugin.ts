@@ -1,11 +1,11 @@
-import type { HarnessPlugin, PluginApi } from "@micro-harnesses/core";
+import type { HarnessPlugin, PluginApi, PluginCapability } from "@micro-harnesses/core";
 import { type BasicToolsPluginOptions, resolveOptions } from "./options";
 import { createFilesystemTools } from "./tools/filesystemTools";
 import { createShellTool } from "./tools/shellTool";
 
 export class BasicToolsPlugin implements HarnessPlugin {
   readonly name = "basic-tools-plugin";
-  readonly capabilities = ["tools"];
+  readonly capabilities: PluginCapability[] = ["tools"];
   private readonly options: ReturnType<typeof resolveOptions>;
 
   constructor(options: BasicToolsPluginOptions = {}) {

@@ -3,10 +3,12 @@ import type { ProviderRegistry } from "../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
 import type { AfterLoopHook, BeforeLoopHook } from "../runtime/types";
 import { ValidationError } from "../shared/errors";
+import type { ChannelRegistry } from "../channels/registry";
 import type { SubagentService } from "../subagents/types";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
 import { registerBuiltInProviders, registerProviders } from "./providers/plugins";
+import { type ChannelToolsOptions, createChannelTools } from "./tools/channels";
 import { type PlanModeToolsOptions, createPlanModeTools } from "./tools/planMode";
 import {
   type SpawnSubagentToolOptions,
@@ -24,6 +26,7 @@ export * from "./tools/planMode";
 export * from "./tools/workspaceReadOnly";
 export * from "./tools/spawnSubagentTool";
 export * from "./tools/toolOutputRead";
+export * from "./tools/channels";
 
 export interface LoopHookRegistrar {
   onBeforeLoop(hook: BeforeLoopHook): void;
@@ -57,6 +60,7 @@ export interface RegisterCoreDefaultsOptions {
 export interface CreateCoreDefaultToolsOptions {
   workspaceTools?: ReadOnlyWorkspaceToolsOptions;
   planModeTools?: PlanModeToolsOptions;
+  channelTools?: Omit<ChannelToolsOptions, "registry"> & { registry: ChannelRegistry };
   subagents?: SubagentService;
   spawnSubagent?: SpawnSubagentToolOptions;
 }
@@ -68,6 +72,9 @@ export function createCoreDefaultTools(options: CreateCoreDefaultToolsOptions): 
   }
   if (options.planModeTools) {
     tools.push(...createPlanModeTools(options.planModeTools));
+  }
+  if (options.channelTools) {
+    tools.push(...createChannelTools(options.channelTools));
   }
   if (options.subagents) {
     tools.push(createSpawnSubagentTool(options.subagents, options.spawnSubagent));

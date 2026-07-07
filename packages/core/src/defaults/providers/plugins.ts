@@ -21,6 +21,7 @@ export function createProviderPlugin(
 ): HarnessPlugin {
   return {
     name,
+    capabilities: ["providers", "credentials"],
     register(api: PluginApi) {
       api.registerProvider(adapter);
       api.registerCredentialsResolver(adapter.providerId, credentials);

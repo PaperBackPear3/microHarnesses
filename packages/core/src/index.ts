@@ -65,6 +65,10 @@ export * from "./context/overflowPlan";
 export * from "./session/types";
 export * from "./session/sessionStore";
 
+// Channels
+export * from "./channels/types";
+export * from "./channels/registry";
+
 // Observability (traces + metrics + logs; zero-dependency, OTel-shaped)
 export * from "./observability/types";
 export * from "./observability/tokenCounter";

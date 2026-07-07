@@ -6,9 +6,10 @@ import { CompositePolicyEngine } from "../policy/compositePolicyEngine";
 import { DefaultPolicyEngine } from "../policy/defaultPolicyEngine";
 import { CredentialsRegistry } from "../providers/credentialsRegistry";
 import { ProviderRegistry } from "../providers/registry";
-import { PluginLoadError } from "../shared/errors";
+import { PluginCapabilityError, PluginLoadError } from "../shared/errors";
 import { SkillRegistry } from "../skills/registry";
 import { ToolRegistry } from "../tools/registry";
+import { ChannelRegistry } from "../channels/registry";
 import { PluginHost } from "./host";
 import type { HarnessPlugin, PluginApi } from "./types";
 
@@ -18,6 +19,7 @@ function buildHost() {
   const credentials = new CredentialsRegistry();
   const policy = new CompositePolicyEngine(new DefaultPolicyEngine());
   const skills = new SkillRegistry();
+  const channels = new ChannelRegistry();
   const beforeHooks: unknown[] = [];
   const afterHooks: unknown[] = [];
   return {
@@ -26,6 +28,7 @@ function buildHost() {
     credentials,
     policy,
     skills,
+    channels,
     beforeHooks,
     afterHooks,
     host: new PluginHost({
@@ -38,6 +41,7 @@ function buildHost() {
       onAfterLoop: (hook) => afterHooks.push(hook),
       setCompressor: () => {},
       setModelSelector: () => {},
+      channels,
     }),
   };
 }
@@ -46,6 +50,7 @@ test("plugin registers a tool", async () => {
   const { host, tools } = buildHost();
   const plugin: HarnessPlugin = {
     name: "p",
+    capabilities: ["tools"],
     register(api: PluginApi) {
       api.registerTool({
         name: "t",
@@ -66,6 +71,7 @@ test("host rejects duplicate plugin names", async () => {
   const { host } = buildHost();
   const plugin: HarnessPlugin = {
     name: "dup",
+    capabilities: ["tools"],
     register() {},
   };
   await host.register([plugin]);
@@ -76,6 +82,7 @@ test("hooks registration attaches before/after hooks", async () => {
   const { host, beforeHooks, afterHooks } = buildHost();
   const plugin: HarnessPlugin = {
     name: "hooks",
+    capabilities: ["hooks"],
     register(api: PluginApi) {
       api.onBeforeLoop(async () => {});
       api.onAfterLoop(async () => {});
@@ -90,6 +97,7 @@ test("registration is atomic when plugin register throws", async () => {
   const { host, tools } = buildHost();
   const plugin: HarnessPlugin = {
     name: "boom",
+    capabilities: ["tools"],
     register(api: PluginApi) {
       api.registerTool({
         name: "t",
@@ -111,6 +119,7 @@ test("host rejects two plugins claiming the model selector", async () => {
   const { host } = buildHost();
   const makeSelectorPlugin = (name: string): HarnessPlugin => ({
     name,
+    capabilities: ["model-selector"],
     register(api: PluginApi) {
       api.setModelSelector({ select: () => ({ model: "m", reason: "profile" }) });
     },
@@ -123,6 +132,7 @@ test("host rejects two plugins claiming the compressor", async () => {
   const { host } = buildHost();
   const makeCompressorPlugin = (name: string): HarnessPlugin => ({
     name,
+    capabilities: ["compressor"],
     register(api: PluginApi) {
       api.setCompressor(async () => ({
         summary: "s",
@@ -156,6 +166,7 @@ test("host throws when plugin requests skills without a configured skill registr
   });
   const plugin: HarnessPlugin = {
     name: "skills",
+    capabilities: ["skills"],
     register(api: PluginApi) {
       api.registerSkill({
         name: "s",
@@ -173,6 +184,7 @@ test("host throws when plugin uses observability without a configured provider",
   const { host } = buildHost();
   const plugin: HarnessPlugin = {
     name: "obs-missing",
+    capabilities: ["observability"],
     register(api: PluginApi) {
       api.observability.registerTraceExporter({ export() {} });
     },
@@ -208,6 +220,7 @@ test("plugin registers observability exporters when provider exists", async () =
   const memory = new InMemoryObservabilityExporter();
   const plugin: HarnessPlugin = {
     name: "otel-ish",
+    capabilities: ["observability"],
     register(api: PluginApi) {
       api.observability.registerTraceExporter(memory);
     },
@@ -218,4 +231,42 @@ test("plugin registers observability exporters when provider exists", async () =
   span.end();
   await provider.forceFlush();
   assert.equal(memory.getSpans().length, 1);
+});
+
+test("host throws when plugin uses undeclared capability", async () => {
+  const { host } = buildHost();
+  const plugin: HarnessPlugin = {
+    name: "bad-cap",
+    capabilities: ["tools"],
+    register(api: PluginApi) {
+      api.registerProvider({
+        providerId: "p",
+        defaultModel: "m",
+        async complete() {
+          return { assistantMessage: "", toolCalls: [], stop: true };
+        },
+      });
+    },
+  };
+  await assert.rejects(() => host.register([plugin]), PluginCapabilityError);
+});
+
+test("plugin can register channel adapters when capability is declared", async () => {
+  const { host, channels } = buildHost();
+  const plugin: HarnessPlugin = {
+    name: "channels",
+    capabilities: ["channels"],
+    register(api: PluginApi) {
+      api.registerChannel({
+        channelId: "email",
+        description: "SMTP",
+        transport: "smtp",
+        async send() {
+          return { channelId: "email", accepted: true, status: "sent", deliveries: [] };
+        },
+      });
+    },
+  };
+  await host.register([plugin]);
+  assert.equal(channels.has("email"), true);
 });

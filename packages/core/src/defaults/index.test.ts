@@ -3,6 +3,7 @@ import test from "node:test";
 import { CredentialsRegistry } from "../providers/credentialsRegistry";
 import { ProviderRegistry } from "../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
+import { ChannelRegistry } from "../channels/registry";
 import type { SubagentSupervisor } from "../subagents/types";
 import { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
@@ -125,6 +126,28 @@ test("createCoreDefaultTools registers wait tool for subagent supervisors", () =
   assert.deepEqual(
     tools.map((tool) => tool.name),
     ["tool_output_read", "spawn_subagent", "wait_subagents"],
+  );
+});
+
+test("createCoreDefaultTools registers channel tools when provided", () => {
+  const channels = new ChannelRegistry();
+  channels.register({
+    channelId: "email",
+    description: "SMTP",
+    transport: "smtp",
+    async send() {
+      return {
+        channelId: "email",
+        accepted: true,
+        status: "sent",
+        deliveries: [],
+      };
+    },
+  });
+  const tools = createCoreDefaultTools({ channelTools: { registry: channels } });
+  assert.deepEqual(
+    tools.map((tool) => tool.name),
+    ["tool_output_read", "channel_list", "channel_send"],
   );
 });
 

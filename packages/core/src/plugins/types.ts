@@ -19,6 +19,20 @@ import type {
 import type { SkillDefinition } from "../skills/types";
 import type { SubagentResult, SubagentRunOptions } from "../subagents/types";
 import type { ToolDefinition } from "../tools/types";
+import type { ChannelAdapter } from "../channels/types";
+
+export type PluginCapability =
+  | "tools"
+  | "hooks"
+  | "compressor"
+  | "providers"
+  | "credentials"
+  | "policy"
+  | "model-selector"
+  | "channels"
+  | "skills"
+  | "agents"
+  | "observability";
 
 /**
  * Observability surface handed to plugins that declare the "observability"
@@ -40,6 +54,7 @@ export interface PluginObservabilityApi {
  */
 export interface PluginApi {
   registerTool(tool: ToolDefinition): void;
+  registerChannel(adapter: ChannelAdapter): void;
   registerSkill(skill: SkillDefinition): void;
   onBeforeLoop(hook: BeforeLoopHook): void;
   onAfterLoop(hook: AfterLoopHook): void;
@@ -66,6 +81,6 @@ export interface HarnessPlugin {
   name: string;
   version?: string;
   /** Optional metadata retained for compatibility with previous plugin shape. */
-  capabilities?: string[];
+  capabilities?: PluginCapability[];
   register(api: PluginApi): Promise<void> | void;
 }

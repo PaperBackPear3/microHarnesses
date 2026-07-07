@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
   type Agent,
+  ChannelRegistry,
   CompositePolicyEngine,
   ContextManager,
   CredentialsRegistry,
@@ -121,6 +122,7 @@ export async function buildComposition(
   const providers = new ProviderRegistry();
   const credentials = new CredentialsRegistry();
   const tools = new ToolRegistry();
+  const channels = new ChannelRegistry();
   const policy = new CompositePolicyEngine(
     new DefaultPolicyEngine({
       allowedHighRiskTools: [
@@ -364,6 +366,7 @@ export async function buildComposition(
     tools: createCoreDefaultTools({
       workspaceTools: { rootDir: process.cwd() },
       planModeTools: { rootDir: process.cwd() },
+      channelTools: { registry: channels },
       subagents,
       spawnSubagent: { defaultPromptName: "coder" },
     }),
@@ -386,6 +389,7 @@ export async function buildComposition(
       registerMetricExporter: (exporter) => observability.addMetricExporter(exporter),
       registerLogExporter: (exporter) => observability.addLogExporter(exporter),
     },
+    channels,
     subagents,
     invokeAgent: (request) => agent.invoke(request),
   });

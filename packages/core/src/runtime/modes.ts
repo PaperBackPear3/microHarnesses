@@ -55,6 +55,7 @@ export const DEFAULT_MUTATING_TOOLS = [
   "fs_move",
   "fs_remove",
   "shell_exec",
+  "channel_send",
 ];
 
 /** Read-only / planning tools allowed while in plan mode. */
@@ -63,6 +64,7 @@ export const DEFAULT_PLAN_ALLOWED_TOOLS = [
   "fs_list",
   "fs_read",
   "grep_search",
+  "channel_list",
   "plan_agent",
   "explore_agent",
   "plan_mode_info",
