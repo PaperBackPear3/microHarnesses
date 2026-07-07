@@ -1,6 +1,6 @@
 {
   "name": "micro-harnesses",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "private": true,
   "description": "Library-first framework for building micro harnesses.",
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
@@ -20,7 +20,8 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present",
     "lint": "biome check .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "version:bump": "node scripts/bump-version.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

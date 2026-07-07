@@ -60,6 +60,18 @@ npm test
 npm run lint
 ```
 
+## Bump versions for a release
+
+Use the monorepo bump script to set a new version everywhere (root/workspaces,
+internal dependency ranges, lockfile):
+
+```bash
+npm run version:bump -- 2.1.1
+```
+
+Then create/push the matching tag (for example `v2.1.1`) to trigger the
+release workflow.
+
 ## Install packages
 
 ```bash
