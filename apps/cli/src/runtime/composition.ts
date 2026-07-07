@@ -249,6 +249,24 @@ export async function buildComposition(
     return routeCatalogCache;
   }
 
+  /**
+   * Resolves the effective context window token budget for a spawned subagent.
+   * Checks the live route catalog first (prefers discovered > catalog data),
+   * then falls back to the parent's own budget. This ensures a child routed to
+   * a small-context model (e.g. Ollama/lfm2.5:8b with an 8k window) receives
+   * the correct budget rather than inheriting the root agent's larger window.
+   */
+  function resolveChildContextWindowTokens(
+    childProviderId: string,
+    childModel: string | undefined,
+  ): number {
+    if (!childModel) return contextWindowTokens;
+    const catalog = routeCatalog();
+    // Find the best matching route by provider+model exact match.
+    const route = catalog.find((r) => r.providerId === childProviderId && r.model === childModel);
+    return route?.metadata?.contextWindowTokens ?? contextWindowTokens;
+  }
+
   const skills = new SkillRegistry();
   const skillSource = new FsSkillSource({
     rootDir: config.skillsDir ?? path.join(config.stateDir, "skills"),
@@ -288,11 +306,17 @@ export async function buildComposition(
           if (request.allowedTools && !request.allowedTools.includes(tool.name)) continue;
           childTools.register(tool);
         }
+        const childProviderId = request.providerId ?? runtimeState.provider;
+        const childModel = request.model ?? runtimeState.model;
+        const childContextWindowTokens = resolveChildContextWindowTokens(
+          childProviderId,
+          childModel,
+        );
         const childContext = new ContextManager({
           stateDir: path.join(config.stateDir, "sessions", childSessionId, "context"),
           maxWorkingTurns: 6,
           goal: request.goal ?? request.prompt,
-          contextWindowTokens,
+          contextWindowTokens: childContextWindowTokens,
           compressionTriggerUtilization: config.compactionTriggerUtilization,
           compressionTargetUtilization: config.compactionTargetUtilization,
           turnCompactionTargetRatio: config.turnCompactionTargetRatio,

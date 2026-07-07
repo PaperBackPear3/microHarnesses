@@ -110,7 +110,7 @@ test("list_model_routes returns empty array when catalog is empty", async () => 
   assert.deepEqual(result.routes, []);
 });
 
-test("list_model_routes includes available=false routes", async () => {
+test("list_model_routes sorts available routes before unavailable ones", async () => {
   const routes = [
     makeRoute("openai:gpt-5.5", "openai", "gpt-5.5", {}, false),
     makeRoute("openai:gpt-5.4-mini", "openai", "gpt-5.4-mini", {}, true),
@@ -119,8 +119,37 @@ test("list_model_routes includes available=false routes", async () => {
   const result = await tool.execute({});
   assert.equal(result.total, 2);
   const summaries = result.routes as Array<{ available: boolean }>;
-  assert.equal(summaries[0]?.available, false);
-  assert.equal(summaries[1]?.available, true);
+  // Available route comes first regardless of input order.
+  assert.equal(summaries[0]?.available, true);
+  assert.equal(summaries[1]?.available, false);
+});
+
+test("list_model_routes sorts available routes before unavailable even with preference", async () => {
+  const routes = [
+    // Cheapest but unavailable.
+    makeRoute(
+      "ollama:llama3.1:8b",
+      "ollama",
+      "llama3.1:8b",
+      { cost: 1, speed: 2, intelligence: 1 },
+      false,
+    ),
+    // More expensive but available.
+    makeRoute(
+      "openai:gpt-5.4-mini",
+      "openai",
+      "gpt-5.4-mini",
+      { cost: 2, speed: 3, intelligence: 2 },
+      true,
+    ),
+  ];
+  const tool = createListModelRoutesTool(() => routes);
+  const result = await tool.execute({ preference: "cost" });
+  const summaries = result.routes as Array<{ available: boolean; id: string }>;
+  // Even though ollama has lower cost, gpt-5.4-mini should be first because it's available.
+  assert.equal(summaries[0]?.id, "openai:gpt-5.4-mini");
+  assert.equal(summaries[0]?.available, true);
+  assert.equal(summaries[1]?.available, false);
 });
 
 test("list_model_routes includes real pricing and context window when known", async () => {

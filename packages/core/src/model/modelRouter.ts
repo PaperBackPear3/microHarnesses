@@ -122,7 +122,7 @@ function resolvePreference(request: ModelRoutingRequest): ModelRoutingPreference
   return "balanced";
 }
 
-function scoreRoute(route: ModelRoute, preference: ModelRoutingPreference): number {
+export function scoreRoute(route: ModelRoute, preference: ModelRoutingPreference): number {
   const cost = route.metadata?.cost ?? 2;
   const speed = route.metadata?.speed ?? 2;
   const intelligence = route.metadata?.intelligence ?? 2;

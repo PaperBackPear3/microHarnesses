@@ -122,6 +122,48 @@ test("model route catalog aggregates across configured providers, not just the a
   }
 });
 
+test("subagent routed to a different model receives that model's context window budget", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-composition-"));
+  const originalOpenAiKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-key";
+  try {
+    const composition = await buildComposition(makeConfig(stateDir), "s-test-child-ctx");
+    // Refresh routes so the catalog has real context-window data for the
+    // current-gen openai models (gpt-5.4 = 1M tokens, gpt-5.4-mini = 400k).
+    await composition.refreshModelRoutes();
+
+    // The route catalog contains correct context-window data; this is what
+    // resolveChildContextWindowTokens() reads when building a child agent.
+    const catalogRoutes = composition.listModelRoutes();
+    const miniRoute = catalogRoutes.find(
+      (r) => r.providerId === "openai" && r.model === "gpt-5.4-mini",
+    );
+    assert.ok(miniRoute, "gpt-5.4-mini is in the route catalog");
+    assert.equal(
+      miniRoute?.metadata?.contextWindowTokens,
+      400_000,
+      "gpt-5.4-mini has 400k context window in catalog",
+    );
+
+    const flagshipRoute = catalogRoutes.find(
+      (r) => r.providerId === "openai" && r.model === "gpt-5.4",
+    );
+    assert.ok(flagshipRoute, "gpt-5.4 is in the route catalog");
+    assert.equal(
+      flagshipRoute?.metadata?.contextWindowTokens,
+      1_000_000,
+      "gpt-5.4 has 1M context window in catalog (root default differs from mini)",
+    );
+  } finally {
+    if (originalOpenAiKey === undefined) {
+      delete process.env.OPENAI_API_KEY;
+    } else {
+      process.env.OPENAI_API_KEY = originalOpenAiKey;
+    }
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("model route catalog includes a non-active provider once its credentials are configured", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-composition-"));
   const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;

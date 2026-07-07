@@ -1,22 +1,8 @@
+import { scoreRoute } from "../../model/modelRouter";
 import type { ModelRoute, ModelRoutingPreference } from "../../model/types";
 import type { ToolDefinition } from "../../tools/types";
 
 const ROUTING_PREFERENCES = ["cost", "speed", "intelligence", "balanced", "auto"] as const;
-
-/**
- * Scores a route for sorting purposes. Mirrors `scoreRoute` in modelRouter.ts —
- * kept local so this tool has no coupling to modelRouter internals.
- */
-function scoreForPreference(route: ModelRoute, preference: ModelRoutingPreference): number {
-  const cost = route.metadata?.cost ?? 2;
-  const speed = route.metadata?.speed ?? 2;
-  const intelligence = route.metadata?.intelligence ?? 2;
-  if (preference === "cost") return -cost;
-  if (preference === "speed") return speed;
-  if (preference === "intelligence") return intelligence;
-  // balanced or auto: capability + speed, penalise cost.
-  return intelligence * 1.0 + speed * 0.75 - cost * 0.5;
-}
 
 /** Serialisable summary of a single `ModelRoute`. Undefined fields are omitted. */
 export interface ModelRouteSummary {
@@ -108,16 +94,21 @@ export function createListModelRoutesTool(routeCatalog: () => ModelRoute[]): Too
           ? (rawPref as ModelRoutingPreference)
           : undefined;
 
-      const summaries = routes.map(toSummary);
+      // Zip routes with their summaries so sorting never needs a re-lookup.
+      const paired = routes.map((route) => ({ route, summary: toSummary(route) }));
 
-      if (preference) {
-        summaries.sort(
-          (a, b) =>
-            scoreForPreference(routes.find((r) => r.id === b.id)!, preference) -
-            scoreForPreference(routes.find((r) => r.id === a.id)!, preference),
-        );
-      }
+      paired.sort((a, b) => {
+        // Always surface available routes before unavailable ones, regardless
+        // of preference score — an agent trusting sort order should not be
+        // directed to a dead route.
+        const aAvail = a.route.available !== false ? 1 : 0;
+        const bAvail = b.route.available !== false ? 1 : 0;
+        if (aAvail !== bAvail) return bAvail - aAvail;
+        if (!preference) return 0;
+        return scoreRoute(b.route, preference) - scoreRoute(a.route, preference);
+      });
 
+      const summaries = paired.map((p) => p.summary);
       return Promise.resolve({ routes: summaries, total: summaries.length });
     },
   };
