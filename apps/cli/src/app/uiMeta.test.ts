@@ -82,8 +82,13 @@ test("help lines include commands and shortcuts discoverability", () => {
     "expected exit shortcut",
   );
   assert(
+    shortcuts.some((line) => line.startsWith("Ctrl+Y")),
+    "expected diagnostics-toggle shortcut",
+  );
+  assert(
     shortcuts.some((line) => line.startsWith("Esc / Ctrl+C")),
     "expected interrupt shortcut",
   );
+  assert.match(compactShortcutHintLine(), /Ctrl\+Y diagnostics/);
   assert.match(compactShortcutHintLine(), /\/help commands\+shortcuts/);
 });

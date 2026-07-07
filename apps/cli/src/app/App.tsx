@@ -62,6 +62,7 @@ export function App({
   const [screen, setScreen] = useState<UiScreen>("chat");
   const [status, setStatus] = useState<StatusState>(createStatusState());
   const [chatScrollOffset, setChatScrollOffset] = useState(0);
+  const [diagnosticsExpanded, setDiagnosticsExpanded] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState(composition.rootSessionId);
   const [sessionsView, setSessionsView] = useState<string>("No sessions loaded.");
   const [sessionDetailView, setSessionDetailView] = useState<string>("No session selected.");
@@ -95,8 +96,22 @@ export function App({
 
   const chatLines = useMemo(
     () =>
-      buildChatLines(chatEntries, subagents, status.compressing, pendingApproval, terminalColumns),
-    [chatEntries, subagents, status.compressing, pendingApproval, terminalColumns],
+      buildChatLines(
+        chatEntries,
+        subagents,
+        status.compressing,
+        pendingApproval,
+        terminalColumns,
+        diagnosticsExpanded,
+      ),
+    [
+      chatEntries,
+      subagents,
+      status.compressing,
+      pendingApproval,
+      terminalColumns,
+      diagnosticsExpanded,
+    ],
   );
   const transcriptViewport = useMemo(
     () => sliceFromBottom(chatLines, contentRows, chatScrollOffset),
@@ -179,6 +194,10 @@ export function App({
     }
     if (key.ctrl && raw.toLowerCase() === "t") {
       toggleAllThinkingCollapse();
+      return;
+    }
+    if (key.ctrl && raw.toLowerCase() === "y") {
+      setDiagnosticsExpanded((current) => !current);
       return;
     }
   });
@@ -631,8 +650,9 @@ export function App({
         {screen === "chat" ? (
           <>
             {transcriptViewport.visible.map((line) => (
-              <Text key={line.id} color={line.color}>
-                {line.text}
+              <Text key={line.id}>
+                <Text color={line.indicatorColor}>{line.indicator}</Text>
+                <Text color={line.textColor}>{line.text}</Text>
               </Text>
             ))}
             {transcriptViewport.offset > 0 ? (
@@ -794,8 +814,16 @@ function asString(value: unknown): string | undefined {
 
 interface ChatRenderLine {
   id: string;
+  indicator: string;
+  indicatorColor?: "gray" | "cyan" | "yellow" | "green" | "blue";
   text: string;
-  color?: "gray" | "cyan" | "yellow" | "green";
+  textColor?: "gray" | "cyan" | "yellow" | "green";
+}
+
+interface LineStyle {
+  indicator: string;
+  indicatorColor?: ChatRenderLine["indicatorColor"];
+  textColor?: ChatRenderLine["textColor"];
 }
 
 function buildChatLines(
@@ -804,107 +832,204 @@ function buildChatLines(
   compressing: boolean,
   pendingApproval: ApprovalView | undefined,
   columns: number,
+  diagnosticsExpanded: boolean,
 ): ChatRenderLine[] {
   const lines: ChatRenderLine[] = [];
+  let hiddenSystemCount = 0;
+  let hiddenStepSystemCount = 0;
+  let hiddenRunningSubagents = 0;
+  let hiddenApprovalPreview = false;
+
+  const userStyle: LineStyle = { indicator: "user > ", indicatorColor: "blue" };
+  const thinkingHeaderStyle: LineStyle = { indicator: "think > ", indicatorColor: "yellow" };
+  const thinkingBodyStyle: LineStyle = { indicator: "       ", textColor: "gray" };
+  const assistantStyle: LineStyle = { indicator: "agent > ", indicatorColor: "green" };
+  const systemStyle: LineStyle = {
+    indicator: "diag > ",
+    indicatorColor: "gray",
+    textColor: "gray",
+  };
+
   for (const entry of entries) {
     if (entry.type === "system") {
-      pushWrapped(lines, entry.id, "gray", `system > ${entry.text ?? ""}`, columns);
+      if (diagnosticsExpanded) {
+        pushWrapped(lines, entry.id, systemStyle, entry.text ?? "", columns);
+      } else {
+        hiddenSystemCount += 1;
+      }
       continue;
     }
     if (!entry.turn) continue;
     if (entry.turn.userText) {
-      pushWrapped(lines, `${entry.id}-user`, "cyan", `user > ${entry.turn.userText}`, columns);
+      pushWrapped(lines, `${entry.id}-user`, userStyle, entry.turn.userText, columns);
     }
     for (const step of entry.turn.steps) {
       if (step.thinkingText.length > 0) {
         pushWrapped(
           lines,
           `${step.id}-think-header`,
-          "yellow",
-          `Thinking${formatIteration(step.iteration)} [${step.thinkingCollapsed ? "collapsed" : "expanded"}]`,
+          thinkingHeaderStyle,
+          `iteration${formatIteration(step.iteration)} [${step.thinkingCollapsed ? "collapsed" : "expanded"}]`,
           columns,
         );
         if (!step.thinkingCollapsed) {
-          pushMultiline(lines, `${step.id}-think`, undefined, step.thinkingText, columns);
+          pushMultiline(lines, `${step.id}-think`, thinkingBodyStyle, step.thinkingText, columns);
         }
       }
       if (step.assistantText.length > 0) {
         pushMultiline(
           lines,
           `${step.id}-assistant`,
-          "green",
-          `assistant${formatIteration(step.iteration)} > ${step.assistantText}`,
+          assistantStyle,
+          `iteration${formatIteration(step.iteration)} ${step.assistantText}`,
           columns,
         );
       }
       for (const message of step.systemMessages) {
-        pushWrapped(
-          lines,
-          `${step.id}-sys-${message.id}`,
-          "gray",
-          `system${formatIteration(step.iteration)} > ${message.text}`,
-          columns,
-        );
+        if (diagnosticsExpanded) {
+          pushWrapped(
+            lines,
+            `${step.id}-sys-${message.id}`,
+            systemStyle,
+            `iteration${formatIteration(step.iteration)} ${message.text}`,
+            columns,
+          );
+        } else {
+          hiddenStepSystemCount += 1;
+        }
       }
     }
   }
   if (compressing) {
-    pushWrapped(lines, "compressing", "yellow", "Compressing context...", columns);
+    if (diagnosticsExpanded) {
+      pushWrapped(lines, "compressing", systemStyle, "Compressing context...", columns);
+    } else {
+      hiddenSystemCount += 1;
+    }
   }
   const runningSubagents = subagents.filter((entry) => entry.status === "running");
   if (runningSubagents.length > 0) {
-    pushWrapped(
-      lines,
-      "subagents-header",
-      "yellow",
-      `subagents > running ${runningSubagents.length}`,
-      columns,
-    );
-    for (const subagent of runningSubagents) {
-      const activity = subagent.activity ? ` | ${subagent.activity}` : "";
-      const model = subagent.model ? ` | model=${subagent.model}` : "";
+    if (diagnosticsExpanded) {
       pushWrapped(
         lines,
-        `subagent-${subagent.sessionId}`,
-        "yellow",
-        `subagent > [running] ${subagent.promptName} (${subagent.sessionId})${activity}${model}`,
+        "subagents-header",
+        systemStyle,
+        `subagents running ${runningSubagents.length}`,
         columns,
       );
+      for (const subagent of runningSubagents) {
+        const activity = subagent.activity ? ` | ${subagent.activity}` : "";
+        const model = subagent.model ? ` | model=${subagent.model}` : "";
+        pushWrapped(
+          lines,
+          `subagent-${subagent.sessionId}`,
+          systemStyle,
+          `[running] ${subagent.promptName} (${subagent.sessionId})${activity}${model}`,
+          columns,
+        );
+      }
+    } else {
+      hiddenRunningSubagents = runningSubagents.length;
     }
   }
+
   const finishedSubagents = subagents.filter((entry) => entry.status !== "running").slice(0, 5);
   if (finishedSubagents.length > 0) {
     pushWrapped(
       lines,
       "subagents-finished-header",
-      "gray",
-      `subagents > recent finished ${finishedSubagents.length}`,
+      { indicator: "sub > ", indicatorColor: "gray", textColor: "gray" },
+      `recent finished ${finishedSubagents.length}`,
       columns,
     );
     for (const subagent of finishedSubagents) {
-      const summary = subagent.summary ? ` | ${subagent.summary}` : "";
+      const status =
+        subagent.status === "completed"
+          ? "[done]"
+          : subagent.status === "failed"
+            ? "[failed]"
+            : "[stopped]";
+      const summary = subagent.summary ? ` ${subagent.summary}` : "";
       pushWrapped(
         lines,
         `subagent-finished-${subagent.sessionId}`,
-        subagent.status === "completed" ? "green" : "yellow",
-        `subagent > [${subagent.status}] ${subagent.promptName} (${subagent.sessionId})${summary}`,
+        {
+          indicator: "sub > ",
+          indicatorColor: subagent.status === "completed" ? "green" : "yellow",
+        },
+        `${status} ${subagent.promptName}${summary}`,
         columns,
       );
     }
   }
+
   if (pendingApproval) {
+    if (diagnosticsExpanded) {
+      pushWrapped(
+        lines,
+        "approval-title",
+        {
+          indicator: "diag > ",
+          indicatorColor: "yellow",
+          textColor: "gray",
+        },
+        `approval required: ${pendingApproval.request.tool.name} (y=approve, n=reject, a=always)`,
+        columns,
+      );
+      pushMultiline(
+        lines,
+        "approval-preview",
+        {
+          indicator: "diag > ",
+          indicatorColor: "gray",
+          textColor: "gray",
+        },
+        pendingApproval.preview.slice(0, 600),
+        columns,
+      );
+    } else {
+      hiddenApprovalPreview = true;
+    }
+  }
+
+  if (!diagnosticsExpanded) {
+    const hiddenTotal = hiddenSystemCount + hiddenStepSystemCount;
+    if (hiddenTotal > 0) {
+      pushWrapped(
+        lines,
+        "diag-collapsed",
+        systemStyle,
+        `${hiddenTotal} diagnostic updates hidden`,
+        columns,
+      );
+    }
+    if (hiddenRunningSubagents > 0) {
+      pushWrapped(
+        lines,
+        "diag-running-collapsed",
+        systemStyle,
+        `${hiddenRunningSubagents} running subagent updates hidden`,
+        columns,
+      );
+    }
+    if (hiddenApprovalPreview) {
+      pushWrapped(
+        lines,
+        "diag-approval-collapsed",
+        {
+          indicator: "diag > ",
+          indicatorColor: "yellow",
+          textColor: "gray",
+        },
+        "approval preview hidden",
+        columns,
+      );
+    }
     pushWrapped(
       lines,
-      "approval-title",
-      "yellow",
-      `Approval required: ${pendingApproval.request.tool.name} (y=approve, n=reject, a=always)`,
-      columns,
-    );
-    pushMultiline(
-      lines,
-      "approval-preview",
-      undefined,
-      pendingApproval.preview.slice(0, 600),
+      "diag-hint",
+      { indicator: "diag > ", indicatorColor: "gray", textColor: "gray" },
+      "press Ctrl+Y to expand diagnostics",
       columns,
     );
   }
@@ -914,33 +1039,50 @@ function buildChatLines(
 function pushMultiline(
   lines: ChatRenderLine[],
   idPrefix: string,
-  color: ChatRenderLine["color"],
+  style: LineStyle,
   text: string,
   columns: number,
 ): void {
   const segments = text.split(/\r?\n/);
   segments.forEach((segment, index) => {
-    pushWrapped(lines, `${idPrefix}-${index}`, color, segment, columns);
+    pushWrapped(lines, `${idPrefix}-${index}`, style, segment, columns);
   });
 }
 
 function pushWrapped(
   lines: ChatRenderLine[],
   idPrefix: string,
-  color: ChatRenderLine["color"],
+  style: LineStyle,
   text: string,
   columns: number,
 ): void {
   const safeWidth = Math.max(10, columns);
+  const indicator = style.indicator;
+  const continuationIndicator = " ".repeat(indicator.length);
+  const firstWidth = Math.max(1, safeWidth - indicator.length);
   if (text.length === 0) {
-    lines.push({ id: `${idPrefix}-0`, text: "", color });
+    lines.push({
+      id: `${idPrefix}-0`,
+      indicator,
+      indicatorColor: style.indicatorColor,
+      text: "",
+      textColor: style.textColor,
+    });
     return;
   }
-  for (let start = 0, index = 0; start < text.length; start += safeWidth, index += 1) {
+  let start = 0;
+  let index = 0;
+  while (start < text.length) {
+    const isFirst = index === 0;
+    const width = isFirst ? firstWidth : safeWidth - continuationIndicator.length;
     lines.push({
       id: `${idPrefix}-${index}`,
-      text: text.slice(start, start + safeWidth),
-      color,
+      indicator: isFirst ? indicator : continuationIndicator,
+      indicatorColor: isFirst ? style.indicatorColor : undefined,
+      text: text.slice(start, start + width),
+      textColor: style.textColor,
     });
+    start += width;
+    index += 1;
   }
 }

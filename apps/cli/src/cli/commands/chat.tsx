@@ -8,16 +8,16 @@ export async function chatCommand(composition: CliComposition, config: CliConfig
   const buildForSession = async (sessionId: string): Promise<CliComposition> =>
     buildComposition(config, sessionId);
 
-  await new Promise<void>((resolve) => {
-    const app = render(
-      <App
-        composition={composition}
-        buildForSession={buildForSession}
-        onExit={() => {
-          app.unmount();
-          resolve();
-        }}
-      />,
-    );
-  });
+  const app = render(
+    <App
+      composition={composition}
+      buildForSession={buildForSession}
+      onExit={() => {
+        app.unmount();
+      }}
+    />,
+    { exitOnCtrlC: false },
+  );
+
+  await app.waitUntilExit();
 }
