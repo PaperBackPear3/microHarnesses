@@ -4,6 +4,11 @@ export interface ViewportSlice<T> {
   offset: number;
 }
 
+export interface TextTailSlice {
+  visible: string[];
+  hidden: number;
+}
+
 export function sliceFromBottom<T>(
   lines: T[],
   rows: number,
@@ -19,6 +24,15 @@ export function sliceFromBottom<T>(
     maxOffset,
     offset,
   };
+}
+
+export function tailTextLines(text: string, maxLines: number): TextTailSlice {
+  const lines = text.split(/\r?\n/);
+  if (maxLines < 1) {
+    return { visible: [], hidden: lines.length };
+  }
+  const hidden = Math.max(0, lines.length - maxLines);
+  return { visible: lines.slice(Math.max(0, lines.length - maxLines)), hidden };
 }
 
 function clamp(value: number, min: number, max: number): number {

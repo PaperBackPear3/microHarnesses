@@ -1,11 +1,15 @@
 import type { ApprovalView } from "../runtime/approvalHandler.js";
+import { tailTextLines } from "./viewport.js";
 import type { ChatEntry } from "./transcript.js";
 
 export interface SubagentStatus {
   sessionId: string;
+  startedAt?: number;
   name?: string;
   promptName?: string;
   goal?: string;
+  anchorTurnId?: string;
+  anchorIteration?: number;
   model?: string;
   status: "running" | "completed" | "failed";
   activity?: string;
@@ -46,7 +50,22 @@ export function buildChatLines(
   const lines: ChatRenderLine[] = [];
   let hiddenSystemCount = 0;
   let hiddenStepSystemCount = 0;
-  let hiddenRunningSubagents = 0;
+  let hiddenSubagentCount = 0;
+  const anchoredSubagents = new Map<string, SubagentStatus[]>();
+  const unanchoredSubagents: SubagentStatus[] = [];
+  const normalizedSubagents = subagents
+    .slice()
+    .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
+  for (const subagent of normalizedSubagents) {
+    if (subagent.anchorTurnId) {
+      const key = anchorKey(subagent.anchorTurnId, subagent.anchorIteration);
+      const list = anchoredSubagents.get(key) ?? [];
+      list.push(subagent);
+      anchoredSubagents.set(key, list);
+    } else {
+      unanchoredSubagents.push(subagent);
+    }
+  }
 
   const userStyle: LineStyle = { indicator: "user > ", indicatorColor: "blue" };
   const thinkingHeaderStyle: LineStyle = { indicator: "think > ", indicatorColor: "yellow" };
@@ -83,7 +102,14 @@ export function buildChatLines(
           columns,
         );
         if (preferences.thinkingExpanded) {
-          pushMultiline(lines, `${step.id}-think`, thinkingBodyStyle, step.thinkingText, columns);
+          pushBoundedMultiline(
+            lines,
+            `${step.id}-think`,
+            thinkingBodyStyle,
+            step.thinkingText,
+            columns,
+            8,
+          );
         }
       }
       if (step.assistantText.length > 0) {
@@ -108,6 +134,11 @@ export function buildChatLines(
           hiddenStepSystemCount += 1;
         }
       }
+      const stepSubagents =
+        anchoredSubagents.get(anchorKey(entry.turn.id, step.iteration)) ?? [];
+      for (const subagent of stepSubagents) {
+        pushSubagentBlock(lines, subagent, columns, preferences.thinkingExpanded);
+      }
     }
   }
 
@@ -119,55 +150,14 @@ export function buildChatLines(
     }
   }
 
-  const runningSubagents = subagents.filter((entry) => entry.status === "running");
-  if (runningSubagents.length > 0) {
+  if (unanchoredSubagents.length > 0) {
     if (preferences.diagnosticsExpanded) {
-      pushWrapped(
-        lines,
-        "subagents-running-header",
-        systemStyle,
-        `subagents running ${runningSubagents.length}`,
-        columns,
-      );
-      for (const subagent of runningSubagents) {
-        pushSubagentBlock(lines, subagent, columns);
+      pushWrapped(lines, "subagents-unanchored-header", systemStyle, "subagents", columns);
+      for (const subagent of unanchoredSubagents) {
+        pushSubagentBlock(lines, subagent, columns, preferences.thinkingExpanded);
       }
     } else {
-      hiddenRunningSubagents = runningSubagents.length;
-    }
-  }
-
-  const finishedSubagents = subagents.filter((entry) => entry.status !== "running").slice(0, 5);
-  if (finishedSubagents.length > 0) {
-    pushWrapped(
-      lines,
-      "subagents-finished-header",
-      { indicator: "sub > ", indicatorColor: "gray", textColor: "gray" },
-      `recent finished ${finishedSubagents.length}`,
-      columns,
-    );
-    for (const subagent of finishedSubagents) {
-      const status =
-        subagent.status === "completed"
-          ? "[done]"
-          : subagent.status === "failed"
-            ? "[failed]"
-            : "[stopped]";
-      const name = subagentDisplayName(subagent);
-      const summary =
-        subagent.status === "failed"
-          ? ` ${subagent.error ?? subagent.summary ?? ""}`.trimEnd()
-          : ` ${subagent.summary ?? ""}`.trimEnd();
-      pushWrapped(
-        lines,
-        `subagent-finished-${subagent.sessionId}`,
-        {
-          indicator: "sub > ",
-          indicatorColor: subagent.status === "completed" ? "green" : "yellow",
-        },
-        `${name} ${status}${summary.length > 0 ? ` ${summary}` : ""}`,
-        columns,
-      );
+      hiddenSubagentCount = unanchoredSubagents.length;
     }
   }
 
@@ -207,12 +197,12 @@ export function buildChatLines(
         columns,
       );
     }
-    if (hiddenRunningSubagents > 0) {
+    if (hiddenSubagentCount > 0) {
       pushWrapped(
         lines,
-        "diag-running-collapsed",
+        "diag-subagents-collapsed",
         systemStyle,
-        `${hiddenRunningSubagents} running subagent updates hidden`,
+        `${hiddenSubagentCount} subagent update(s) hidden`,
         columns,
       );
     }
@@ -236,18 +226,32 @@ function pushSubagentBlock(
   lines: ChatRenderLine[],
   subagent: SubagentStatus,
   columns: number,
+  thinkingExpanded: boolean,
 ): void {
   const name = subagentDisplayName(subagent);
+  const status =
+    subagent.status === "running"
+      ? "[running]"
+      : subagent.status === "completed"
+        ? "[done]"
+        : "[failed]";
   pushWrapped(
     lines,
     `subagent-${subagent.sessionId}-header`,
-    { indicator: "sub > ", indicatorColor: "green" },
-    `${name} [running]`,
+    {
+      indicator: "sub > ",
+      indicatorColor:
+        subagent.status === "running"
+          ? "green"
+          : subagent.status === "completed"
+            ? "green"
+            : "yellow",
+    },
+    `${name} ${status}`,
     columns,
   );
 
   const details: string[] = [];
-  details.push(`session=${subagent.sessionId}`);
   if (subagent.promptName) details.push(`persona=${subagent.promptName}`);
   if (subagent.model) details.push(`model=${subagent.model}`);
   if (subagent.activity) details.push(`activity=${subagent.activity}`);
@@ -260,20 +264,24 @@ function pushSubagentBlock(
     columns,
   );
   if (subagent.thinkingText && subagent.thinkingText.length > 0) {
+    const state = thinkingExpanded ? "[expanded]" : "[collapsed]";
     pushWrapped(
       lines,
       `subagent-${subagent.sessionId}-thinking-label`,
       { indicator: "       ", textColor: "yellow" },
-      "thinking:",
+      `thinking ${state}:`,
       columns,
     );
-    pushMultiline(
-      lines,
-      `subagent-${subagent.sessionId}-thinking`,
-      { indicator: "       ", textColor: "gray" },
-      subagent.thinkingText,
-      columns,
-    );
+    if (thinkingExpanded) {
+      pushBoundedMultiline(
+        lines,
+        `subagent-${subagent.sessionId}-thinking`,
+        { indicator: "       ", textColor: "gray" },
+        subagent.thinkingText,
+        columns,
+        5,
+      );
+    }
   }
   if (subagent.outputText && subagent.outputText.length > 0) {
     pushWrapped(
@@ -283,11 +291,30 @@ function pushSubagentBlock(
       "output:",
       columns,
     );
-    pushMultiline(
+    pushBoundedMultiline(
       lines,
       `subagent-${subagent.sessionId}-output`,
       { indicator: "       ", textColor: "gray" },
       subagent.outputText,
+      columns,
+      6,
+    );
+  }
+  if (subagent.summary && subagent.summary.length > 0) {
+    pushWrapped(
+      lines,
+      `subagent-${subagent.sessionId}-summary`,
+      { indicator: "       ", textColor: "green" },
+      `summary: ${subagent.summary}`,
+      columns,
+    );
+  }
+  if (subagent.error && subagent.error.length > 0) {
+    pushWrapped(
+      lines,
+      `subagent-${subagent.sessionId}-error`,
+      { indicator: "       ", textColor: "yellow" },
+      `error: ${subagent.error}`,
       columns,
     );
   }
@@ -300,6 +327,10 @@ function pushSubagentBlock(
       columns,
     );
   }
+}
+
+function anchorKey(turnId: string, iteration: number | undefined): string {
+  return `${turnId}:${iteration ?? 1}`;
 }
 
 function subagentDisplayName(subagent: SubagentStatus): string {
@@ -321,6 +352,27 @@ function pushMultiline(
   segments.forEach((segment, index) => {
     pushWrapped(lines, `${idPrefix}-${index}`, index === 0 ? style : continuationStyle, segment, columns);
   });
+}
+
+function pushBoundedMultiline(
+  lines: ChatRenderLine[],
+  idPrefix: string,
+  style: LineStyle,
+  text: string,
+  columns: number,
+  maxLines: number,
+): void {
+  const tail = tailTextLines(text, maxLines);
+  if (tail.hidden > 0) {
+    pushWrapped(
+      lines,
+      `${idPrefix}-truncated`,
+      { indicator: style.indicator, textColor: "gray" },
+      `... ${tail.hidden} line(s) hidden`,
+      columns,
+    );
+  }
+  pushMultiline(lines, idPrefix, style, tail.visible.join("\n"), columns);
 }
 
 function pushWrapped(

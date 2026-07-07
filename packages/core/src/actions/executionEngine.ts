@@ -205,12 +205,22 @@ export class ActionExecutionEngine {
     span.addEvent("action.allowed");
     await ctx.observer.stream(
       "tool.started",
-      { action: call.name, kind: this.kind, iteration: ctx.iteration },
+      {
+        action: call.name,
+        kind: this.kind,
+        iteration: ctx.iteration,
+        inputSummary: truncateForStream(safeJson(call.input), 400),
+      },
       span,
     );
 
     if (ctx.budget) {
       ctx.budget.remaining -= 1;
+    }
+
+    function truncateForStream(value: string, maxLength: number): string {
+      if (value.length <= maxLength) return value;
+      return `${value.slice(0, maxLength - 1)}…`;
     }
 
     const startedAt = Date.now();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sliceFromBottom } from "./viewport.js";
+import { sliceFromBottom, tailTextLines } from "./viewport.js";
 
 test("sliceFromBottom returns tail when offset is zero", () => {
   const lines = ["1", "2", "3", "4", "5"];
@@ -27,4 +27,16 @@ test("sliceFromBottom clamps offset bounds", () => {
   const high = sliceFromBottom(lines, 2, 99);
   assert.equal(high.offset, 1);
   assert.deepEqual(high.visible, ["1", "2"]);
+});
+
+test("tailTextLines returns trailing lines with hidden count", () => {
+  const slice = tailTextLines("a\nb\nc\nd", 2);
+  assert.deepEqual(slice.visible, ["c", "d"]);
+  assert.equal(slice.hidden, 2);
+});
+
+test("tailTextLines handles maxLines less than one", () => {
+  const slice = tailTextLines("a\nb", 0);
+  assert.deepEqual(slice.visible, []);
+  assert.equal(slice.hidden, 2);
 });

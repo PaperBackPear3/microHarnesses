@@ -143,8 +143,38 @@ test("renders subagent blocks with separate name, status, and stream content", (
   );
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
   assert(rendered.includes("sub > goal-finder [running]"));
+  assert(rendered.includes("diag > subagents"));
   assert(rendered.includes("persona=coder"));
-  assert(rendered.includes("thinking:"));
+  assert(rendered.includes("thinking [expanded]:"));
   assert(rendered.includes("output:"));
   assert(rendered.includes("tools: shell_exec started"));
+});
+
+test("bounds long thinking blocks to avoid filling transcript", () => {
+  const entries: ChatEntry[] = [
+    {
+      id: "turn-1",
+      type: "turn",
+      turn: {
+        id: "turn-1",
+        userText: "hello",
+        steps: [
+          {
+            id: "step-1",
+            iteration: 1,
+            thinkingText: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10",
+            assistantText: "",
+            systemMessages: [],
+            thinkingCollapsed: false,
+          },
+        ],
+      },
+    },
+  ];
+
+  const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
+  const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
+  assert(rendered.includes("... 2 line(s) hidden"));
+  assert.equal(lines.some((line) => line.indicator === "       " && line.text === "1"), false);
+  assert(rendered.includes("       10"));
 });

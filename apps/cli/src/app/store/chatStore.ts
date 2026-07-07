@@ -31,6 +31,11 @@ export class ChatStore {
   private readonly unsubscribeApproval: () => void;
   private activeTurnId: string | undefined;
   private activeRunSessionId: string | undefined;
+  private readonly pendingSubagentAnchors: Array<{
+    turnId: string;
+    iteration?: number;
+    createdAt: number;
+  }> = [];
 
   constructor(uiStream: UiStream, approvalController: ApprovalController, cliVersion: string) {
     this.state = {
@@ -115,11 +120,15 @@ export class ChatStore {
     const isSubagentStart =
       event.type === "run.started" && payloadKind === "subagent" && Boolean(eventSessionId);
     if (isSubagentStart && eventSessionId) {
+      const anchor = this.pendingSubagentAnchors.shift();
       this.upsertSubagent(eventSessionId, {
         sessionId: eventSessionId,
+        startedAt: anchor?.createdAt ?? Date.now(),
         name: asString(event.payload.displayName),
         promptName: asString(event.payload.promptName) ?? "subagent",
         goal: asString(event.payload.goal),
+        anchorTurnId: anchor?.turnId,
+        anchorIteration: anchor?.iteration,
         status: "running",
         activity: "starting",
         thinkingText: "",
@@ -160,12 +169,16 @@ export class ChatStore {
         });
       } else if (event.type === "tool.started") {
         const action = asString(event.payload.action) ?? "tool";
+        const inputSummary = asString(event.payload.inputSummary);
         const existing = this.getSubagent(eventSessionId);
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
           status: "running",
           activity: `tool: ${action}`,
-          recentTools: pushToolLog(existing?.recentTools ?? [], `${action} started`),
+          recentTools: pushToolLog(
+            existing?.recentTools ?? [],
+            inputSummary ? `${action} started ${inputSummary}` : `${action} started`,
+          ),
         });
       } else if (event.type === "tool.completed") {
         const action = asString(event.payload.action) ?? "tool";
@@ -197,11 +210,6 @@ export class ChatStore {
           activity: "completed",
           summary,
         });
-        if (summary && summary.length > 0) {
-          this.appendSystemMessage(`subagent completed (${eventSessionId}): ${summary}`);
-        } else {
-          this.appendSystemMessage(`subagent completed (${eventSessionId}).`);
-        }
       } else if (event.type === "run.failed") {
         const reason = asString(event.payload.reason) ?? "failed";
         this.upsertSubagent(eventSessionId, {
@@ -246,8 +254,20 @@ export class ChatStore {
     }
     if (event.type === "tool.started") {
       const action = String(event.payload.action ?? "unknown_tool");
+      const inputSummary = asString(event.payload.inputSummary);
+      if (action === "spawn_subagent" && this.activeTurnId) {
+        this.pendingSubagentAnchors.push({
+          turnId: this.activeTurnId,
+          iteration: asNumber(event.payload.iteration),
+          createdAt: Date.now(),
+        });
+      }
       const text =
-        action === "wait_subagents" ? "waiting for subagent result..." : `tool started: ${action}`;
+        action === "wait_subagents"
+          ? "waiting for subagent result..."
+          : inputSummary && inputSummary.length > 0
+            ? `tool started: ${action} ${inputSummary}`
+            : `tool started: ${action}`;
       this.setState({
         ...this.state,
         entries: appendStepSystemMessage(

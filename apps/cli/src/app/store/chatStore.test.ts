@@ -60,3 +60,38 @@ test("does not include subagent output in main transcript", () => {
   assert.equal(snapshot.subagents[0]?.recentTools?.[0], "shell_exec started");
   store.dispose();
 });
+
+test("anchors spawned subagents to the current turn/iteration and does not emit late completion diag", () => {
+  const ui = new UiStream();
+  const approvals = new ApprovalController(process.cwd());
+  const store = new ChatStore(ui, approvals, "2.0.0");
+  store.startTurn("spawn");
+  store.setActiveRunSession("s-root");
+
+  ui.push({
+    type: "tool.started",
+    sessionId: "s-root",
+    payload: { action: "spawn_subagent", iteration: 2, inputSummary: '{"goal":"reverse"}' },
+  } as never);
+  ui.push({
+    type: "run.started",
+    sessionId: "s-sub",
+    payload: { kind: "subagent", promptName: "coder", displayName: "reverser" },
+  } as never);
+  ui.push({
+    type: "run.completed",
+    sessionId: "s-sub",
+    payload: { summary: "done" },
+  } as never);
+
+  const snapshot = store.getSnapshot();
+  assert.equal(snapshot.subagents[0]?.anchorTurnId, snapshot.entries[1]?.turn?.id);
+  assert.equal(snapshot.subagents[0]?.anchorIteration, 2);
+  assert.equal(snapshot.subagents[0]?.status, "completed");
+  const allSystemText = snapshot.entries
+    .filter((entry) => entry.type === "system")
+    .map((entry) => entry.text ?? "")
+    .join("\n");
+  assert(!allSystemText.includes("subagent completed (s-sub)"));
+  store.dispose();
+});
