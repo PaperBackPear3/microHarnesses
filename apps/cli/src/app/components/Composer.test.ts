@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  clipeRenderedToMaxRows,
   deleteBackward,
   deleteForward,
   estimateComposerRows,
@@ -48,4 +49,27 @@ test("estimateComposerRows accounts for wrapping and caps growth", () => {
   assert.equal(estimateComposerRows("", 20), 1);
   assert.equal(estimateComposerRows("1234567890", 5), 3);
   assert.equal(estimateComposerRows("a\nb\nc\nd\ne\nf\ng\nh", 20), 6);
+});
+
+test("clipeRenderedToMaxRows clips text exceeding max rows", () => {
+  const rendered = "12345\nabcde\nXYZ";
+  const clipped = clipeRenderedToMaxRows(rendered, 5, 2);
+  const lines = clipped.split("\n");
+  assert(lines.length <= 3);
+  assert.equal(lines[0], "12345");
+  assert.equal(lines[1], "abcde");
+  assert(!rendered.includes(clipped) || clipped.includes("12345"));
+});
+
+test("clipeRenderedToMaxRows preserves content under max rows", () => {
+  const rendered = "hello\nworld█";
+  const clipped = clipeRenderedToMaxRows(rendered, 20, 3);
+  assert.equal(clipped, rendered);
+});
+
+test("clipeRenderedToMaxRows handles single long line correctly", () => {
+  const rendered = "1234567890█";
+  const clipped = clipeRenderedToMaxRows(rendered, 5, 2);
+  const lines = clipped.split("\n");
+  assert(lines.length <= 2);
 });

@@ -67,8 +67,11 @@ export function App({
 
   const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
   const composerRows = estimateComposerRows(input, Math.max(20, terminalColumns - 10));
-  const footerRows = 3;
-  const contentRows = Math.max(1, viewportHeight - composerRows - footerRows);
+  const composerBoxRows = 1;
+  const footerMarginRows = 1;
+  const footerTextRows = 3;
+  const controlRows = composerRows + composerBoxRows + footerMarginRows + footerTextRows;
+  const contentRows = Math.max(1, viewportHeight - controlRows);
 
   const chatLines = useMemo(
     () =>
@@ -287,6 +290,7 @@ export function App({
             onChange={setInput}
             onSubmit={submit}
             disabled={switchingSession}
+            columns={Math.max(20, terminalColumns - 10)}
           />
         )}
         {running && (

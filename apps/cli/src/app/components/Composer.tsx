@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 interface Props {
   value: string;
   disabled?: boolean;
+  columns?: number;
   onChange(value: string): void;
   onSubmit(value: string): void;
 }
@@ -13,7 +14,32 @@ interface Props {
 const CURSOR_GLYPH = "█";
 const MAX_COMPOSER_ROWS = 6;
 
-export function Composer({ value, disabled, onChange, onSubmit }: Props): ReactElement {
+export function clipeRenderedToMaxRows(
+  rendered: string,
+  columns: number,
+  maxRows: number,
+): string {
+  const safeColumns = Math.max(1, columns);
+  const lines = rendered.split("\n");
+  let currentRows = 0;
+  const clipped: string[] = [];
+
+  for (const line of lines) {
+    const lineLength = Math.max(1, line.length);
+    const lineRows = Math.ceil(lineLength / safeColumns);
+    if (currentRows + lineRows > maxRows) {
+      const remainingColumns = (maxRows - currentRows) * safeColumns;
+      clipped.push(line.slice(0, Math.max(0, remainingColumns - 1)));
+      break;
+    }
+    clipped.push(line);
+    currentRows += lineRows;
+  }
+
+  return clipped.join("\n");
+}
+
+export function Composer({ value, disabled, columns, onChange, onSubmit }: Props): ReactElement {
   const [cursor, setCursor] = useState(value.length);
 
   useEffect(() => {
@@ -21,6 +47,10 @@ export function Composer({ value, disabled, onChange, onSubmit }: Props): ReactE
   }, [value]);
 
   const renderedValue = useMemo(() => withCursor(value, cursor), [value, cursor]);
+  const displayedValue = useMemo(() => {
+    if (!columns) return renderedValue;
+    return clipeRenderedToMaxRows(renderedValue, columns, MAX_COMPOSER_ROWS);
+  }, [renderedValue, columns]);
 
   const handleInput = useCallback(
     (input: string, key: Key) => {
@@ -98,7 +128,7 @@ export function Composer({ value, disabled, onChange, onSubmit }: Props): ReactE
 
   useInput(handleInput);
 
-  return <Text>{renderedValue}</Text>;
+  return <Text>{displayedValue}</Text>;
 }
 
 export function estimateComposerRows(value: string, columns: number): number {
