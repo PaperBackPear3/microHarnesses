@@ -28,32 +28,23 @@ export class McpClient {
   private child?: ChildProcessWithoutNullStreams;
   private requestId = 1;
   private readonly pending = new Map<number, PendingCall>();
+  private stdoutBuffer = "";
 
   constructor(config: McpServerConfig) {
     this.config = config;
   }
 
   async initialize(): Promise<void> {
-    if (this.config.transport === "stdio") {
-      await this.ensureStdioProcess();
-      await this.request("initialize", {
-        protocolVersion: "2024-11-05",
-        capabilities: {},
-        clientInfo: {
-          name: "micro-harnesses-core",
-          version: "1.0.0",
-        },
-      });
-      return;
-    }
-    await this.request("initialize", {
+    const initializeParams = {
       protocolVersion: "2024-11-05",
       capabilities: {},
       clientInfo: {
         name: "micro-harnesses-core",
         version: "1.0.0",
       },
-    });
+    };
+    await this.request("initialize", initializeParams, this.config.initTimeoutMs ?? 10_000);
+    await this.notify("notifications/initialized");
   }
 
   async listTools(): Promise<McpToolDescriptor[]> {
@@ -89,22 +80,25 @@ export class McpClient {
       this.child.kill();
       this.child = undefined;
     }
+    this.stdoutBuffer = "";
   }
 
   private async request(
     method: string,
     params?: Record<string, unknown>,
+    timeoutMs?: number,
   ): Promise<Record<string, unknown>> {
     if (this.config.transport === "http") {
-      return await this.httpRequest(method, params);
+      return await this.httpRequest(method, params, timeoutMs);
     }
     await this.ensureStdioProcess();
-    return await this.stdioRequest(method, params);
+    return await this.stdioRequest(method, params, timeoutMs);
   }
 
   private async httpRequest(
     method: string,
     params?: Record<string, unknown>,
+    timeoutMs?: number,
   ): Promise<Record<string, unknown>> {
     if (!this.config.url) {
       throw new Error(`MCP server "${this.config.name}" is missing url for http transport`);
@@ -122,6 +116,7 @@ export class McpClient {
         ...(this.config.headers ?? {}),
       },
       body: JSON.stringify(request),
+      signal: timeoutSignal(timeoutMs ?? this.config.requestTimeoutMs),
     });
     if (!response.ok) {
       throw new Error(`MCP HTTP request failed (${response.status})`);
@@ -139,6 +134,7 @@ export class McpClient {
   private async stdioRequest(
     method: string,
     params?: Record<string, unknown>,
+    timeoutMs?: number,
   ): Promise<Record<string, unknown>> {
     if (!this.child?.stdin.writable) {
       throw new Error(`MCP stdio process for "${this.config.name}" is not writable`);
@@ -154,7 +150,11 @@ export class McpClient {
       this.pending.set(id, { resolve, reject });
     });
     this.child.stdin.write(`${JSON.stringify(request)}\n`);
-    return await promise;
+    return await withTimeout(
+      promise,
+      timeoutMs ?? this.config.requestTimeoutMs,
+      `MCP request timed out (${method})`,
+    );
   }
 
   private async ensureStdioProcess(): Promise<void> {
@@ -174,13 +174,14 @@ export class McpClient {
 
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      const lines = chunk
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean);
+      this.stdoutBuffer += chunk;
+      const lines = this.stdoutBuffer.split("\n");
+      this.stdoutBuffer = lines.pop() ?? "";
       for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
         try {
-          const response = JSON.parse(line) as JsonRpcResponse;
+          const response = JSON.parse(trimmed) as JsonRpcResponse;
           if (typeof response.id !== "number") continue;
           const pending = this.pending.get(response.id);
           if (!pending) continue;
@@ -193,7 +194,7 @@ export class McpClient {
           }
           pending.resolve(isRecord(response.result) ? response.result : {});
         } catch {
-          // Ignore non-JSON lines from server stderr-like stdout chatter.
+          // Ignore non-JSON lines from server stdout chatter.
         }
       }
     });
@@ -209,10 +210,75 @@ export class McpClient {
       }
       this.pending.clear();
       this.child = undefined;
+      this.stdoutBuffer = "";
     });
+  }
+
+  private async notify(method: string, params?: Record<string, unknown>): Promise<void> {
+    if (this.config.transport === "http") {
+      if (!this.config.url) {
+        throw new Error(`MCP server "${this.config.name}" is missing url for http transport`);
+      }
+      const request = {
+        jsonrpc: "2.0" as const,
+        method,
+        ...(params ? { params } : {}),
+      };
+      const response = await fetch(this.config.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(this.config.headers ?? {}),
+        },
+        body: JSON.stringify(request),
+        signal: timeoutSignal(this.config.requestTimeoutMs),
+      });
+      if (!response.ok) {
+        throw new Error(`MCP HTTP notification failed (${response.status})`);
+      }
+      return;
+    }
+    await this.ensureStdioProcess();
+    if (!this.child?.stdin.writable) {
+      throw new Error(`MCP stdio process for "${this.config.name}" is not writable`);
+    }
+    const request = {
+      jsonrpc: "2.0" as const,
+      method,
+      ...(params ? { params } : {}),
+    };
+    this.child.stdin.write(`${JSON.stringify(request)}\n`);
   }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number | undefined,
+  message: string,
+): Promise<T> {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return await promise;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function timeoutSignal(timeoutMs: number | undefined): AbortSignal | undefined {
+  if (!timeoutMs || timeoutMs <= 0) return undefined;
+  return AbortSignal.timeout(timeoutMs);
 }

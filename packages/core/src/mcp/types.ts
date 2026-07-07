@@ -9,6 +9,10 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  /** Timeout for startup lifecycle calls (initialize/listTools). */
+  initTimeoutMs?: number;
+  /** Timeout for individual MCP requests. */
+  requestTimeoutMs?: number;
 }
 
 export interface McpToolDescriptor {

@@ -1,0 +1,88 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { type SubagentStatus, type ViewPreferences, buildChatLines } from "./chatLines.js";
+import type { ChatEntry } from "./transcript.js";
+
+const preferences: ViewPreferences = {
+  thinkingExpanded: true,
+  diagnosticsExpanded: true,
+};
+
+test("does not print literal iteration text for first iteration", () => {
+  const entries: ChatEntry[] = [
+    {
+      id: "turn-1",
+      type: "turn",
+      turn: {
+        id: "turn-1",
+        userText: "hello",
+        steps: [
+          {
+            id: "step-1",
+            iteration: 1,
+            thinkingText: "reasoning",
+            assistantText: "response",
+            systemMessages: [{ id: "m1", text: "tool started: ls" }],
+            thinkingCollapsed: false,
+          },
+        ],
+      },
+    },
+  ];
+
+  const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
+  const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
+
+  assert(!rendered.includes("iteration"));
+  assert(rendered.includes("think > [expanded]"));
+  assert(rendered.includes("agent > response"));
+});
+
+test("uses #N prefix for iteration > 1", () => {
+  const entries: ChatEntry[] = [
+    {
+      id: "turn-1",
+      type: "turn",
+      turn: {
+        id: "turn-1",
+        userText: "hello",
+        steps: [
+          {
+            id: "step-2",
+            iteration: 2,
+            thinkingText: "reasoning",
+            assistantText: "response",
+            systemMessages: [{ id: "m1", text: "tool started: ls" }],
+            thinkingCollapsed: false,
+          },
+        ],
+      },
+    },
+  ];
+
+  const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
+  const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
+  assert(rendered.includes("think > #2 [expanded]"));
+  assert(rendered.includes("agent > #2 response"));
+  assert(rendered.includes("diag > #2 tool started: ls"));
+});
+
+test("shows approval prompt even when diagnostics are collapsed", () => {
+  const lines = buildChatLines(
+    [],
+    [] satisfies SubagentStatus[],
+    false,
+    {
+      request: {
+        tool: { name: "fs_write", metadata: {} as never },
+        call: { input: { path: "a.txt", content: "x" } as never } as never,
+      } as never,
+      preview: "preview line",
+    },
+    120,
+    { thinkingExpanded: false, diagnosticsExpanded: false },
+  );
+  const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
+  assert(rendered.includes("approval required: fs_write"));
+  assert(rendered.includes("preview line"));
+});

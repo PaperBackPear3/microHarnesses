@@ -2,6 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { type ApprovalHandler, type ApprovalRequest, safeResolve } from "@micro-harnesses/core";
 import type { HarnessMode } from "@micro-harnesses/core";
 import { createPatch } from "diff";
+import { asString } from "../shared/values.js";
 
 export interface ApprovalView {
   request: ApprovalRequest;
@@ -127,8 +128,4 @@ async function safeReadWithinRoot(rootDir: string, requestedPath: string): Promi
   } catch {
     return "";
   }
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }

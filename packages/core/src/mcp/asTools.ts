@@ -9,9 +9,7 @@ export interface McpToolset {
 }
 
 export async function createMcpToolset(config: McpServerConfig): Promise<McpToolset> {
-  const client = new McpClient(config);
-  await client.initialize();
-  const listed = await client.listTools();
+  const listed = await withClient(config, async (client) => await client.listTools());
   const serverName = normalizeServerName(config.name);
   const tools = listed.map<ToolDefinition>((tool) => {
     const toolName = `mcp__${serverName}__${tool.name}`;
@@ -24,7 +22,10 @@ export async function createMcpToolset(config: McpServerConfig): Promise<McpTool
         additionalProperties: true,
       },
       async execute(input) {
-        const result = await client.callTool(tool.name, input);
+        const result = await withClient(
+          config,
+          async (client) => await client.callTool(tool.name, input),
+        );
         return {
           server: config.name,
           tool: tool.name,
@@ -36,12 +37,23 @@ export async function createMcpToolset(config: McpServerConfig): Promise<McpTool
   return {
     serverName: config.name,
     tools,
-    close() {
-      client.close();
-    },
+    close() {},
   };
 }
 
 function normalizeServerName(name: string): string {
   return name.trim().replace(/[^a-zA-Z0-9_]+/g, "_");
+}
+
+async function withClient<T>(
+  config: McpServerConfig,
+  run: (client: McpClient) => Promise<T>,
+): Promise<T> {
+  const client = new McpClient(config);
+  try {
+    await client.initialize();
+    return await run(client);
+  } finally {
+    client.close();
+  }
 }

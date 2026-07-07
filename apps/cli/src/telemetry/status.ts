@@ -1,4 +1,5 @@
 import type { StreamEvent } from "@micro-harnesses/core";
+import { asNumber, asString } from "../shared/values.js";
 
 export interface StatusState {
   model?: string;
@@ -64,12 +65,4 @@ export function reduceStatus(state: StatusState, event: StreamEvent): StatusStat
     return { ...state, errors: state.errors + 1 };
   }
   return state;
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
-}
-
-function asNumber(value: unknown): number | undefined {
-  return typeof value === "number" ? value : undefined;
 }

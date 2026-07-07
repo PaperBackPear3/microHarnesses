@@ -6,7 +6,6 @@ import {
   appendStepSystemMessage,
   appendThinkingDelta,
   startUserTurn,
-  toggleAllThinkingCollapse,
 } from "./transcript.js";
 
 test("keeps multi-iteration thinking and assistant output in step order", () => {
@@ -58,29 +57,3 @@ function idFactory(): () => string {
     return `step-${next}`;
   };
 }
-
-test("toggles collapse state for all reasoning steps", () => {
-  let entries: ChatEntry[] = startUserTurn([], "turn-1", "inspect");
-  let activeTurnId: string | undefined = "turn-1";
-  const ids = idFactory();
-
-  ({ entries, activeTurnId } = appendThinkingDelta(entries, activeTurnId, 1, ids, "first"));
-  ({ entries, activeTurnId } = appendThinkingDelta(entries, activeTurnId, 2, ids, "second"));
-  entries = startUserTurn(entries, "turn-2", "follow up");
-  activeTurnId = "turn-2";
-  ({ entries } = appendThinkingDelta(entries, activeTurnId, 1, ids, "third"));
-
-  const collapsed = toggleAllThinkingCollapse(entries);
-  const collapsedFlags = collapsed
-    .flatMap((entry) => entry.turn?.steps ?? [])
-    .filter((step) => step.thinkingText.length > 0)
-    .map((step) => step.thinkingCollapsed);
-  assert.deepEqual(collapsedFlags, [true, true, true]);
-
-  const expanded = toggleAllThinkingCollapse(collapsed);
-  const expandedFlags = expanded
-    .flatMap((entry) => entry.turn?.steps ?? [])
-    .filter((step) => step.thinkingText.length > 0)
-    .map((step) => step.thinkingCollapsed);
-  assert.deepEqual(expandedFlags, [false, false, false]);
-});

@@ -143,9 +143,6 @@ export async function defineAgentAsync(options: DefineAgentOptions): Promise<Age
     mcp: undefined,
     tools: [...configuredTools, ...toolsets.flatMap((toolset) => toolset.tools)],
   });
-  for (const toolset of toolsets) {
-    registerMcpCleanup(agent, toolset.close);
-  }
   return agent;
 }
 
@@ -210,7 +207,6 @@ function createDeclarativeSubagents(
   agent: Agent,
   definitions: DefineAgentSubagentMap,
 ): SubagentSupervisor {
-  const cache = new Map<string, Agent>();
   const defaultSubagentName = Object.keys(definitions)[0];
 
   const factory: SubagentRuntimeFactory = {
@@ -223,7 +219,7 @@ function createDeclarativeSubagents(
       if (!definition) {
         throw new ValidationError(`Unknown subagent "${selectedName}"`);
       }
-      const child = resolveSubagent(selectedName, definition, cache);
+      const child = resolveSubagent(selectedName, definition);
       return {
         agent: child,
         prompt: request.prompt,
@@ -244,22 +240,14 @@ function createDeclarativeSubagents(
   return new InProcessSubagentSupervisor(factory, agent);
 }
 
-function resolveSubagent(
-  name: string,
-  definition: Agent | DefineAgentOptions,
-  cache: Map<string, Agent>,
-): Agent {
+function resolveSubagent(name: string, definition: Agent | DefineAgentOptions): Agent {
   if (definition instanceof Agent) {
     return definition;
   }
-  const existing = cache.get(name);
-  if (existing) return existing;
-  const created = defineAgent({
+  return defineAgent({
     ...definition,
     kind: "subagent",
   });
-  cache.set(name, created);
-  return created;
 }
 
 function defaultProfileFor(name: string): ModelProfile {
@@ -370,16 +358,4 @@ function renderTemplate(
     }
     return "";
   });
-}
-
-function registerMcpCleanup(agent: Agent, close: () => void): void {
-  const previousKill = agent.kill.bind(agent);
-  let closed = false;
-  agent.kill = (reason?: string) => {
-    if (!closed) {
-      close();
-      closed = true;
-    }
-    previousKill(reason);
-  };
 }

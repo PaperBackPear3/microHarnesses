@@ -1,3 +1,5 @@
+export { asNumber } from "../shared/values.js";
+
 export interface ChatStep {
   id: string;
   iteration?: number;
@@ -142,45 +144,6 @@ export function updateActiveStep(
       },
     };
   });
-}
-
-export function toggleAllThinkingCollapse(entries: ChatEntry[]): ChatEntry[] {
-  const hasThinking = entries.some(
-    (entry) =>
-      entry.type === "turn" && entry.turn?.steps.some((step) => step.thinkingText.length > 0),
-  );
-  if (!hasThinking) return entries;
-
-  const allCollapsed = entries.every(
-    (entry) =>
-      entry.type !== "turn" ||
-      !entry.turn ||
-      entry.turn.steps
-        .filter((step) => step.thinkingText.length > 0)
-        .every((step) => step.thinkingCollapsed),
-  );
-
-  return entries.map((entry) => {
-    if (entry.type !== "turn" || !entry.turn) return entry;
-    const steps = entry.turn.steps.map((step) => {
-      if (step.thinkingText.length === 0) return step;
-      return {
-        ...step,
-        thinkingCollapsed: !allCollapsed,
-      };
-    });
-    return {
-      ...entry,
-      turn: {
-        ...entry.turn,
-        steps,
-      },
-    };
-  });
-}
-
-export function asNumber(value: unknown): number | undefined {
-  return typeof value === "number" ? value : undefined;
 }
 
 export function findStepIndex(steps: ChatStep[], iteration: number | undefined): number {
