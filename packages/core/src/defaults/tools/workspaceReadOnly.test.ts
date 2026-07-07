@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -35,6 +36,35 @@ test("fs_read persists oversized content artifact and returns preview", async ()
     assert.ok(result.contentArtifact);
     const raw = await readFile(path.join(artifactDir, result.contentArtifact.path), "utf8");
     assert.equal(raw.length, 300);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("grep_search uses rg backend", async () => {
+  const rgCheck = spawnSync("rg", ["--version"], { stdio: "ignore" });
+  if (rgCheck.status !== 0 || rgCheck.error) {
+    return;
+  }
+
+  const root = await mkdtemp(path.join(os.tmpdir(), "mh-core-workspace-rg-"));
+  try {
+    await writeFile(path.join(root, "alpha.txt"), "alpha\nbeta\nalpha again\n", "utf8");
+    const rgTool = createReadOnlyWorkspaceTools({ rootDir: root }).find(
+      (tool) => tool.name === "grep_search",
+    );
+    assert.ok(rgTool);
+    const rgResult = (await rgTool.execute({
+      query: "alpha",
+      root_path: ".",
+      is_regex: false,
+      case_sensitive: false,
+      max_matches: 10,
+      max_files: 10,
+    })) as { searchBackend: string; totalMatches: number; matchedFiles: number };
+    assert.equal(rgResult.searchBackend, "rg");
+    assert.equal(rgResult.totalMatches, 2);
+    assert.equal(rgResult.matchedFiles, 1);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

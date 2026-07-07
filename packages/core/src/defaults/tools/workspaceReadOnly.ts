@@ -1,3 +1,4 @@
+import { spawn, spawnSync } from "node:child_process";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -9,7 +10,7 @@ import {
 import { relativeToRoot, resolveWorkspacePath } from "../../shared/paths";
 import { truncate } from "../../shared/text";
 import { captureToolText } from "../../tools/outputArtifacts";
-import type { ToolDefinition } from "../../tools/types";
+import type { ToolDefinition, ToolExecutionContext } from "../../tools/types";
 
 export interface ReadOnlyWorkspaceToolsOptions {
   rootDir: string;
@@ -66,7 +67,7 @@ function createFsListTool(options: ResolvedOptions): ToolDefinition {
       additionalProperties: false,
     },
     inputAnnotations: [{ field: "path", kind: "file_path" }],
-    async execute(input, context) {
+    async execute(input) {
       const requestedPath = readOptionalString(input, "path", ".");
       const recursive = readOptionalBoolean(input, "recursive", false);
       const maxEntries = readOptionalInteger(
@@ -206,7 +207,7 @@ function createFsReadTool(options: ResolvedOptions): ToolDefinition {
 function createGrepTool(options: ResolvedOptions): ToolDefinition {
   return {
     name: "grep_search",
-    description: "Search text content under a workspace path using literal or regex matching.",
+    description: "Search text content under a workspace path using ripgrep.",
     risk: "low",
     tags: ["filesystem", "search", "read-only"],
     capabilities: ["filesystem.read", "search.text"],
@@ -225,7 +226,7 @@ function createGrepTool(options: ResolvedOptions): ToolDefinition {
       additionalProperties: false,
     },
     inputAnnotations: [{ field: "root_path", kind: "file_path" }],
-    async execute(input) {
+    async execute(input, context) {
       const query = readRequiredString(input, "query", "grep_search");
       const requestedRoot = readOptionalString(input, "root_path", ".");
       const isRegex = readOptionalBoolean(input, "is_regex", false);
@@ -244,111 +245,162 @@ function createGrepTool(options: ResolvedOptions): ToolDefinition {
         1,
         options.maxSearchMatches,
       );
-      const maxDepth = readOptionalInteger(
-        input,
-        "max_depth",
-        options.maxTraversalDepth,
-        0,
-        options.maxTraversalDepth,
-      );
+      readOptionalInteger(input, "max_depth", options.maxTraversalDepth, 0, options.maxTraversalDepth);
 
       const root = resolveWorkspacePath(options.rootDir, requestedRoot);
       const rootInfo = await stat(root);
-      const files = rootInfo.isFile() ? [root] : await collectFiles(root, maxDepth, maxFiles);
-      const matcher = buildMatcher(query, isRegex, caseSensitive);
-      const matches: Array<{ file: string; line: number; snippet: string }> = [];
-      let scannedFiles = 0;
-      let matchedFiles = 0;
-
-      for (const filePath of files) {
-        if (matches.length >= maxMatches) break;
-        const fileMatches = await findMatchesInFile(
-          filePath,
-          matcher,
-          maxMatches - matches.length,
-          options.maxReadChars,
-        );
-        scannedFiles += 1;
-        if (fileMatches.length > 0) {
-          matchedFiles += 1;
-          for (const match of fileMatches) {
-            matches.push({
-              file: relativeToRoot(options.rootDir, filePath),
-              line: match.line,
-              snippet: truncate(match.snippet, 240),
-            });
-            if (matches.length >= maxMatches) break;
-          }
-        }
-      }
+      const result = await searchWithRg(
+        {
+          rootDir: options.rootDir,
+        },
+        rootInfo.isFile() ? root : root,
+        query,
+        isRegex,
+        caseSensitive,
+        maxFiles,
+        maxMatches,
+        context,
+      );
 
       return {
         query,
         isRegex,
         caseSensitive,
         root: relativeToRoot(options.rootDir, root),
-        scannedFiles,
-        matchedFiles,
-        totalMatches: matches.length,
-        truncated: matches.length >= maxMatches,
-        matches,
+        scannedFiles: result.scannedFiles,
+        matchedFiles: result.matchedFiles,
+        totalMatches: result.matches.length,
+        truncated: result.matches.length >= maxMatches,
+        matches: result.matches,
+        searchBackend: "rg",
       };
     },
   };
 }
 
-async function collectFiles(root: string, maxDepth: number, maxFiles: number): Promise<string[]> {
-  const out: string[] = [];
-  const queue: Array<{ absolutePath: string; depth: number }> = [{ absolutePath: root, depth: 0 }];
-  while (queue.length > 0 && out.length < maxFiles) {
-    const current = queue.shift() as { absolutePath: string; depth: number };
-    const entries = await readdir(current.absolutePath, { withFileTypes: true });
-    for (const entry of entries) {
-      const absolutePath = path.join(current.absolutePath, entry.name);
-      if (entry.isDirectory()) {
-        if (current.depth < maxDepth) {
-          queue.push({ absolutePath, depth: current.depth + 1 });
-        }
-        continue;
-      }
-      if (entry.isFile()) {
-        out.push(absolutePath);
-        if (out.length >= maxFiles) break;
-      }
-    }
-  }
-  return out;
-}
-
-function buildMatcher(
+async function searchWithRg(
+  options: { rootDir: string },
+  root: string,
   query: string,
   isRegex: boolean,
   caseSensitive: boolean,
-): (line: string) => boolean {
-  if (!isRegex) {
-    const expected = caseSensitive ? query : query.toLowerCase();
-    return (line) => (caseSensitive ? line : line.toLowerCase()).includes(expected);
-  }
-  const flags = caseSensitive ? "" : "i";
-  const regex = new RegExp(query, flags);
-  return (line) => regex.test(line);
+  maxFiles: number,
+  maxMatches: number,
+  context?: ToolExecutionContext,
+): Promise<{
+  scannedFiles: number;
+  matchedFiles: number;
+  matches: Array<{ file: string; line: number; snippet: string }>;
+}> {
+  ensureRgAvailable();
+
+  return new Promise((resolve, reject) => {
+    const args = [
+      "--json",
+      "--line-number",
+      "--column",
+      "--no-heading",
+      "--color",
+      "never",
+      "--hidden",
+    ];
+    if (!caseSensitive) args.push("-i");
+    if (!isRegex) args.push("-F");
+    args.push(query);
+    args.push(root);
+
+    const child = spawn("rg", args, {
+      cwd: options.rootDir,
+      stdio: ["ignore", "pipe", "pipe"],
+      ...(context?.signal ? { signal: context.signal } : {}),
+    });
+    const matches: Array<{ file: string; line: number; snippet: string }> = [];
+    const seenFiles = new Set<string>();
+    let scannedFiles = 0;
+    let matchedFiles = 0;
+    let stderr = "";
+    let buffer = "";
+    let settled = false;
+
+    const finish = (fn: (value: any) => void, value?: unknown): void => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+
+    const parseEvent = (line: string): void => {
+      if (!line || matches.length >= maxMatches) return;
+      const parsed = JSON.parse(line) as {
+        type: string;
+        data?: {
+          path?: { text?: string };
+          line_number?: number;
+          lines?: { text?: string };
+        };
+      };
+      if (parsed.type === "begin") {
+        scannedFiles += 1;
+        if (scannedFiles >= maxFiles) {
+          child.kill("SIGTERM");
+        }
+        return;
+      }
+      if (parsed.type !== "match") return;
+      const file = parsed.data?.path?.text;
+      if (!file) return;
+      if (!seenFiles.has(file)) {
+        seenFiles.add(file);
+        matchedFiles += 1;
+      }
+      matches.push({
+        file: relativeToRoot(options.rootDir, path.resolve(options.rootDir, file)),
+        line: parsed.data?.line_number ?? 0,
+        snippet: truncate(parsed.data?.lines?.text ?? "", 240),
+      });
+      if (matches.length >= maxMatches) {
+        child.kill("SIGTERM");
+      }
+    };
+
+    child.stdout?.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      let newlineIndex = buffer.indexOf("\n");
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trimEnd();
+        buffer = buffer.slice(newlineIndex + 1);
+        try {
+          parseEvent(line);
+        } catch (error) {
+          child.kill("SIGTERM");
+          finish(reject, error);
+          return;
+        }
+        newlineIndex = buffer.indexOf("\n");
+      }
+    });
+
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.once("error", (error) => {
+      finish(reject, error);
+    });
+
+    child.once("close", (code, signal) => {
+      if (settled) return;
+      if (code === 0 || code === 1 || signal === "SIGTERM") {
+        finish(resolve, { scannedFiles, matchedFiles, matches });
+        return;
+      }
+      const message = stderr.trim() || `rg exited with code ${code ?? "unknown"}`;
+      finish(reject, new Error(message));
+    });
+  });
 }
 
-async function findMatchesInFile(
-  filePath: string,
-  matcher: (line: string) => boolean,
-  maxMatches: number,
-  maxReadChars: number,
-): Promise<Array<{ line: number; snippet: string }>> {
-  const content = await readFile(filePath, "utf8");
-  const sliced = content.length > maxReadChars ? content.slice(0, maxReadChars) : content;
-  const lines = sliced.split(/\r?\n/);
-  const matches: Array<{ line: number; snippet: string }> = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] as string;
-    if (!matcher(line)) continue;
-    matches.push({ line: index + 1, snippet: line });
-    if (matches.length >= maxMatches) break;
-  }
-  return matches;
+function ensureRgAvailable(): void {
+  const result = spawnSync("rg", ["--version"], { stdio: "ignore" });
+  if (result.status === 0 && !result.error) return;
+  throw new Error("grep_search requires `rg` to be installed and available on PATH");
 }
