@@ -18,6 +18,7 @@ Composable, plugin-first library:
 - `plugins/basic-tools` — workspace-scoped mutation + shell tools
 - `plugins/example-tools` — reference `echo` / `time` tools
 - `apps/cli` — `@micro-harnesses/cli`, a thin composition + Ink TUI layer over core
+- `scripts/` — release automation helpers (`bump-version.mjs` updates root/workspace versions, internal ranges, and lockfile; `release-preflight.mjs` validates publishable package metadata before npm publish)
 
 ### Runtime loop (`packages/core/src/runtime/agent.ts`)
 

@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/plugin-example-tools",
-  "version": "3.1.4",
+  "version": "3.2.0",
   "description": "Reference tool plugin (echo, time) for @micro-harnesses/core. Doubles as a plugin-authoring example.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "example", "tools"],
@@ -34,6 +34,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harnesses/core": "^3.1.4"
+    "@micro-harnesses/core": "^3.2.0"
   }
 }

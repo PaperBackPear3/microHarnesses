@@ -60,10 +60,10 @@ Use the monorepo bump script to set a new version everywhere (root/workspaces,
 internal dependency ranges, lockfile):
 
 ```bash
-npm run version:bump -- 2.1.1
+npm run version:bump -- 3.2.0
 ```
 
-Then create/push the matching tag (for example `v2.1.1`) to trigger the
+Then create/push the matching tag (for example `v3.2.0`) to trigger the
 release workflow.
 
 ## Install packages
