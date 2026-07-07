@@ -14,6 +14,10 @@ if (packageDirs.length === 0) {
 }
 
 const repoRoot = process.cwd();
+const rootPackage = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
+const expectedRepositoryUrl = normalizeRepositoryUrl(
+  readRepositoryUrl(rootPackage, "package.json"),
+);
 const packageSummaries = packageDirs.map((dir) => readAndValidatePackage(dir));
 const releaseVersion = assertSingleVersion(packageSummaries);
 
@@ -50,6 +54,14 @@ function readAndValidatePackage(relativeDir) {
 
   if (typeof version !== "string" || !isSemver(version)) {
     fail(`Invalid semver version in ${relativeDir}/package.json: ${String(version)}`);
+  }
+  const repositoryUrl = normalizeRepositoryUrl(
+    readRepositoryUrl(parsed, `${relativeDir}/package.json`),
+  );
+  if (repositoryUrl !== expectedRepositoryUrl) {
+    fail(
+      `Repository URL mismatch in ${relativeDir}/package.json: ${repositoryUrl} does not match ${expectedRepositoryUrl}`,
+    );
   }
 
   return {
@@ -123,6 +135,24 @@ function assertVersionNotPublished(packageName, version) {
 
 function isSemver(value) {
   return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value);
+}
+
+function readRepositoryUrl(pkg, source) {
+  const repository = pkg.repository;
+  const url =
+    typeof repository === "string"
+      ? repository
+      : repository && typeof repository === "object"
+        ? repository.url
+        : undefined;
+  if (typeof url !== "string" || url.trim().length === 0) {
+    fail(`Missing repository.url in ${source}`);
+  }
+  return url.trim();
+}
+
+function normalizeRepositoryUrl(url) {
+  return url.replace(/\.git$/i, "").replace(/\/+$/g, "");
 }
 
 function fail(message) {
