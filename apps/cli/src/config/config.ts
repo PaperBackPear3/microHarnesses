@@ -17,6 +17,7 @@ export interface CliConfig {
   effort: EffortLevel;
   mode: HarnessMode;
   maxIterations: number;
+  unlimitedIterations: boolean;
   snapshotEvery: number;
   maxTokens?: number;
   noSafety: boolean;
@@ -36,7 +37,7 @@ export interface ConfigOverrides {
   model?: string;
   effort?: EffortLevel;
   mode?: HarnessMode;
-  maxIterations?: number;
+  maxIterations?: number | "unlimited";
   snapshotEvery?: number;
   maxTokens?: number;
   noSafety?: boolean;
@@ -56,7 +57,7 @@ interface FileConfig {
   model?: string;
   effort?: string;
   mode?: string;
-  maxIterations?: number;
+  maxIterations?: number | "unlimited";
   snapshotEvery?: number;
   maxTokens?: number;
   noSafety?: boolean;
@@ -75,7 +76,8 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
     provider: "openai",
     effort: "medium",
     mode: "accept-edits",
-    maxIterations: 16,
+    maxIterations: 320,
+    unlimitedIterations: false,
     snapshotEvery: 4,
     noSafety: false,
     privacyMode: false,
@@ -90,12 +92,20 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
   const envModel = process.env.MH_MODEL || process.env.MICRO_HARNESS_MODEL;
   const envEffort = parseEffort(process.env.MH_EFFORT || process.env.MICRO_HARNESS_EFFORT);
   const envMode = parseMode(process.env.MH_MODE || process.env.MICRO_HARNESS_MODE);
-  const envMaxIterations = parseEnvPositiveInt(process.env.MH_MAX_ITERATIONS);
+  const envMaxIterations =
+    parseEnvIterationLimit(process.env.MH_MAX_ITERATIONS) ??
+    parseEnvIterationLimit(process.env.MICRO_HARNESS_MAX_ITERATIONS);
   const envSnapshotEvery = parseEnvPositiveInt(process.env.MH_SNAPSHOT_EVERY);
   const envCompactionTrigger = parseEnvRatio(process.env.MH_COMPACTION_TRIGGER);
   const envCompactionTarget = parseEnvRatio(process.env.MH_COMPACTION_TARGET);
   const envTurnCompactionTarget = parseEnvRatio(process.env.MH_TURN_COMPACTION_TARGET);
   const envNonTurnTokenReserve = parseEnvPositiveInt(process.env.MH_NON_TURN_TOKEN_RESERVE);
+
+  const overrideIterations = overrides.maxIterations;
+  const fileIterations = fromFile.maxIterations;
+  const resolvedIterationSetting =
+    overrideIterations ?? fileIterations ?? envMaxIterations ?? defaults.maxIterations;
+  const unlimitedIterations = resolvedIterationSetting === "unlimited";
 
   return {
     stateDir: overrides.stateDir ?? envStateDir ?? fromFile.stateDir ?? defaults.stateDir,
@@ -106,10 +116,8 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
     effort: overrides.effort ?? envEffort ?? parseEffort(fromFile.effort) ?? defaults.effort,
     mode: overrides.mode ?? envMode ?? parseMode(fromFile.mode) ?? defaults.mode,
     maxIterations:
-      overrides.maxIterations ??
-      fromFile.maxIterations ??
-      envMaxIterations ??
-      defaults.maxIterations,
+      resolvedIterationSetting === "unlimited" ? defaults.maxIterations : resolvedIterationSetting,
+    unlimitedIterations,
     snapshotEvery:
       overrides.snapshotEvery ??
       fromFile.snapshotEvery ??
@@ -149,6 +157,12 @@ function parseEnvPositiveInt(raw: string | undefined): number | undefined {
     return undefined;
   }
   return parsed;
+}
+
+function parseEnvIterationLimit(raw: string | undefined): number | "unlimited" | undefined {
+  if (!raw) return undefined;
+  if (raw.trim().toLowerCase() === "unlimited") return "unlimited";
+  return parseEnvPositiveInt(raw);
 }
 
 function parseEnvRatio(raw: string | undefined): number | undefined {

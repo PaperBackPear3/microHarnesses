@@ -14,7 +14,7 @@ export interface GlobalCliArgs {
   skillsDir?: string;
   noSafety: boolean;
   maxTokens?: number;
-  maxIterations?: number;
+  maxIterations?: number | "unlimited";
   snapshotEvery?: number;
   compactionTriggerUtilization?: number;
   compactionTargetUtilization?: number;
@@ -67,7 +67,7 @@ export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
     skillsDir: getValue(args, "--skills-dir"),
     noSafety: hasFlag(args, "--no-safety"),
     maxTokens: parseOptionalInt(getValue(args, "--max-tokens"), "--max-tokens"),
-    maxIterations: parseOptionalInt(getValue(args, "--iterations"), "--iterations"),
+    maxIterations: parseIterationLimit(getValue(args, "--iterations"), "--iterations"),
     snapshotEvery: parseOptionalInt(getValue(args, "--snapshot-every"), "--snapshot-every"),
     compactionTriggerUtilization: parseOptionalRatio(
       getValue(args, "--compaction-trigger"),
@@ -116,6 +116,15 @@ function parseOptionalInt(raw: string | undefined, flag: string): number | undef
     throw new Error(`${flag} must be a positive integer`);
   }
   return parsed;
+}
+
+function parseIterationLimit(
+  raw: string | undefined,
+  flag: string,
+): number | "unlimited" | undefined {
+  if (raw === undefined) return undefined;
+  if (raw.trim().toLowerCase() === "unlimited") return "unlimited";
+  return parseOptionalInt(raw, flag);
 }
 
 function parseOptionalRatio(raw: string | undefined, flag: string): number | undefined {

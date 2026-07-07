@@ -2,7 +2,7 @@ import type { PolicyRule } from "../policy/types";
 
 /**
  * Interaction modes for an agentic harness:
- * - `plan` — read-only exploration and planning;
+ * - `plan` — planning-safe exploration with approval-gated commands;
  * - `accept-edits` — mutating actions require user approval;
  * - `autopilot` — actions are auto-approved and the agent continues until done.
  */
@@ -69,17 +69,22 @@ export const DEFAULT_PLAN_ALLOWED_TOOLS = [
   "time",
 ];
 
+/** Tools that may run in plan mode only after explicit approval. */
+export const DEFAULT_PLAN_APPROVAL_TOOLS = ["shell_exec"];
+
 export interface ModeAwarePolicyOptions {
   /** Overrides DEFAULT_MUTATING_TOOLS. */
   mutatingTools?: string[];
   /** Overrides DEFAULT_PLAN_ALLOWED_TOOLS. */
   planAllowedTools?: string[];
+  /** Overrides DEFAULT_PLAN_APPROVAL_TOOLS. */
+  planApprovalTools?: string[];
 }
 
 /**
  * PolicyRule that enforces the current harness mode: autopilot auto-approves,
- * plan mode denies everything outside the plan allowlist, and accept-edits
- * requires approval for mutating tools.
+ * plan mode allows safe planning tools and requires approval for command tools,
+ * and accept-edits requires approval for mutating tools.
  */
 export function createModeAwareApprovalPolicy(
   modeController: ModeController,
@@ -87,6 +92,7 @@ export function createModeAwareApprovalPolicy(
 ): PolicyRule {
   const mutating = new Set(options.mutatingTools ?? DEFAULT_MUTATING_TOOLS);
   const planAllowed = new Set(options.planAllowedTools ?? DEFAULT_PLAN_ALLOWED_TOOLS);
+  const planApproval = new Set(options.planApprovalTools ?? DEFAULT_PLAN_APPROVAL_TOOLS);
 
   return async (tool) => {
     const mode = modeController.getMode();
@@ -94,10 +100,16 @@ export function createModeAwareApprovalPolicy(
       return { decision: "allow", reason: "Autopilot mode auto-approves actions" };
     }
     if (mode === "plan") {
+      if (planApproval.has(tool.name)) {
+        return {
+          decision: "require_approval",
+          reason: `Tool "${tool.name}" requires approval in plan mode`,
+        };
+      }
       if (!planAllowed.has(tool.name)) {
         return { decision: "deny", reason: `Tool "${tool.name}" denied in plan mode` };
       }
-      return { decision: "allow", reason: "Read-only planning tool allowed in plan mode" };
+      return { decision: "allow", reason: "Planning-safe tool allowed in plan mode" };
     }
     if (mutating.has(tool.name)) {
       return {
@@ -114,7 +126,7 @@ export function isMutatingTool(name: string): boolean {
 }
 
 export function planModeAllowActions(): string[] {
-  return [...DEFAULT_PLAN_ALLOWED_TOOLS];
+  return [...DEFAULT_PLAN_ALLOWED_TOOLS, ...DEFAULT_PLAN_APPROVAL_TOOLS];
 }
 
 const AUTOPILOT_INSTRUCTIONS = [

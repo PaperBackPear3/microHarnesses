@@ -17,6 +17,7 @@ function makeConfig(stateDir: string): CliConfig {
     effort: "medium",
     mode: "accept-edits",
     maxIterations: 8,
+    unlimitedIterations: false,
     snapshotEvery: 2,
     noSafety: true,
     privacyMode: true,
@@ -79,6 +80,18 @@ test("composition configures core agentic compression through the subagent super
     assert.ok(requests.every((request) => request.allowedTools?.length === 0));
     assert.match(result.summary, /compressed/);
     assert.equal(result.refinedGoal, "refined goal");
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("autopilot uses the configured iteration budget", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-composition-"));
+  try {
+    const config = { ...makeConfig(stateDir), mode: "autopilot" as const, maxIterations: 8 };
+    const composition = await buildComposition(config, "s-test-autopilot-iterations");
+    assert.equal(composition.runOptions().maxIterations, 8);
+    assert.equal(composition.runOptions().unlimitedIterations, false);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

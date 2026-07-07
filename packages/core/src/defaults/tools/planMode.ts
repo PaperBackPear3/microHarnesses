@@ -96,7 +96,7 @@ function resolvePlanModeOptions(options: PlanModeToolsOptions): ResolvedPlanMode
 function createPlanAgentTool(): ToolDefinition {
   return {
     name: "plan_agent",
-    description: "Read-only planner that turns a goal into prioritised execution steps.",
+    description: "Planner that turns a goal into prioritised execution steps.",
     risk: "low",
     inputSchema: {
       type: "object",
@@ -149,7 +149,7 @@ function createPlanAgentTool(): ToolDefinition {
 
       return {
         mode: "plan",
-        read_only: true,
+        permission_model: "planning-safe; commands may require approval",
         goal,
         scope,
         constraints,
@@ -158,7 +158,8 @@ function createPlanAgentTool(): ToolDefinition {
         milestones,
         steps,
         notes: [
-          "This tool is read-only and does not execute actions.",
+          "This tool does not execute actions itself.",
+          "Plan mode may request approval for commands when investigation or validation requires them.",
           "Use explore_agent to gather codebase facts before finalising the plan.",
         ],
       };
@@ -407,7 +408,7 @@ function firstLineSnippet(
 function createPlanModeInfoTool(): ToolDefinition {
   return {
     name: "plan_mode_info",
-    description: "Returns capabilities and guarantees of the plan-mode read-only tools.",
+    description: "Returns capabilities and guarantees of the plan-mode planning tools.",
     risk: "low",
     async execute() {
       return {
@@ -415,10 +416,11 @@ function createPlanModeInfoTool(): ToolDefinition {
         tools: ["plan_agent", "explore_agent", "plan_mode_info"],
         guarantees: [
           "No file writes",
-          "No process execution",
+          "Commands require explicit approval",
           "No network calls",
-          "Planning and exploration only",
+          "Planning-safe exploration by default",
         ],
+        approval_required_for: ["shell_exec"],
       };
     },
   };

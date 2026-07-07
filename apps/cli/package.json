@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/cli",
-  "version": "3.0.6",
+  "version": "3.0.7",
   "description": "Interactive development assistant CLI powered by @micro-harnesses/core.",
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
@@ -30,9 +30,9 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
-    "@micro-harnesses/core": "^3.0.6",
-    "@micro-harnesses/plugin-basic-tools": "^3.0.6",
-    "@micro-harnesses/plugin-example-tools": "^3.0.6",
+    "@micro-harnesses/core": "^3.0.7",
+    "@micro-harnesses/plugin-basic-tools": "^3.0.7",
+    "@micro-harnesses/plugin-example-tools": "^3.0.7",
     "diff": "^9.0.0",
     "ink": "^7.1.0",
     "ink-spinner": "^5.0.0",

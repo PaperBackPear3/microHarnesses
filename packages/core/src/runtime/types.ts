@@ -40,6 +40,8 @@ export type ApprovalHandler = (request: ApprovalRequest) => Promise<boolean> | b
 
 export interface RunOptions {
   maxIterations: number;
+  /** Allows the runtime to keep looping until the model signals stop. */
+  unlimitedIterations?: boolean;
   /** Persist a session snapshot every N iterations. Must be a positive integer. */
   snapshotEvery: number;
   profile: ModelProfile;

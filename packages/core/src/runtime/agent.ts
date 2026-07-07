@@ -313,7 +313,10 @@ export class Agent implements AgentHandle {
     }
 
     const priorTurns = state.turns.length;
-    const maxIterations = adaptiveIterationLimit(options.maxIterations, priorTurns);
+    const unlimitedIterations = options.unlimitedIterations ?? false;
+    const maxIterations = unlimitedIterations
+      ? options.maxIterations
+      : adaptiveIterationLimit(options.maxIterations, priorTurns);
     const adaptiveLimits: RuntimeLimits = {
       ...limits,
       maxActionCallsPerRun: adaptiveActionCallLimit(limits.maxActionCallsPerRun, priorTurns),
@@ -346,7 +349,7 @@ export class Agent implements AgentHandle {
       goal,
       parentSessionId: options.parentSessionId,
       rootSessionId: options.rootSessionId,
-      maxIterations,
+      ...(unlimitedIterations ? { unlimitedIterations: true } : { maxIterations }),
       maxActionCallsPerRun: adaptiveLimits.maxActionCallsPerRun,
     });
 
@@ -355,7 +358,7 @@ export class Agent implements AgentHandle {
     const budget: ActionCallBudget = { remaining: adaptiveLimits.maxActionCallsPerRun };
     let maxIterationLimitReached = false;
 
-    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    for (let iteration = 1; unlimitedIterations || iteration <= maxIterations; iteration += 1) {
       if (runCtx.cancelled) {
         observer.countError("killed");
         observer.log("warn", "agent killed before next iteration", {
@@ -387,7 +390,7 @@ export class Agent implements AgentHandle {
         });
         iterationSpan.setStatus({ code: "ok" });
         if (stop) break;
-        if (iteration === maxIterations) {
+        if (!unlimitedIterations && iteration === maxIterations) {
           maxIterationLimitReached = true;
         }
       } catch (error) {
@@ -763,7 +766,10 @@ export class Agent implements AgentHandle {
 }
 
 export function validateRunOptions(options: RunOptions): void {
-  if (!Number.isInteger(options.maxIterations) || options.maxIterations < 1) {
+  if (
+    !options.unlimitedIterations &&
+    (!Number.isInteger(options.maxIterations) || options.maxIterations < 1)
+  ) {
     throw new ValidationError(
       `maxIterations must be a positive integer, got ${String(options.maxIterations)}`,
     );

@@ -21,6 +21,15 @@ const readTool: ToolDefinition = {
   },
 };
 
+const shellTool: ToolDefinition = {
+  name: "shell_exec",
+  description: "shell",
+  risk: "high",
+  async execute() {
+    return {};
+  },
+};
+
 test("plan mode denies mutating tools", async () => {
   const mode = new ModeController("plan");
   const rule = createModeAwareApprovalPolicy(mode);
@@ -34,6 +43,21 @@ test("plan mode denies mutating tools", async () => {
     },
   );
   assert.equal(decision?.decision, "deny");
+});
+
+test("plan mode requires approval for command execution", async () => {
+  const mode = new ModeController("plan");
+  const rule = createModeAwareApprovalPolicy(mode);
+  const decision = await rule(
+    shellTool,
+    { name: "shell_exec", input: { command: "npm test" } },
+    {
+      iteration: 1,
+      promptName: "coder",
+      runId: "r-1",
+    },
+  );
+  assert.equal(decision?.decision, "require_approval");
 });
 
 test("accept-edits mode requires approval for mutating tools", async () => {

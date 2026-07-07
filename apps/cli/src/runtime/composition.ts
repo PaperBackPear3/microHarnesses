@@ -352,10 +352,9 @@ export async function buildComposition(
     subagents,
     runOptions() {
       const mode = modeController.getMode();
-      const maxIterations =
-        mode === "autopilot" ? Math.max(config.maxIterations, 48) : config.maxIterations;
       return {
-        maxIterations,
+        maxIterations: config.maxIterations,
+        unlimitedIterations: config.unlimitedIterations,
         snapshotEvery: config.snapshotEvery,
         profile: profileForProvider(runtimeState.provider, runtimeState.model),
         modelOverride: runtimeState.model,

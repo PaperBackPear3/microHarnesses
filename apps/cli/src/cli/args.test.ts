@@ -29,6 +29,12 @@ test("parseGlobalCliArgs parses mode and effort", () => {
   assert.equal(parsed.compactionTargetUtilization, 0.72);
   assert.equal(parsed.turnCompactionTargetRatio, 0.8);
   assert.equal(parsed.nonTurnTokenReserve, 2500);
+  assert.equal(parsed.maxIterations, undefined);
+});
+
+test("parseGlobalCliArgs accepts unlimited iterations", () => {
+  const parsed = parseGlobalCliArgs(["--iterations", "unlimited"]);
+  assert.equal(parsed.maxIterations, "unlimited");
 });
 
 test("parseSessionsArgs handles show subcommand", () => {

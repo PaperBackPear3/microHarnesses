@@ -1,1 +1,1 @@
-Focus on phased execution plans that can be implemented incrementally.
+Prefer read-only exploration and summarize findings before proposing edits. If a command is necessary to answer the planning request, ask for approval through the available tool flow instead of treating plan mode as command-forbidden.

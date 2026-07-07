@@ -22,11 +22,11 @@ test("plan_agent enforces goal and clamps max_steps", async () => {
   await assert.rejects(() => planTool.execute({ goal: "" }));
 
   const result = (await planTool.execute({ goal: "Ship feature", max_steps: 99 })) as {
-    read_only: boolean;
+    permission_model: string;
     requested_max_steps: number;
     actual_steps: number;
   };
-  assert.equal(result.read_only, true);
+  assert.match(result.permission_model, /commands may require approval/);
   assert.equal(result.requested_max_steps, 12);
   assert.equal(result.actual_steps, 12);
 });
@@ -75,7 +75,13 @@ test("plan_mode_info reports safety guarantees", async () => {
     (tool) => tool.name === "plan_mode_info",
   );
   assert.ok(infoTool);
-  const result = (await infoTool.execute({})) as { tools: string[]; guarantees: string[] };
+  const result = (await infoTool.execute({})) as {
+    tools: string[];
+    guarantees: string[];
+    approval_required_for: string[];
+  };
   assert.deepEqual(result.tools, ["plan_agent", "explore_agent", "plan_mode_info"]);
   assert.equal(result.guarantees.includes("No file writes"), true);
+  assert.equal(result.guarantees.includes("Commands require explicit approval"), true);
+  assert.deepEqual(result.approval_required_for, ["shell_exec"]);
 });

@@ -60,7 +60,7 @@ function printHelp(): void {
       "  --session <id>",
       "  --state-dir <path>",
       "  --skills-dir <path>",
-      "  --iterations <n>",
+      "  --iterations <n|unlimited> (default 320)",
       "  --snapshot-every <n>",
       "  --max-tokens <n>",
       "  --compaction-trigger <0..1>",

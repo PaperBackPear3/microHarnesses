@@ -76,6 +76,16 @@ class FakeModel implements ModelAdapter {
   }
 }
 
+class SequenceModel implements ModelAdapter {
+  private index = 0;
+  constructor(private readonly steps: StepPlan[]) {}
+  async nextStep(_input: StepInput): Promise<StepPlan> {
+    const step = this.steps[Math.min(this.index, this.steps.length - 1)];
+    this.index += 1;
+    return step;
+  }
+}
+
 class FakeStreamingModel implements ModelAdapter {
   async nextStep(input: StepInput): Promise<StepPlan> {
     await input.onReasoningDelta?.("thinking...");
@@ -374,6 +384,33 @@ test("runtime streams limit event and exits gracefully when tool call limit is e
     obs.memory.getMetrics().some((m) => m.name === "runtime.limit_reached"),
     true,
   );
+});
+
+test("runtime can run without an iteration cap when unlimitedIterations is enabled", async () => {
+  const obs = makeObs();
+  const runtime = new Agent({
+    promptName: "default",
+    model: new SequenceModel([
+      { assistantMessage: "step 1", toolCalls: [], stop: false },
+      { assistantMessage: "step 2", toolCalls: [], stop: false },
+      { assistantMessage: "done", toolCalls: [], stop: true },
+    ]),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("hello", {
+    ...options,
+    maxIterations: 1,
+    unlimitedIterations: true,
+  });
+
+  assert.equal(state.turns.length, 3);
+  assert.equal(obs.stream.ofType("limit.reached").length, 0);
 });
 
 test("tool executionTimeoutMs='none' bypasses default per-tool timeout", async () => {
