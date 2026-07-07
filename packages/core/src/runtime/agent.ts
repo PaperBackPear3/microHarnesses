@@ -11,6 +11,7 @@ import { ValidationError } from "../shared/errors";
 import { truncate } from "../shared/text";
 import { skillsAsToolResolver } from "../skills/asTool";
 import type { SkillRegistry } from "../skills/registry";
+import type { SubagentSupervisor } from "../subagents/types";
 import { deriveToolDescriptors } from "../tools/descriptors";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolResult } from "../tools/types";
@@ -48,6 +49,8 @@ export interface AgentOptions {
   approvalHandler?: ApprovalHandler;
   kind?: "main" | "subagent";
   skills?: SkillRegistry;
+  subagents?: SubagentSupervisor;
+  autoJoinSubagents?: boolean;
 }
 
 const DEFAULT_LIMITS: RuntimeLimits = {
@@ -84,6 +87,8 @@ export class Agent implements AgentHandle {
   private readonly defaultLimits: RuntimeLimits;
   private readonly approvalHandler?: ApprovalHandler;
   private readonly skills?: SkillRegistry;
+  private subagents?: SubagentSupervisor;
+  private autoJoinSubagents: boolean;
   private readonly beforeHooks: BeforeLoopHook[] = [];
   private readonly afterHooks: AfterLoopHook[] = [];
   private readonly activeRuns = new Set<RunContext>();
@@ -102,6 +107,8 @@ export class Agent implements AgentHandle {
     this.approvalHandler = options.approvalHandler;
     this.kind = options.kind ?? "main";
     this.skills = options.skills;
+    this.subagents = options.subagents;
+    this.autoJoinSubagents = options.autoJoinSubagents ?? false;
   }
 
   kill(reason?: string): void {
@@ -133,6 +140,14 @@ export class Agent implements AgentHandle {
 
   setTokenCounter(counter: TokenCounter, estimator = "custom"): void {
     this.context.setTokenCounter(counter, estimator);
+  }
+
+  setSubagentSupervisor(subagents: SubagentSupervisor | undefined): void {
+    this.subagents = subagents;
+  }
+
+  setAutoJoinSubagents(enabled: boolean): void {
+    this.autoJoinSubagents = enabled;
   }
 
   async compactSession(sessionId: string): Promise<{
@@ -620,6 +635,23 @@ export class Agent implements AgentHandle {
     };
 
     const toolOutcome = await engine.executeCalls(step.toolCalls, executionCtx);
+    const combinedToolCalls = [...step.toolCalls];
+    const combinedToolResults = [...toolOutcome.results];
+    const autoJoinResult = await this.autoJoinSubagentsIfEnabled({
+      options,
+      signal: runCtx.controller.signal,
+    });
+    if (autoJoinResult) {
+      combinedToolCalls.push({
+        name: "wait_subagents",
+        input: {
+          mode: "all",
+          auto: true,
+          ...(autoJoinResult.ids.length > 0 ? { ids: autoJoinResult.ids } : {}),
+        },
+      });
+      combinedToolResults.push(autoJoinResult.result);
+    }
     const skillCalls = step.skillCalls ?? [];
     let skillResults: ToolResult[] = [];
     let skillLimitReached = false;
@@ -644,8 +676,8 @@ export class Agent implements AgentHandle {
       // internal continuations and leave it empty (see providerModelAdapter).
       userMessage: iteration === 1 ? userPrompt : "",
       assistantMessage: step.assistantMessage,
-      toolCalls: step.toolCalls,
-      toolResults: toolOutcome.results,
+      toolCalls: combinedToolCalls,
+      toolResults: combinedToolResults,
       ...(skillCalls.length > 0 ? { skillCalls, skillResults } : {}),
     });
 
@@ -677,6 +709,54 @@ export class Agent implements AgentHandle {
       runId: state.runId,
       sessionId: state.sessionId,
     };
+  }
+
+  private shouldAutoJoinSubagents(options: RunOptions): boolean {
+    return options.autoJoinSubagents ?? this.autoJoinSubagents;
+  }
+
+  private async autoJoinSubagentsIfEnabled(args: {
+    options: RunOptions;
+    signal: AbortSignal;
+  }): Promise<{ ids: string[]; result: ToolResult } | undefined> {
+    if (!this.shouldAutoJoinSubagents(args.options)) return undefined;
+    if (!this.subagents) return undefined;
+    const tracked = this.subagents.list();
+    if (tracked.length === 0) return undefined;
+
+    const runningIds = tracked.filter((entry) => entry.status === "running").map((entry) => entry.id);
+    const waitOptions =
+      runningIds.length > 0
+        ? { mode: "all" as const, signal: args.signal, ids: runningIds }
+        : { mode: "all" as const, signal: args.signal };
+    try {
+      const waited = await this.subagents.wait(waitOptions);
+      if (waited.completed.length === 0 && waited.running.length === 0) {
+        return undefined;
+      }
+      return {
+        ids: runningIds,
+        result: {
+          ok: true,
+          output: {
+            completed: waited.completed,
+            running: waited.running,
+            remaining: waited.running.length,
+            auto: true,
+          },
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "subagent auto-join failed";
+      return {
+        ids: runningIds,
+        result: {
+          ok: false,
+          output: { auto: true },
+          error: message,
+        },
+      };
+    }
   }
 }
 

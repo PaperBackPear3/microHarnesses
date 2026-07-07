@@ -60,6 +60,12 @@ export interface RunOptions {
   /** Parent span context, propagated so a subagent run joins the parent trace. */
   parentTrace?: TraceContext;
   capabilityScope?: CapabilityScope;
+  /**
+   * Controls runtime-managed subagent joining after action execution.
+   * - true: auto-join all currently running subagents.
+   * - false: disable runtime auto-join (model/tool-driven waits only).
+   */
+  autoJoinSubagents?: boolean;
 }
 
 export interface AgentInvokeRequest {

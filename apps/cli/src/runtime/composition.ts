@@ -234,6 +234,8 @@ export async function buildComposition(
     },
     agent,
   );
+  agent.setSubagentSupervisor(subagents);
+  agent.setAutoJoinSubagents(true);
 
   registerCoreDefaults({
     providerRegistry: providers,

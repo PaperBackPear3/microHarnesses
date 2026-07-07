@@ -65,6 +65,7 @@ export interface DefineAgentOptions {
   limits?: RuntimeLimits;
   approvalHandler?: ApprovalHandler;
   kind?: "main" | "subagent";
+  autoJoinSubagents?: boolean;
   stateDir?: string;
   maxWorkingTurns?: number;
   includeBuiltInProviders?: boolean;
@@ -119,10 +120,12 @@ export function defineAgent(options: DefineAgentOptions): Agent {
     limits: options.limits,
     approvalHandler: options.approvalHandler,
     kind: options.kind,
+    autoJoinSubagents: options.autoJoinSubagents,
   });
 
   if (options.subagents && Object.keys(options.subagents).length > 0) {
     const supervisor = createDeclarativeSubagents(agent, options.subagents);
+    agent.setSubagentSupervisor(supervisor);
     tools.register(createSpawnSubagentTool(supervisor));
     tools.register(createWaitSubagentsTool(supervisor));
   }

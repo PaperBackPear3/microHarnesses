@@ -20,6 +20,14 @@ import type { ToolPolicyContext, ToolPolicyEngine, ToolPolicyEvaluation } from "
 import type { PromptBundle, PromptSource } from "../prompts/types";
 import { SessionStore } from "../session/sessionStore";
 import { SkillRegistry } from "../skills/registry";
+import type {
+  SubagentResult,
+  SubagentRunOptions,
+  SubagentSnapshot,
+  SubagentSpawnResult,
+  SubagentWaitOptions,
+  SubagentWaitResult,
+} from "../subagents/types";
 import { ToolRegistry } from "../tools/registry";
 import type { ToolCall, ToolDefinition } from "../tools/types";
 import { Agent } from "./agent";
@@ -97,6 +105,45 @@ class ReasoningPromptSource implements PromptSource {
 class FakeModelSelector implements ModelSelector {
   select(_input: ModelSelectionInput, _profile: ModelProfile): ModelSelectionDecision {
     return { model: "test-model", reason: "profile" };
+  }
+}
+
+class FakeSubagents {
+  private tracked: SubagentSnapshot[] = [];
+  waitCalls = 0;
+
+  async run(_options: SubagentRunOptions): Promise<SubagentResult> {
+    throw new Error("not used");
+  }
+
+  async spawn(_options: SubagentRunOptions): Promise<SubagentSpawnResult> {
+    const snapshot: SubagentSnapshot = {
+      id: "sub-1",
+      launchIndex: 1,
+      prompt: "calc",
+      status: "running",
+      startedAt: new Date().toISOString(),
+    };
+    this.tracked = [snapshot];
+    return { id: snapshot.id, launchIndex: snapshot.launchIndex, status: "running" };
+  }
+
+  async wait(_options?: SubagentWaitOptions): Promise<SubagentWaitResult> {
+    this.waitCalls += 1;
+    const running = this.tracked.filter((entry) => entry.status === "running");
+    if (running.length === 0) return { completed: [], running: [] };
+    const completed: SubagentSnapshot = {
+      ...running[0],
+      status: "completed",
+      completedAt: new Date().toISOString(),
+      summary: "4",
+    };
+    this.tracked = [completed];
+    return { completed: [completed], running: [] };
+  }
+
+  list(): SubagentSnapshot[] {
+    return this.tracked;
   }
 }
 
@@ -209,6 +256,84 @@ test("runtime normalizes simple function-style tool names", async () => {
   assert.equal(state.turns[0]?.toolCalls[0]?.name, "time()");
   assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
   assert.deepEqual(state.turns[0]?.toolResults[0]?.output, { now: "2026-01-01T00:00:00.000Z" });
+});
+
+test("runtime auto-joins subagents when enabled", async () => {
+  const obs = makeObs();
+  const tools = new ToolRegistry();
+  const subagents = new FakeSubagents();
+  tools.register({
+    name: "spawn_subagent",
+    description: "spawn",
+    risk: "high",
+    async execute() {
+      const spawned = await subagents.spawn({ prompt: "calc 2+2" });
+      return { subagentId: spawned.id, status: spawned.status, launchIndex: spawned.launchIndex };
+    },
+  });
+
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({
+      assistantMessage: "",
+      toolCalls: [{ name: "spawn_subagent", input: { prompt: "calc 2+2" } }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    subagents,
+    autoJoinSubagents: true,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("hello", options);
+  assert.equal(subagents.waitCalls, 1);
+  assert.equal(state.turns[0]?.toolCalls.length, 2);
+  assert.equal(state.turns[0]?.toolCalls[1]?.name, "wait_subagents");
+  assert.equal(state.turns[0]?.toolResults[1]?.ok, true);
+  assert.equal(
+    Array.isArray((state.turns[0]?.toolResults[1]?.output as { completed?: unknown[] }).completed),
+    true,
+  );
+});
+
+test("run option can disable runtime auto-join subagents", async () => {
+  const obs = makeObs();
+  const tools = new ToolRegistry();
+  const subagents = new FakeSubagents();
+  tools.register({
+    name: "spawn_subagent",
+    description: "spawn",
+    risk: "high",
+    async execute() {
+      const spawned = await subagents.spawn({ prompt: "calc 2+2" });
+      return { subagentId: spawned.id, status: spawned.status, launchIndex: spawned.launchIndex };
+    },
+  });
+
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({
+      assistantMessage: "",
+      toolCalls: [{ name: "spawn_subagent", input: { prompt: "calc 2+2" } }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    subagents,
+    autoJoinSubagents: true,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("hello", { ...options, autoJoinSubagents: false });
+  assert.equal(subagents.waitCalls, 0);
+  assert.equal(state.turns[0]?.toolCalls.length, 1);
 });
 
 test("runtime streams limit event and exits gracefully when tool call limit is exceeded", async () => {
