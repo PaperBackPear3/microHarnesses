@@ -20,6 +20,7 @@ This page documents package functionality and the concepts each package is respo
 - Provider-aware token counting (`ProviderAdapter.createTokenCounter`) with runtime calibration from observed model usage
 - Model selection (`DefaultModelSelector`, `EffortModelSelector`, default provider model profiles, Ollama context-window detection)
 - Subagent primitives (`InProcessSubagentRunner`, `InProcessSubagentSupervisor`)
+- Compression primitives (`defaultCompressor`, `createAgenticCompressor`) for heuristic or subagent-driven context compression
 
 ### Concepts
 
@@ -30,6 +31,9 @@ This page documents package functionality and the concepts each package is respo
 - **Deterministic subagent wait**: the supervisor tracks launch order, completion
   order, failures, aborts, and remaining running children; default tools expose
   this as `spawn_subagent` plus `wait_subagents`.
+- **Agentic compression**: `createAgenticCompressor` spawns summarizer and
+  goal-finder subagents with no tools, then falls back to deterministic
+  compression if subagent execution fails.
 
 ---
 
@@ -51,17 +55,6 @@ This page documents package functionality and the concepts each package is respo
 - **Workspace confinement** via root directory resolution.
 - **Bounded execution** for shell calls (timeout, output caps, abort support).
 - **High-risk classification** so policy engines can gate mutation/command tools.
-
----
-
-## `@micro-harnesses/plugin-agentic-compression`
-
-**Role**: subagent-driven context compression.
-
-### Concepts
-
-- **Agentic summarization**: spawns a subagent to summarize older turns instead of using a heuristic compressor.
-- **Bounded transcripts**: renders deterministic, size-capped transcripts for the summarizer prompt.
 
 ---
 

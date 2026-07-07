@@ -14,9 +14,8 @@ Use npm scripts from the root `package.json`:
 
 Composable, plugin-first library:
 
-- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, policy, harness modes, provider adapters, skills, subagent primitive; extensible provider-aware capabilities)
+- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, default + agentic compression, policy, harness modes, provider adapters, skills, subagent primitive; extensible provider-aware capabilities)
 - `plugins/basic-tools` — workspace-scoped mutation + shell tools
-- `plugins/agentic-compression` — subagent-driven context compression
 - `plugins/example-tools` — reference `echo` / `time` tools
 - `apps/cli` — `@micro-harnesses/cli`, a thin composition + Ink TUI layer over core
 

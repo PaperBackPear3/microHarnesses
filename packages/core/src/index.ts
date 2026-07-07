@@ -52,6 +52,10 @@ export * from "./prompts/fsPromptSource";
 export * from "./context/types";
 export * from "./context/manager";
 export * from "./context/defaultCompressor";
+export * from "./context/agenticCompressor";
+export * from "./context/agenticOutputParsing";
+export * from "./context/agenticSupportHistory";
+export * from "./context/agenticTranscript";
 export * from "./context/overflowPlan";
 
 // Session

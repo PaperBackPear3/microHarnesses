@@ -724,7 +724,9 @@ export class Agent implements AgentHandle {
     const tracked = this.subagents.list();
     if (tracked.length === 0) return undefined;
 
-    const runningIds = tracked.filter((entry) => entry.status === "running").map((entry) => entry.id);
+    const runningIds = tracked
+      .filter((entry) => entry.status === "running")
+      .map((entry) => entry.id);
     const waitOptions =
       runningIds.length > 0
         ? { mode: "all" as const, signal: args.signal, ids: runningIds }

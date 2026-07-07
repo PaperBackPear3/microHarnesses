@@ -1,9 +1,9 @@
-export interface ParsedSummary {
+export interface ParsedAgenticSummary {
   summary: string;
   highlights: string[];
 }
 
-export interface ParsedGoal {
+export interface ParsedAgenticGoal {
   goal: string;
   subgoals: string[];
 }
@@ -15,12 +15,10 @@ const SUBGOALS_LABEL = /^subgoals:\s*$/i;
 const BULLET = /^[-*]\s+(.*)$/;
 
 /**
- * Parses a summarizer subagent's reply. Expects a `SUMMARY:` line followed by
- * an optional `HIGHLIGHTS:` section of bullet points. Falls back to treating
- * the first non-empty line as the summary when the model doesn't follow the
- * requested format exactly, so malformed output never throws.
+ * Parses a summarizer subagent's reply. Falls back to treating the first
+ * non-empty line as the summary when the model doesn't follow the format.
  */
-export function parseSummaryOutput(raw: string): ParsedSummary {
+export function parseAgenticSummaryOutput(raw: string): ParsedAgenticSummary {
   let summary = "";
   const highlights: string[] = [];
   let inHighlights = false;
@@ -50,11 +48,10 @@ export function parseSummaryOutput(raw: string): ParsedSummary {
 }
 
 /**
- * Parses a goal-finder subagent's reply. Expects a `GOAL:` line followed by
- * an optional `SUBGOALS:` section of bullet points. Same permissive fallback
- * behavior as {@link parseSummaryOutput}.
+ * Parses a goal-finder subagent's reply with the same permissive fallback
+ * behavior as {@link parseAgenticSummaryOutput}.
  */
-export function parseGoalOutput(raw: string): ParsedGoal {
+export function parseAgenticGoalOutput(raw: string): ParsedAgenticGoal {
   let goal = "";
   const subgoals: string[] = [];
   let inSubgoals = false;

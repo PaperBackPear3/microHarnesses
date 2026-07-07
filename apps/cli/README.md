@@ -91,8 +91,8 @@ Context usage is estimated with provider-aware token counters:
 
 - **Default compressor** (`@micro-harnesses/core`): deterministic heuristic
   scoring (recency/impact/goal-keyword match), no model calls.
-- **Agentic compressor** (`@micro-harnesses/plugin-agentic-compression`, used by
-  this CLI): spawns two subagents in parallel:
+- **Agentic compressor** (`@micro-harnesses/core`, used by this CLI): spawns
+  two subagents in parallel:
   - `context-summarizer` for `SUMMARY` + `HIGHLIGHTS`
   - `goal-finder` for refined `GOAL` + `SUBGOALS`
 

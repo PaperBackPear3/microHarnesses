@@ -1,14 +1,11 @@
-import type { Turn } from "@micro-harnesses/core";
-import { truncate } from "@micro-harnesses/core";
+import type { Turn } from "../runtime/state";
+import { truncate } from "../shared/text";
 
 /**
  * Renders a bounded, deterministic text transcript of `turns` for use inside
- * subagent prompts (summarizer / goal-finder). Each turn becomes one line:
- * `iter=<n> | user: <...> | assistant: <...> tools=[a, b]`. The result is
- * capped at `maxChars`, appending a truncation marker when clipped so the
- * receiving model knows the transcript was cut short.
+ * subagent prompts (summarizer / goal-finder).
  */
-export function buildTranscript(turns: Turn[], maxChars: number): string {
+export function buildAgenticCompressionTranscript(turns: Turn[], maxChars: number): string {
   const lines = turns.map((turn) => renderTurnLine(turn));
   const joined = lines.join("\n");
   if (joined.length <= maxChars) {

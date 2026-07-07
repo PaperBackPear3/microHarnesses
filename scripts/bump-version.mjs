@@ -19,7 +19,6 @@ const packageJsonPaths = [
   "packages/core/package.json",
   "plugins/example-tools/package.json",
   "plugins/basic-tools/package.json",
-  "plugins/agentic-compression/package.json",
   "apps/cli/package.json",
 ];
 

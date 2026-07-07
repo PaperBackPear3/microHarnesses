@@ -1,20 +1,17 @@
-import type {
-  CompressionResult,
-  CompressorFn,
-  SubagentResult,
-  SubagentRunOptions,
-  Turn,
-} from "@micro-harnesses/core";
-import { defaultCompressor, truncate } from "@micro-harnesses/core";
-import { collectSupportHistory } from "./collectSupportHistory";
-import { parseGoalOutput, parseSummaryOutput } from "./parseAgentOutput";
-import { buildTranscript } from "./transcript";
+import type { Turn } from "../runtime/state";
+import { truncate } from "../shared/text";
+import type { SubagentResult, SubagentRunOptions } from "../subagents/types";
+import { parseAgenticGoalOutput, parseAgenticSummaryOutput } from "./agenticOutputParsing";
+import { collectAgenticSupportHistory } from "./agenticSupportHistory";
+import { buildAgenticCompressionTranscript } from "./agenticTranscript";
+import { defaultCompressor } from "./defaultCompressor";
+import type { CompressionResult, CompressorFn } from "./types";
 
-export type SpawnFn = (options: SubagentRunOptions) => Promise<SubagentResult>;
+export type AgenticCompressionSpawnFn = (options: SubagentRunOptions) => Promise<SubagentResult>;
 
 export interface AgenticCompressorOptions {
-  /** Delegates to `PluginApi.agents.spawn` (or an equivalent `SubagentRunner.run`). */
-  spawn: SpawnFn;
+  /** Delegates to a subagent service backed by the host composition. */
+  spawn: AgenticCompressionSpawnFn;
   /** Prompt persona for the summarizer subagent. Default: "context-summarizer". */
   summarizerPromptName?: string;
   /** Prompt persona for the goal-finder subagent. Default: "goal-finder". */
@@ -31,15 +28,9 @@ export interface AgenticCompressorOptions {
 
 /**
  * Builds a `CompressorFn` that compresses overflowed turns by spawning two
- * subagents in parallel — a summarizer and a goal-finder — instead of scoring
- * turns heuristically. Both subagents run with `allowedTools: []` (pure text
- * generation, no side effects) and inherit whatever model/provider/effort the
- * host composition currently has selected, since `spawn` is backed by the
- * same `SubagentRuntimeFactory` the rest of the app uses.
- *
- * Never throws: any spawn/model failure falls back to a deterministic
- * compressor (`defaultCompressor` by default) so compression can never break
- * a run.
+ * pure-text subagents in parallel: a summarizer and a goal-finder. Any
+ * subagent/model failure falls back to a deterministic compressor so
+ * compression can never break a run.
  */
 export function createAgenticCompressor(options: AgenticCompressorOptions): CompressorFn {
   const summarizerPromptName = options.summarizerPromptName ?? "context-summarizer";
@@ -59,7 +50,7 @@ export function createAgenticCompressor(options: AgenticCompressorOptions): Comp
     }
 
     const goal = context.goal?.trim() || "No explicit goal set";
-    const transcript = buildTranscript(turns, maxTranscriptChars);
+    const transcript = buildAgenticCompressionTranscript(turns, maxTranscriptChars);
     const previousSummaryText = context.previousSummary?.summary?.trim();
 
     try {
@@ -82,9 +73,6 @@ export function createAgenticCompressor(options: AgenticCompressorOptions): Comp
 
       return combineResults(goal, turns.length, summaryResult, goalResult, maxHighlights, turns);
     } catch {
-      // Compression must never break a run — fall back to a deterministic
-      // strategy when subagent spawning itself fails (e.g. no model/provider
-      // configured, or a transient provider error).
       return fallback(turns, context);
     }
   };
@@ -98,8 +86,8 @@ function combineResults(
   maxHighlights: number,
   turns: Turn[],
 ): CompressionResult {
-  const parsedSummary = parseSummaryOutput(summaryResult.summary);
-  const parsedGoal = parseGoalOutput(goalResult.summary);
+  const parsedSummary = parseAgenticSummaryOutput(summaryResult.summary);
+  const parsedGoal = parseAgenticGoalOutput(goalResult.summary);
 
   const highlights = [
     ...parsedSummary.highlights,
@@ -117,7 +105,7 @@ function combineResults(
   return {
     summary: truncate(summaryParts.join(" "), 800),
     highlights,
-    supportHistory: collectSupportHistory(turns),
+    supportHistory: collectAgenticSupportHistory(turns),
     ...(refinedGoal ? { refinedGoal } : {}),
   };
 }

@@ -27,6 +27,7 @@ import {
   type TokenCounter,
   ToolRegistry,
   builtInProviderPlugins,
+  createAgenticCompressor,
   createCommandSafetyRule,
   createCoreDefaultTools,
   createModeAwareApprovalPolicy,
@@ -37,7 +38,6 @@ import {
   profileForProvider,
   registerCoreDefaults,
 } from "@micro-harnesses/core";
-import { AgenticCompressionPlugin } from "@micro-harnesses/plugin-agentic-compression";
 import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
 import type { CliConfig } from "../config/config.js";
@@ -236,6 +236,7 @@ export async function buildComposition(
   );
   agent.setSubagentSupervisor(subagents);
   agent.setAutoJoinSubagents(true);
+  agent.setCompressor(createAgenticCompressor({ spawn: (request) => subagents.run(request) }));
 
   registerCoreDefaults({
     providerRegistry: providers,
@@ -274,7 +275,6 @@ export async function buildComposition(
   await pluginHost.register([
     ...builtInProviderPlugins(),
     new BasicToolsPlugin({ rootDir: process.cwd() }),
-    new AgenticCompressionPlugin(),
     exampleToolsPlugin,
   ]);
 

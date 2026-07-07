@@ -1,60 +1,60 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseGoalOutput, parseSummaryOutput } from "./parseAgentOutput";
+import { parseAgenticGoalOutput, parseAgenticSummaryOutput } from "./agenticOutputParsing";
 
-test("parseSummaryOutput parses SUMMARY and HIGHLIGHTS sections", () => {
+test("parseAgenticSummaryOutput parses SUMMARY and HIGHLIGHTS sections", () => {
   const raw = [
     "SUMMARY: Fixed the login bug and added tests.",
     "HIGHLIGHTS:",
     "- Found root cause",
     "- Added regression test",
   ].join("\n");
-  const parsed = parseSummaryOutput(raw);
+  const parsed = parseAgenticSummaryOutput(raw);
   assert.equal(parsed.summary, "Fixed the login bug and added tests.");
   assert.deepEqual(parsed.highlights, ["Found root cause", "Added regression test"]);
 });
 
-test("parseSummaryOutput is case-insensitive on labels", () => {
+test("parseAgenticSummaryOutput is case-insensitive on labels", () => {
   const raw = ["summary: lowercase label works", "highlights:", "* bullet with asterisk"].join(
     "\n",
   );
-  const parsed = parseSummaryOutput(raw);
+  const parsed = parseAgenticSummaryOutput(raw);
   assert.equal(parsed.summary, "lowercase label works");
   assert.deepEqual(parsed.highlights, ["bullet with asterisk"]);
 });
 
-test("parseSummaryOutput falls back to first non-empty line when markers are missing", () => {
-  const parsed = parseSummaryOutput("Just a plain sentence with no markers.");
+test("parseAgenticSummaryOutput falls back to first non-empty line", () => {
+  const parsed = parseAgenticSummaryOutput("Just a plain sentence with no markers.");
   assert.equal(parsed.summary, "Just a plain sentence with no markers.");
   assert.deepEqual(parsed.highlights, []);
 });
 
-test("parseSummaryOutput falls back to a slice of raw text when everything is empty-ish", () => {
-  const parsed = parseSummaryOutput("");
+test("parseAgenticSummaryOutput falls back to a slice of raw text when empty", () => {
+  const parsed = parseAgenticSummaryOutput("");
   assert.equal(parsed.summary, "");
   assert.deepEqual(parsed.highlights, []);
 });
 
-test("parseGoalOutput parses GOAL and SUBGOALS sections", () => {
+test("parseAgenticGoalOutput parses GOAL and SUBGOALS sections", () => {
   const raw = [
     "GOAL: Ship the agentic compressor plugin.",
     "SUBGOALS:",
     "- Add tests",
     "- Wire into CLI",
   ].join("\n");
-  const parsed = parseGoalOutput(raw);
+  const parsed = parseAgenticGoalOutput(raw);
   assert.equal(parsed.goal, "Ship the agentic compressor plugin.");
   assert.deepEqual(parsed.subgoals, ["Add tests", "Wire into CLI"]);
 });
 
-test("parseGoalOutput handles a GOAL with no SUBGOALS section", () => {
-  const parsed = parseGoalOutput("GOAL: Just the goal, no subgoals.");
+test("parseAgenticGoalOutput handles a GOAL with no SUBGOALS section", () => {
+  const parsed = parseAgenticGoalOutput("GOAL: Just the goal, no subgoals.");
   assert.equal(parsed.goal, "Just the goal, no subgoals.");
   assert.deepEqual(parsed.subgoals, []);
 });
 
-test("parseGoalOutput falls back to first non-empty line when markers are missing", () => {
-  const parsed = parseGoalOutput("The user wants X done.");
+test("parseAgenticGoalOutput falls back to first non-empty line", () => {
+  const parsed = parseAgenticGoalOutput("The user wants X done.");
   assert.equal(parsed.goal, "The user wants X done.");
   assert.deepEqual(parsed.subgoals, []);
 });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { RunState, SubagentRunOptions, Turn } from "@micro-harnesses/core";
+import type { RunState, Turn } from "../runtime/state";
+import type { SubagentRunOptions } from "../subagents/types";
 import { createAgenticCompressor } from "./agenticCompressor";
 
 function makeTurn(overrides: Partial<Turn> = {}): Turn {
