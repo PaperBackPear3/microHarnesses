@@ -1,25 +1,27 @@
+import type { ChannelRegistry } from "../channels/registry";
+import type { ModelRoute } from "../model/types";
 import type { CredentialsRegistry } from "../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
 import type { AfterLoopHook, BeforeLoopHook } from "../runtime/types";
 import { ValidationError } from "../shared/errors";
-import type { ChannelRegistry } from "../channels/registry";
 import type { SubagentService } from "../subagents/types";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
 import { registerBuiltInProviders, registerProviders } from "./providers/plugins";
 import { type ChannelToolsOptions, createChannelTools } from "./tools/channels";
+import { createListModelRoutesTool } from "./tools/listModelRoutesTool";
 import { type PlanModeToolsOptions, createPlanModeTools } from "./tools/planMode";
 import {
   type SpawnSubagentToolOptions,
   createSpawnSubagentTool,
   createWaitSubagentsTool,
 } from "./tools/spawnSubagentTool";
+import { createToolOutputReadTool } from "./tools/toolOutputRead";
 import {
   type ReadOnlyWorkspaceToolsOptions,
   createReadOnlyWorkspaceTools,
 } from "./tools/workspaceReadOnly";
-import { createToolOutputReadTool } from "./tools/toolOutputRead";
 
 export * from "./providers";
 export * from "./tools/planMode";
@@ -27,6 +29,7 @@ export * from "./tools/workspaceReadOnly";
 export * from "./tools/spawnSubagentTool";
 export * from "./tools/toolOutputRead";
 export * from "./tools/channels";
+export * from "./tools/listModelRoutesTool";
 
 export interface LoopHookRegistrar {
   onBeforeLoop(hook: BeforeLoopHook): void;
@@ -63,6 +66,12 @@ export interface CreateCoreDefaultToolsOptions {
   channelTools?: Omit<ChannelToolsOptions, "registry"> & { registry: ChannelRegistry };
   subagents?: SubagentService;
   spawnSubagent?: SpawnSubagentToolOptions;
+  /**
+   * When provided, registers the `list_model_routes` tool so models can query
+   * the available route catalog before making routing decisions (e.g. before
+   * spawning a subagent with a specific model).
+   */
+  listModelRoutes?: { routeCatalog: () => ModelRoute[] };
 }
 
 export function createCoreDefaultTools(options: CreateCoreDefaultToolsOptions): ToolDefinition[] {
@@ -79,6 +88,9 @@ export function createCoreDefaultTools(options: CreateCoreDefaultToolsOptions): 
   if (options.subagents) {
     tools.push(createSpawnSubagentTool(options.subagents, options.spawnSubagent));
     tools.push(createWaitSubagentsTool(options.subagents));
+  }
+  if (options.listModelRoutes) {
+    tools.push(createListModelRoutesTool(options.listModelRoutes.routeCatalog));
   }
   return tools;
 }

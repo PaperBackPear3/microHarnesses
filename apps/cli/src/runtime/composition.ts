@@ -370,6 +370,7 @@ export async function buildComposition(
       channelTools: { registry: channels },
       subagents,
       spawnSubagent: { defaultPromptName: "coder" },
+      listModelRoutes: { routeCatalog },
     }),
   });
 
