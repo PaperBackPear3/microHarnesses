@@ -1,9 +1,12 @@
+import {
+  type ModelTier,
+  modelTierMetadata,
+  orderedProfileTierEntries,
+} from "../../model/profileSelection";
 import type { ModelRoute, ModelRouteMetadata } from "../../model/types";
 import type { ProviderAdapter, ProviderAuth } from "../../providers/types";
 import { costRatingFromPricing, lookupKnownModelInfo } from "./modelCatalog";
 import { profileForProvider } from "./modelProfiles";
-
-type ProfileTier = "fast" | "default" | "reasoning";
 
 /**
  * Builds a static route catalog from a provider's fast/default/reasoning
@@ -13,10 +16,7 @@ type ProfileTier = "fast" | "default" | "reasoning";
  */
 export function routesForProviderProfile(providerId: string, modelOverride?: string): ModelRoute[] {
   const profile = profileForProvider(providerId, modelOverride);
-  const entries: Array<{ model: string; tier: ProfileTier }> = [];
-  if (profile.fastModel) entries.push({ model: profile.fastModel, tier: "fast" });
-  entries.push({ model: profile.defaultModel, tier: "default" });
-  if (profile.reasoningModel) entries.push({ model: profile.reasoningModel, tier: "reasoning" });
+  const entries = orderedProfileTierEntries(profile);
 
   const seen = new Set<string>();
   const routes: ModelRoute[] = [];
@@ -41,9 +41,9 @@ export function routesForProviderProfile(providerId: string, modelOverride?: str
  * (e.g. a local Ollama model, or a hosted model released after this table
  * was last updated).
  */
-function metadataForModel(model: string, tier: ProfileTier): ModelRouteMetadata {
+function metadataForModel(model: string, tier: ModelTier): ModelRouteMetadata {
   const known = lookupKnownModelInfo(model);
-  const heuristic = metadataForTier(tier);
+  const heuristic = modelTierMetadata(tier);
   if (!known) return heuristic;
 
   const cost = costRatingFromPricing(known) ?? heuristic.cost;
@@ -61,14 +61,6 @@ function metadataForModel(model: string, tier: ProfileTier): ModelRouteMetadata 
       ? { outputCostPerMillionTokens: known.outputCostPerMillionTokens }
       : {}),
   };
-}
-
-function metadataForTier(tier: ProfileTier): ModelRouteMetadata {
-  if (tier === "fast")
-    return { cost: 1, speed: 3, intelligence: 1, costSource: "heuristic", tags: ["fast"] };
-  if (tier === "reasoning")
-    return { cost: 3, speed: 1, intelligence: 3, costSource: "heuristic", tags: ["reasoning"] };
-  return { cost: 2, speed: 2, intelligence: 2, costSource: "heuristic", tags: ["default"] };
 }
 
 /**

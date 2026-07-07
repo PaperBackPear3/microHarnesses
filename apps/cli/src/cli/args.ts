@@ -5,6 +5,12 @@ import {
   parseModelRoutingPreference,
 } from "@micro-harnesses/core";
 import { type EffortLevel, parseEffort } from "../config/config.js";
+import {
+  parseIterationLimit,
+  parsePositiveInteger,
+  parseRatio,
+  throwOnInvalid,
+} from "../config/valueParsers.js";
 
 export interface GlobalCliArgs {
   prompt?: string;
@@ -57,7 +63,7 @@ const VALUE_FLAGS = new Set([
 ]);
 
 export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
-  const prompt = getValue(args, "-p") ?? getValue(args, "--print");
+  const prompt = getFirstValue(args, ["--print", "-p"]);
   const effortRaw = getValue(args, "--effort");
   const modeRaw = getValue(args, "--mode");
 
@@ -69,29 +75,35 @@ export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
     effort: parseEffort(effortRaw),
     routingPreference: parseModelRoutingPreference(getValue(args, "--routing-preference")),
     mode: parseMode(modeRaw),
-    sessionId: getValue(args, "--session") ?? getValue(args, "--session-id"),
+    sessionId: getFirstValue(args, ["--session-id", "--session"]),
     stateDir: getValue(args, "--state-dir"),
     promptsDir: getValue(args, "--prompts-dir"),
     skillsDir: getValue(args, "--skills-dir"),
     noSafety: hasFlag(args, "--no-safety"),
-    maxTokens: parseOptionalInt(getValue(args, "--max-tokens"), "--max-tokens"),
-    maxIterations: parseIterationLimit(getValue(args, "--iterations"), "--iterations"),
-    snapshotEvery: parseOptionalInt(getValue(args, "--snapshot-every"), "--snapshot-every"),
-    compactionTriggerUtilization: parseOptionalRatio(
+    maxTokens: parsePositiveInteger(getValue(args, "--max-tokens"), throwOnInvalid("--max-tokens")),
+    maxIterations: parseIterationLimit(
+      getValue(args, "--iterations"),
+      throwOnInvalid("--iterations"),
+    ),
+    snapshotEvery: parsePositiveInteger(
+      getValue(args, "--snapshot-every"),
+      throwOnInvalid("--snapshot-every"),
+    ),
+    compactionTriggerUtilization: parseRatio(
       getValue(args, "--compaction-trigger"),
-      "--compaction-trigger",
+      throwOnInvalid("--compaction-trigger"),
     ),
-    compactionTargetUtilization: parseOptionalRatio(
+    compactionTargetUtilization: parseRatio(
       getValue(args, "--compaction-target"),
-      "--compaction-target",
+      throwOnInvalid("--compaction-target"),
     ),
-    turnCompactionTargetRatio: parseOptionalRatio(
+    turnCompactionTargetRatio: parseRatio(
       getValue(args, "--turn-compaction-target"),
-      "--turn-compaction-target",
+      throwOnInvalid("--turn-compaction-target"),
     ),
-    nonTurnTokenReserve: parseOptionalInt(
+    nonTurnTokenReserve: parsePositiveInteger(
       getValue(args, "--non-turn-token-reserve"),
-      "--non-turn-token-reserve",
+      throwOnInvalid("--non-turn-token-reserve"),
     ),
   };
 }
@@ -113,35 +125,18 @@ function getValue(args: string[], name: string): string | undefined {
   return args[index + 1];
 }
 
+function getFirstValue(args: string[], names: string[]): string | undefined {
+  for (const name of names) {
+    const value = getValue(args, name);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag);
-}
-
-function parseOptionalInt(raw: string | undefined, flag: string): number | undefined {
-  if (raw === undefined) return undefined;
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`${flag} must be a positive integer`);
-  }
-  return parsed;
-}
-
-function parseIterationLimit(
-  raw: string | undefined,
-  flag: string,
-): number | "unlimited" | undefined {
-  if (raw === undefined) return undefined;
-  if (raw.trim().toLowerCase() === "unlimited") return "unlimited";
-  return parseOptionalInt(raw, flag);
-}
-
-function parseOptionalRatio(raw: string | undefined, flag: string): number | undefined {
-  if (raw === undefined) return undefined;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
-    throw new Error(`${flag} must be a number between 0 and 1`);
-  }
-  return parsed;
 }
 
 export function extractPositionals(args: string[]): string[] {

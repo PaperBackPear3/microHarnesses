@@ -1,6 +1,8 @@
 import {
   type HarnessMode,
   type ModelRoutingPreference,
+  parseEffort,
+  parseMode,
   parseModelRoutingPreference,
 } from "@micro-harnesses/core";
 
@@ -37,14 +39,14 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
   if (command === "resume" && args[0]) return { type: "switch-session", sessionId: args[0] };
   if (command === "session" && args[0]) return { type: "show-session-details", sessionId: args[0] };
   if (command === "mode" && args[0]) {
-    const mode = normalizeMode(args[0]);
+    const mode = parseMode(args[0]);
     if (mode) return { type: "set-mode", mode };
   }
   if (command === "plan") return { type: "set-mode", mode: "plan" };
   if (command === "edits") return { type: "set-mode", mode: "accept-edits" };
   if (command === "autopilot") return { type: "set-mode", mode: "autopilot" };
   if (command === "effort" && args[0]) {
-    const effort = normalizeEffort(args[0]);
+    const effort = parseEffort(args[0]);
     if (effort) return { type: "set-effort", effort };
   }
   if (command === "model") {
@@ -68,19 +70,6 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
   if (command === "chat") return { type: "show-chat" };
   if (command === "clear") return { type: "clear" };
   if (command === "exit" || command === "quit") return { type: "exit" };
-  return undefined;
-}
-
-function normalizeMode(value: string): HarnessMode | undefined {
-  if (value === "plan") return "plan";
-  if (value === "edits" || value === "accept-edits") return "accept-edits";
-  if (value === "auto" || value === "autopilot") return "autopilot";
-  return undefined;
-}
-
-function normalizeEffort(value: string): "low" | "medium" | "high" | undefined {
-  if (value === "low" || value === "medium" || value === "high") return value;
-  if (value === "med") return "medium";
   return undefined;
 }
 

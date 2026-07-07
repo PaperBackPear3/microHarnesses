@@ -1,6 +1,11 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { isNodeError } from "../shared/nodeError";
+import {
+  listDirectoryNames,
+  readOptionalJsonFile,
+  readOptionalTextFile,
+  resolveSourceRoot,
+} from "../shared/fsSource";
 import { truncate } from "../shared/text";
 import type { SkillDefinition } from "./types";
 
@@ -38,40 +43,27 @@ export class FsSkillSource {
   private readonly maxInstructionChars: number;
 
   constructor(options: FsSkillSourceOptions) {
-    this.rootDir = path.resolve(options.rootDir);
+    this.rootDir = resolveSourceRoot(options.rootDir);
     this.maxInstructionChars = options.maxInstructionChars ?? 100_000;
   }
 
   async listSkillNames(): Promise<string[]> {
-    try {
-      const entries = await readdir(this.rootDir, { withFileTypes: true });
-      return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
-    } catch (error: unknown) {
-      if (isNodeError(error) && error.code === "ENOENT") {
-        return [];
-      }
-      throw error;
-    }
+    return listDirectoryNames(this.rootDir);
   }
 
   async readSkillMetadata(skillName: string): Promise<SkillMetadata> {
     const metadataPath = path.join(this.rootDir, skillName, META_FILE);
-    try {
-      const raw = await readFile(metadataPath, "utf8");
-      const parsed = JSON.parse(raw) as Omit<SkillMetadata, "name">;
-      return {
-        name: skillName,
-        description: parsed.description,
-        tags: parsed.tags,
-        capabilities: parsed.capabilities,
-        risk: parsed.risk,
-      };
-    } catch (error: unknown) {
-      if (isNodeError(error) && error.code === "ENOENT") {
-        return { name: skillName };
-      }
-      throw error;
+    const parsed = await readOptionalJsonFile<Omit<SkillMetadata, "name">>(metadataPath);
+    if (!parsed) {
+      return { name: skillName };
     }
+    return {
+      name: skillName,
+      description: parsed.description,
+      tags: parsed.tags,
+      capabilities: parsed.capabilities,
+      risk: parsed.risk,
+    };
   }
 
   /** Loads one skill directory into an executable SkillDefinition. */
@@ -115,14 +107,7 @@ export class FsSkillSource {
   }
 
   private async readInstructions(skillDir: string): Promise<string | undefined> {
-    try {
-      return await readFile(path.join(skillDir, SKILL_FILE), "utf8");
-    } catch (error: unknown) {
-      if (isNodeError(error) && error.code === "ENOENT") {
-        return undefined;
-      }
-      throw error;
-    }
+    return readOptionalTextFile(path.join(skillDir, SKILL_FILE));
   }
 }
 

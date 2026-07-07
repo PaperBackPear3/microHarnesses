@@ -1,6 +1,5 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { isNodeError } from "../shared/nodeError";
+import { readOptionalJsonFile, readOptionalTextFile, resolveSourceRoot } from "../shared/fsSource";
 import { safeResolve } from "../shared/paths";
 import type { PromptBundle, PromptInstruction, PromptMetadata, PromptSource } from "./types";
 
@@ -16,7 +15,7 @@ export class FsPromptSource implements PromptSource {
   private readonly strictVariables: boolean;
 
   constructor(options: FsPromptSourceOptions) {
-    this.rootDir = path.resolve(options.rootDir);
+    this.rootDir = resolveSourceRoot(options.rootDir);
     this.sections = options.sections ?? ["developer", "tools"];
     this.strictVariables = options.strictVariables ?? false;
   }
@@ -27,11 +26,14 @@ export class FsPromptSource implements PromptSource {
     variables: Record<string, string> = {},
   ): Promise<PromptBundle> {
     const base = safeResolve(this.rootDir, promptName);
-    const systemRaw = await readFile(path.join(base, "system.md"), "utf8");
+    const systemRaw = await readOptionalTextFile(path.join(base, "system.md"));
+    if (systemRaw === undefined) {
+      throw new Error(`Missing required prompt file: ${path.join(base, "system.md")}`);
+    }
     const optionalSections = await Promise.all(
       this.sections.map(async (section) => ({
         section,
-        raw: await readOptional(path.join(base, `${section}.md`)),
+        raw: await readOptionalTextFile(path.join(base, `${section}.md`)),
       })),
     );
     const metadata = await readMetadata(path.join(base, "prompt.meta.json"), promptName);
@@ -63,23 +65,11 @@ export class FsPromptSource implements PromptSource {
   }
 }
 
-async function readOptional(filePath: string): Promise<string | undefined> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (error: unknown) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return undefined;
-    }
-    throw error;
-  }
-}
-
 async function readMetadata(filePath: string, promptName: string): Promise<PromptMetadata> {
-  const raw = await readOptional(filePath);
-  if (!raw) {
+  const parsed = await readOptionalJsonFile<PromptMetadata>(filePath);
+  if (!parsed) {
     return { name: promptName };
   }
-  const parsed = JSON.parse(raw) as PromptMetadata;
   return {
     name: parsed.name ?? promptName,
     modelHint: parsed.modelHint,

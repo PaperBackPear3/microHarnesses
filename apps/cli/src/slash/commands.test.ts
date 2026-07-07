@@ -14,6 +14,16 @@ test("returns undefined for non-slash input", () => {
   assert.equal(parseSlashCommand("compact"), undefined);
 });
 
+test("parses /mode using core aliases", () => {
+  assert.deepEqual(parseSlashCommand("/mode edits"), { type: "set-mode", mode: "accept-edits" });
+  assert.deepEqual(parseSlashCommand("/mode auto"), { type: "set-mode", mode: "autopilot" });
+});
+
+test("parses /effort using shared effort parser", () => {
+  assert.deepEqual(parseSlashCommand("/effort med"), { type: "set-effort", effort: "medium" });
+  assert.equal(parseSlashCommand("/effort nonsense"), undefined);
+});
+
 test("parses /model with no args as list-models", () => {
   assert.deepEqual(parseSlashCommand("/model"), { type: "list-models" });
 });

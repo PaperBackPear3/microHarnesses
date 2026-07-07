@@ -1,3 +1,9 @@
+import {
+  type ModelTier,
+  modelForTier,
+  modelTierForTaskType,
+  selectModelFromProfile,
+} from "./profileSelection";
 import type {
   ModelProfile,
   ModelSelectionDecision,
@@ -17,9 +23,7 @@ export function parseEffort(value: string | undefined): EffortLevel | undefined 
 
 /** Resolves the model a profile prescribes for a given effort level. */
 export function modelForEffort(profile: ModelProfile, effort: EffortLevel): string {
-  if (effort === "low") return profile.fastModel ?? profile.defaultModel;
-  if (effort === "high") return profile.reasoningModel ?? profile.defaultModel;
-  return profile.defaultModel;
+  return modelForTier(profile, tierForEffort(effort));
 }
 
 /**
@@ -43,25 +47,17 @@ export class EffortModelSelector implements ModelSelector {
   }
 
   select(input: ModelSelectionInput, profile: ModelProfile): ModelSelectionDecision {
-    if (input.overrideModel) {
-      return { model: input.overrideModel, reason: "override" };
-    }
-    if (input.promptHintModel) {
-      return { model: input.promptHintModel, reason: "prompt-hint" };
-    }
-
-    if (this.effort === "high") {
-      return { model: profile.reasoningModel ?? profile.defaultModel, reason: "profile" };
-    }
-    if (this.effort === "low") {
-      return { model: profile.fastModel ?? profile.defaultModel, reason: "profile" };
-    }
-    if (input.taskType === "reasoning" && profile.reasoningModel) {
-      return { model: profile.reasoningModel, reason: "profile" };
-    }
-    if (input.taskType === "fast" && profile.fastModel) {
-      return { model: profile.fastModel, reason: "profile" };
-    }
-    return { model: profile.defaultModel, reason: "profile" };
+    const preferredTier = tierForEffort(this.effort);
+    const tier =
+      preferredTier === "default"
+        ? modelTierForTaskType(input.taskType ?? "default")
+        : preferredTier;
+    return selectModelFromProfile(input, profile, tier);
   }
+}
+
+function tierForEffort(effort: EffortLevel): ModelTier {
+  if (effort === "low") return "fast";
+  if (effort === "high") return "reasoning";
+  return "default";
 }

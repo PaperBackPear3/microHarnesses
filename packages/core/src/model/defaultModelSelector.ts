@@ -1,4 +1,4 @@
-import { ConfigError } from "../shared/errors";
+import { modelTierForTaskType, selectModelFromProfile } from "./profileSelection";
 import type {
   ModelProfile,
   ModelSelectionDecision,
@@ -23,28 +23,7 @@ export function inferTaskType(prompt: string): "default" | "reasoning" | "fast" 
 
 export class DefaultModelSelector implements ModelSelector {
   select(input: ModelSelectionInput, profile: ModelProfile): ModelSelectionDecision {
-    if (input.overrideModel) {
-      return { model: input.overrideModel, reason: "override" };
-    }
-
-    if (input.promptHintModel) {
-      return { model: input.promptHintModel, reason: "prompt-hint" };
-    }
-
     const taskType = input.taskType ?? inferTaskType(input.userPrompt ?? "");
-
-    if (taskType === "reasoning" && profile.reasoningModel) {
-      return { model: profile.reasoningModel, reason: "profile" };
-    }
-
-    if (taskType === "fast" && profile.fastModel) {
-      return { model: profile.fastModel, reason: "profile" };
-    }
-
-    if (profile.defaultModel) {
-      return { model: profile.defaultModel, reason: "profile" };
-    }
-
-    throw new ConfigError("No default model configured in ModelProfile");
+    return selectModelFromProfile(input, profile, modelTierForTaskType(taskType));
   }
 }

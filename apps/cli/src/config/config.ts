@@ -10,6 +10,12 @@ import {
   parseMode,
   parseModelRoutingPreference,
 } from "@micro-harnesses/core";
+import {
+  IGNORE_INVALID_PARSE,
+  parseIterationLimit,
+  parsePositiveInteger,
+  parseRatio,
+} from "./valueParsers.js";
 
 export type { EffortLevel };
 export { parseEffort };
@@ -107,13 +113,22 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
   );
   const envMode = parseMode(process.env.MH_MODE || process.env.MICRO_HARNESS_MODE);
   const envMaxIterations =
-    parseEnvIterationLimit(process.env.MH_MAX_ITERATIONS) ??
-    parseEnvIterationLimit(process.env.MICRO_HARNESS_MAX_ITERATIONS);
-  const envSnapshotEvery = parseEnvPositiveInt(process.env.MH_SNAPSHOT_EVERY);
-  const envCompactionTrigger = parseEnvRatio(process.env.MH_COMPACTION_TRIGGER);
-  const envCompactionTarget = parseEnvRatio(process.env.MH_COMPACTION_TARGET);
-  const envTurnCompactionTarget = parseEnvRatio(process.env.MH_TURN_COMPACTION_TARGET);
-  const envNonTurnTokenReserve = parseEnvPositiveInt(process.env.MH_NON_TURN_TOKEN_RESERVE);
+    parseIterationLimit(process.env.MH_MAX_ITERATIONS, IGNORE_INVALID_PARSE) ??
+    parseIterationLimit(process.env.MICRO_HARNESS_MAX_ITERATIONS, IGNORE_INVALID_PARSE);
+  const envSnapshotEvery = parsePositiveInteger(
+    process.env.MH_SNAPSHOT_EVERY,
+    IGNORE_INVALID_PARSE,
+  );
+  const envCompactionTrigger = parseRatio(process.env.MH_COMPACTION_TRIGGER, IGNORE_INVALID_PARSE);
+  const envCompactionTarget = parseRatio(process.env.MH_COMPACTION_TARGET, IGNORE_INVALID_PARSE);
+  const envTurnCompactionTarget = parseRatio(
+    process.env.MH_TURN_COMPACTION_TARGET,
+    IGNORE_INVALID_PARSE,
+  );
+  const envNonTurnTokenReserve = parsePositiveInteger(
+    process.env.MH_NON_TURN_TOKEN_RESERVE,
+    IGNORE_INVALID_PARSE,
+  );
 
   const overrideIterations = overrides.maxIterations;
   const fileIterations = fromFile.maxIterations;
@@ -166,29 +181,6 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
       fromFile.nonTurnTokenReserve ??
       defaults.nonTurnTokenReserve,
   };
-}
-
-function parseEnvPositiveInt(raw: string | undefined): number | undefined {
-  if (!raw) return undefined;
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    return undefined;
-  }
-  return parsed;
-}
-
-function parseEnvIterationLimit(raw: string | undefined): number | "unlimited" | undefined {
-  if (!raw) return undefined;
-  if (raw.trim().toLowerCase() === "unlimited") return "unlimited";
-  return parseEnvPositiveInt(raw);
-}
-
-function parseEnvRatio(raw: string | undefined): number | undefined {
-  if (!raw) return undefined;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return undefined;
-  if (parsed < 0 || parsed > 1) return undefined;
-  return parsed;
 }
 
 async function readConfigFile(): Promise<FileConfig> {

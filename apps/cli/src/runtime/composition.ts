@@ -93,6 +93,7 @@ export async function buildComposition(
   config: CliConfig,
   sessionIdOverride?: string,
 ): Promise<CliComposition> {
+  const workspaceRootDir = process.cwd();
   const rootSessionId = sessionIdOverride ?? config.sessionId ?? `s-${randomUUID()}`;
   const runtimeState: RuntimeState = {
     provider: config.provider,
@@ -102,7 +103,7 @@ export async function buildComposition(
   };
 
   const modeController = new ModeController(config.mode);
-  const approvalController = new ApprovalController(process.cwd());
+  const approvalController = new ApprovalController(workspaceRootDir);
   const uiStream = new UiStream();
   const telemetryExporter = new JsonlObservabilityExporter({
     dir: path.join(config.stateDir, "sessions", rootSessionId, "telemetry"),
@@ -364,8 +365,8 @@ export async function buildComposition(
     toolRegistry: tools,
     includeBuiltInProviders: false,
     tools: createCoreDefaultTools({
-      workspaceTools: { rootDir: process.cwd() },
-      planModeTools: { rootDir: process.cwd() },
+      workspaceTools: { rootDir: workspaceRootDir },
+      planModeTools: { rootDir: workspaceRootDir },
       channelTools: { registry: channels },
       subagents,
       spawnSubagent: { defaultPromptName: "coder" },
@@ -396,7 +397,7 @@ export async function buildComposition(
 
   await pluginHost.register([
     ...builtInProviderPlugins(),
-    new BasicToolsPlugin({ rootDir: process.cwd() }),
+    new BasicToolsPlugin(),
     exampleToolsPlugin,
   ]);
 

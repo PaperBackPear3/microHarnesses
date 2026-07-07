@@ -52,3 +52,18 @@ test("parseSessionsArgs handles show subcommand", () => {
   assert.equal(parsed.sub, "show");
   assert.equal(parsed.sessionId, "s-123");
 });
+
+test("parseGlobalCliArgs keeps compatibility aliases but prefers canonical flags", () => {
+  const parsed = parseGlobalCliArgs([
+    "-p",
+    "from-short",
+    "--print",
+    "from-long",
+    "--session",
+    "legacy-session",
+    "--session-id",
+    "canonical-session",
+  ]);
+  assert.equal(parsed.prompt, "from-long");
+  assert.equal(parsed.sessionId, "canonical-session");
+});

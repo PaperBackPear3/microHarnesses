@@ -1,4 +1,5 @@
 import path from "node:path";
+import { clampNumber } from "@micro-harnesses/core";
 
 export interface BasicToolsPluginOptions {
   rootDir?: string;
@@ -74,9 +75,5 @@ export function resolveOptions(options: BasicToolsPluginOptions = {}): BasicTool
 }
 
 export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, Math.floor(parsed)));
+  return clampNumber(value, min, max, fallback);
 }

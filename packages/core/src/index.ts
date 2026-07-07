@@ -4,6 +4,7 @@ export * from "./shared/nodeError";
 export * from "./shared/paths";
 export * from "./shared/text";
 export * from "./shared/inputParsing";
+export * from "./shared/fsSource";
 
 // Tools
 export * from "./tools/types";
