@@ -86,7 +86,7 @@ export function buildChatLines(
           lines,
           `${step.id}-assistant`,
           assistantStyle,
-          `${iterationPrefixFor(step.iteration)}${step.assistantText}`,
+          step.assistantText,
           columns,
         );
       }
@@ -238,9 +238,13 @@ function pushMultiline(
   text: string,
   columns: number,
 ): void {
+  const continuationStyle: LineStyle = {
+    indicator: " ".repeat(style.indicator.length),
+    textColor: style.textColor,
+  };
   const segments = text.split(/\r?\n/);
   segments.forEach((segment, index) => {
-    pushWrapped(lines, `${idPrefix}-${index}`, style, segment, columns);
+    pushWrapped(lines, `${idPrefix}-${index}`, index === 0 ? style : continuationStyle, segment, columns);
   });
 }
 

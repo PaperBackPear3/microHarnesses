@@ -9,6 +9,7 @@ import {
   lineEnd,
   lineStart,
   moveCursorVertically,
+  renderComposerValue,
   withCursor,
 } from "./Composer.js";
 
@@ -16,6 +17,14 @@ test("insertAtCursor inserts full pasted chunks at cursor", () => {
   const inserted = insertAtCursor("hello world", 5, " brave\nnew");
   assert.equal(inserted.text, "hello brave\nnew world");
   assert.equal(inserted.cursor, 15);
+});
+
+test("insertAtCursor normalizes CRLF and bare CR in pasted chunks", () => {
+  const crlf = insertAtCursor("ab", 2, "x\r\ny");
+  assert.equal(crlf.text, "abx\ny");
+  assert.equal(crlf.cursor, 5);
+  const cr = insertAtCursor("ab", 2, "x\ry");
+  assert.equal(cr.text, "abx\ny");
 });
 
 test("deleteBackward and deleteForward remove characters around cursor", () => {
@@ -72,4 +81,27 @@ test("clipeRenderedToMaxRows handles single long line correctly", () => {
   const clipped = clipeRenderedToMaxRows(rendered, 5, 2);
   const lines = clipped.split("\n");
   assert(lines.length <= 2);
+});
+
+test("renderComposerValue windows long multiline input around cursor", () => {
+  const value = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight";
+  const cursorAt = value.indexOf("seven");
+  const rendered = renderComposerValue(value, cursorAt, 20);
+  const lines = rendered.split("\n");
+  assert(lines.length <= 6);
+  assert(rendered.includes("█"), "cursor glyph must be present");
+  assert(!rendered.startsWith("one"), "should have scrolled past first lines");
+});
+
+test("renderComposerValue wraps long lines and stays within max rows", () => {
+  const value = "1234567890abcdefghij";
+  const rendered = renderComposerValue(value, value.length, 5);
+  const lines = rendered.split("\n");
+  assert(lines.length <= 6);
+  assert(lines.every((l) => l.length <= 5));
+  assert(rendered.includes("█"));
+});
+
+test("renderComposerValue leaves short input unchanged (cursor appended)", () => {
+  assert.equal(renderComposerValue("hello\nworld", 11, 20), "hello\nworld█");
 });

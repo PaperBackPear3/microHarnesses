@@ -63,7 +63,8 @@ test("uses #N prefix for iteration > 1", () => {
   const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
   assert(rendered.includes("think > #2 [expanded]"));
-  assert(rendered.includes("agent > #2 response"));
+  assert(rendered.includes("agent > response"));
+  assert(!rendered.includes("agent > #2"), "iteration prefix must not appear in agent text");
   assert(rendered.includes("diag > #2 tool started: ls"));
 });
 
@@ -85,4 +86,36 @@ test("shows approval prompt even when diagnostics are collapsed", () => {
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
   assert(rendered.includes("approval required: fs_write"));
   assert(rendered.includes("preview line"));
+});
+
+test("multi-line agent response has only one agent > prefix", () => {
+  const entries: ChatEntry[] = [
+    {
+      id: "t1",
+      type: "turn",
+      turn: {
+        id: "t1",
+        userText: "hi",
+        steps: [
+          {
+            id: "s1",
+            iteration: 1,
+            thinkingText: "",
+            assistantText: "line one\n\nline three",
+            systemMessages: [],
+            thinkingCollapsed: false,
+          },
+        ],
+      },
+    },
+  ];
+  const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
+  const indicatorLines = lines.filter((l) => l.indicator.trim() === "agent >").map((l) => l.text);
+  assert.equal(indicatorLines.length, 1, "only the first line should have the agent > indicator");
+  assert.equal(indicatorLines[0], "line one");
+  const continuationTexts = lines
+    .filter((l) => l.indicator.trim() === "" && l.indicator.length > 0)
+    .map((l) => l.text);
+  assert(continuationTexts.includes(""), "blank paragraph line should be a continuation");
+  assert(continuationTexts.includes("line three"), "second paragraph should be a continuation");
 });

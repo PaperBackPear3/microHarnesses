@@ -1,4 +1,4 @@
-import { Text, useInput } from "ink";
+import { Text, useInput, usePaste } from "ink";
 import type { Key } from "ink";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
@@ -46,11 +46,21 @@ export function Composer({ value, disabled, columns, onChange, onSubmit }: Props
     setCursor((current) => clampCursor(current, value));
   }, [value]);
 
-  const renderedValue = useMemo(() => withCursor(value, cursor), [value, cursor]);
-  const displayedValue = useMemo(() => {
-    if (!columns) return renderedValue;
-    return clipeRenderedToMaxRows(renderedValue, columns, MAX_COMPOSER_ROWS);
-  }, [renderedValue, columns]);
+  const displayColumns = Math.max(1, columns ?? process.stdout.columns ?? 80);
+  const displayedValue = useMemo(
+    () => renderComposerValue(value, cursor, displayColumns),
+    [displayColumns, value, cursor],
+  );
+
+  const insertChunk = useCallback(
+    (chunk: string) => {
+      if (disabled || chunk.length === 0) return;
+      const next = insertAtCursor(value, cursor, chunk);
+      onChange(next.text);
+      setCursor(next.cursor);
+    },
+    [cursor, disabled, onChange, value],
+  );
 
   const handleInput = useCallback(
     (input: string, key: Key) => {
@@ -58,9 +68,7 @@ export function Composer({ value, disabled, columns, onChange, onSubmit }: Props
 
       if (key.return) {
         if (key.meta) {
-          const next = insertAtCursor(value, cursor, "\n");
-          onChange(next.text);
-          setCursor(next.cursor);
+          insertChunk("\n");
           return;
         }
         onSubmit(value);
@@ -118,15 +126,14 @@ export function Composer({ value, disabled, columns, onChange, onSubmit }: Props
       }
 
       if (input.length > 0) {
-        const next = insertAtCursor(value, cursor, input);
-        onChange(next.text);
-        setCursor(next.cursor);
+        insertChunk(input);
       }
     },
-    [cursor, disabled, onChange, onSubmit, value],
+    [cursor, disabled, insertChunk, onChange, onSubmit, value],
   );
 
   useInput(handleInput);
+  usePaste(insertChunk, { isActive: !disabled });
 
   return <Text>{displayedValue}</Text>;
 }
@@ -148,8 +155,9 @@ export function insertAtCursor(
   chunk: string,
 ): { text: string; cursor: number } {
   const safeCursor = clampCursor(cursor, value);
-  const text = `${value.slice(0, safeCursor)}${chunk}${value.slice(safeCursor)}`;
-  return { text, cursor: safeCursor + chunk.length };
+  const normalizedChunk = chunk.replace(/\r\n?/g, "\n");
+  const text = `${value.slice(0, safeCursor)}${normalizedChunk}${value.slice(safeCursor)}`;
+  return { text, cursor: safeCursor + normalizedChunk.length };
 }
 
 export function deleteBackward(
@@ -200,6 +208,17 @@ export function withCursor(value: string, cursor: number): string {
   return `${value.slice(0, safeCursor)}${CURSOR_GLYPH}${value.slice(safeCursor)}`;
 }
 
+export function renderComposerValue(value: string, cursor: number, columns: number): string {
+  const safeColumns = Math.max(1, columns);
+  const visualLines = toVisualLines(withCursor(value, cursor), safeColumns);
+  const cursorLine = Math.max(
+    0,
+    visualLines.findIndex((line) => line.includes(CURSOR_GLYPH)),
+  );
+  const start = clampWindowStart(cursorLine, visualLines.length, MAX_COMPOSER_ROWS);
+  return visualLines.slice(start, start + MAX_COMPOSER_ROWS).join("\n");
+}
+
 function previousLineStart(value: string, currentLineStart: number): number | undefined {
   if (currentLineStart === 0) return undefined;
   const previousBreak = value.lastIndexOf("\n", Math.max(0, currentLineStart - 2));
@@ -214,4 +233,24 @@ function nextLineStart(value: string, currentLineStart: number): number | undefi
 
 function clampCursor(cursor: number, value: string): number {
   return Math.max(0, Math.min(cursor, value.length));
+}
+
+function toVisualLines(value: string, columns: number): string[] {
+  const visualLines: string[] = [];
+  for (const logicalLine of value.split("\n")) {
+    if (logicalLine.length === 0) {
+      visualLines.push("");
+      continue;
+    }
+    for (let index = 0; index < logicalLine.length; index += columns) {
+      visualLines.push(logicalLine.slice(index, index + columns));
+    }
+  }
+  return visualLines.length > 0 ? visualLines : [""];
+}
+
+function clampWindowStart(cursorLine: number, lineCount: number, maxRows: number): number {
+  if (lineCount <= maxRows) return 0;
+  const preferredStart = cursorLine - Math.floor(maxRows / 2);
+  return Math.max(0, Math.min(preferredStart, lineCount - maxRows));
 }
