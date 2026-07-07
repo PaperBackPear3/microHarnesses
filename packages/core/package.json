@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/core",
-  "version": "3.0.9",
+  "version": "3.1.0",
   "description": "Composable, plugin-first library for building LLM agent harnesses. Provides the agent loop, tool registry, session/context management, policy engine with command-safety rules, provider/credentials registries, and an in-process subagent primitive.",
   "license": "MIT",
   "keywords": ["llm", "agent", "harness", "tools", "plugins", "ai"],
@@ -34,6 +34,8 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
-    "js-tiktoken": "^1.0.21"
+    "@anthropic-ai/sdk": "^0.110.0",
+    "js-tiktoken": "^1.0.21",
+    "openai": "^6.45.0"
   }
 }

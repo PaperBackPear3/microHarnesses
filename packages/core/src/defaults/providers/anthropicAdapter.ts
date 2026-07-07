@@ -1,3 +1,14 @@
+import Anthropic from "@anthropic-ai/sdk";
+import type {
+  ContentBlock,
+  Message,
+  MessageCreateParamsBase,
+  MessageCreateParamsNonStreaming,
+  MessageCreateParamsStreaming,
+  MessageParam,
+  Tool,
+  ToolUseBlock,
+} from "@anthropic-ai/sdk/resources/messages/messages";
 import type {
   CompletionRequest,
   ProviderAdapter,
@@ -6,46 +17,6 @@ import type {
   ProviderStreamEvent,
 } from "../../providers/types";
 import { ProviderError } from "../../shared/errors";
-import { parseToolCallArgs } from "./openaiCompat";
-import { readSseData } from "./sse";
-
-interface AnthropicResponse {
-  content?: Array<{ type?: string; text?: string; name?: string; input?: Record<string, unknown> }>;
-  stop_reason?: string;
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-  };
-}
-
-interface AnthropicStreamPayload {
-  type?: string;
-  index?: number;
-  message?: {
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
-  content_block?: {
-    type?: string;
-    text?: string;
-    thinking?: string;
-    name?: string;
-    input?: Record<string, unknown>;
-  };
-  delta?: {
-    type?: string;
-    text?: string;
-    thinking?: string;
-    partial_json?: string;
-    stop_reason?: string;
-  };
-  usage?: { input_tokens?: number; output_tokens?: number };
-}
-
-interface ToolUseAccumulator {
-  name: string;
-  inputObject?: Record<string, unknown>;
-  inputJson: string;
-}
 
 export interface AnthropicAdapterOptions {
   fetchImpl?: typeof fetch;
@@ -59,7 +30,7 @@ const DEFAULT_MODEL = "claude-3-5-sonnet-latest";
  * (`end_turn`, `stop_sequence`, `refusal`) stop the loop, while `tool_use` and
  * `max_tokens` continue so truncated generations can finish next iteration.
  */
-function stopReasonIndicatesStop(reason: string | undefined): boolean {
+function stopReasonIndicatesStop(reason: string | undefined | null): boolean {
   if (!reason) return false;
   return reason !== "tool_use" && reason !== "max_tokens";
 }
@@ -79,207 +50,161 @@ export class AnthropicAdapter implements ProviderAdapter {
     request: CompletionRequest,
     auth: ProviderAuth,
   ): AsyncIterable<ProviderStreamEvent> {
-    const endpoint = `${auth.baseUrl ?? "https://api.anthropic.com/v1"}/messages`;
-    const response = await this.fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": auth.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({ ...toAnthropicBody(request), stream: true }),
-      signal: request.signal,
-    });
+    try {
+      const client = this.createClient(auth);
+      const stream = client.messages.stream(
+        {
+          ...(this.toRequestBody(request) as MessageCreateParamsBase),
+          stream: true,
+        } as MessageCreateParamsStreaming,
+        {
+          signal: request.signal,
+        },
+      );
+      const finalMessagePromise = stream.finalMessage();
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new ProviderError(`Anthropic error (${response.status}): ${errorBody}`);
+      for await (const event of stream) {
+        if (event.type === "content_block_start") {
+          yield* this.emitStartDelta(event.content_block);
+          continue;
+        }
+        if (event.type === "content_block_delta") {
+          yield* this.emitDelta(event.delta);
+        }
+      }
+
+      yield { type: "final", response: this.toProviderResponse(await finalMessagePromise) };
+    } catch (error: unknown) {
+      throw this.asProviderError(error);
     }
-
-    let assistantMessage = "";
-    let reasoningMessage = "";
-    let stopReason = "";
-    const usage: { inputTokens?: number; outputTokens?: number } = {};
-    const toolUses = new Map<number, ToolUseAccumulator>();
-
-    for await (const data of readSseData(response)) {
-      if (data === "[DONE]") break;
-      let payload: AnthropicStreamPayload;
-      try {
-        payload = JSON.parse(data) as AnthropicStreamPayload;
-      } catch {
-        // Tolerate non-JSON SSE control frames.
-        continue;
-      }
-      if (payload.type === "message_start") {
-        usage.inputTokens = payload.message?.usage?.input_tokens;
-        continue;
-      }
-      if (payload.type === "content_block_start") {
-        const index = payload.index ?? toolUses.size;
-        if (payload.content_block?.type === "text") {
-          const initial = payload.content_block.text ?? "";
-          if (initial.length > 0) {
-            assistantMessage += initial;
-            yield { type: "assistant.delta", delta: initial };
-          }
-          continue;
-        }
-        if (payload.content_block?.type === "thinking") {
-          const initial = payload.content_block.thinking ?? payload.content_block.text ?? "";
-          if (initial.length > 0) {
-            reasoningMessage += initial;
-            yield { type: "reasoning.delta", delta: initial };
-          }
-          continue;
-        }
-        if (payload.content_block?.type === "tool_use") {
-          toolUses.set(index, {
-            name: payload.content_block.name ?? "unknown",
-            inputObject: payload.content_block.input,
-            inputJson: "",
-          });
-        }
-        continue;
-      }
-      if (payload.type === "content_block_delta") {
-        const index = payload.index ?? 0;
-        if (payload.delta?.type === "text_delta") {
-          const text = payload.delta.text ?? "";
-          if (text.length > 0) {
-            assistantMessage += text;
-            yield { type: "assistant.delta", delta: text };
-          }
-          continue;
-        }
-        if (payload.delta?.type === "thinking_delta") {
-          const text = payload.delta.thinking ?? payload.delta.text ?? "";
-          if (text.length > 0) {
-            reasoningMessage += text;
-            yield { type: "reasoning.delta", delta: text };
-          }
-          continue;
-        }
-        if (payload.delta?.type === "input_json_delta") {
-          const tool = toolUses.get(index) ?? { name: "unknown", inputJson: "" };
-          tool.inputJson += payload.delta.partial_json ?? "";
-          toolUses.set(index, tool);
-        }
-        continue;
-      }
-      if (payload.type === "message_delta") {
-        usage.outputTokens = payload.usage?.output_tokens;
-        if (payload.delta?.stop_reason) {
-          stopReason = payload.delta.stop_reason;
-        }
-      }
-    }
-
-    const toolCalls = Array.from(toolUses.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([, tool]) => {
-        if (tool.inputJson.length === 0 && tool.inputObject) {
-          return { name: tool.name, input: tool.inputObject };
-        }
-        const rawJson =
-          tool.inputJson.length > 0
-            ? tool.inputJson
-            : tool.inputObject
-              ? JSON.stringify(tool.inputObject)
-              : "{}";
-        const parsed = parseToolCallArgs(rawJson);
-        return {
-          name: tool.name,
-          input: parsed.input,
-          ...(parsed.malformed ? { malformedInput: true } : {}),
-        };
-      });
-
-    yield {
-      type: "final",
-      response: {
-        assistantMessage,
-        ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
-        toolCalls,
-        stop: stopReasonIndicatesStop(stopReason || undefined),
-        usage,
-      },
-    };
   }
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
-    const endpoint = `${auth.baseUrl ?? "https://api.anthropic.com/v1"}/messages`;
-    const response = await this.fetchImpl(endpoint, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": auth.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(toAnthropicBody(request)),
-      signal: request.signal,
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new ProviderError(`Anthropic error (${response.status}): ${errorBody}`);
+    try {
+      const client = this.createClient(auth);
+      const response = await client.messages.create(
+        {
+          ...(this.toRequestBody(request) as MessageCreateParamsBase),
+          stream: false,
+        } as MessageCreateParamsNonStreaming,
+        {
+          signal: request.signal,
+        },
+      );
+      return this.toProviderResponse(response);
+    } catch (error: unknown) {
+      throw this.asProviderError(error);
     }
+  }
 
-    const payload = (await response.json()) as AnthropicResponse;
-    const reasoningMessage =
-      payload.content
-        ?.filter((item) => item.type === "thinking")
-        .map((item) => item.text ?? "")
-        .join("") ?? "";
+  private createClient(auth: ProviderAuth): Anthropic {
+    return new Anthropic({
+      apiKey: auth.apiKey,
+      baseURL: auth.baseUrl ?? "https://api.anthropic.com/v1",
+      fetch: this.fetchImpl,
+    });
+  }
+
+  private toRequestBody(request: CompletionRequest): MessageCreateParamsBase {
+    const systemMessage = request.messages
+      .filter((m) => m.role === "system" || m.role === "developer")
+      .map((m) => m.content)
+      .join("\n\n");
+
+    const messages: MessageParam[] = request.messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      }));
+
     return {
-      assistantMessage:
-        payload.content
-          ?.filter((item) => item.type === "text")
-          .map((item) => item.text ?? "")
-          .join("") ?? "",
+      model: request.model,
+      max_tokens: request.maxTokens ?? 4096,
+      temperature: request.temperature ?? 0.2,
+      system: systemMessage,
+      messages,
+      ...(request.tools && request.tools.length > 0
+        ? {
+            tools: request.tools.map((tool) => ({
+              name: tool.name,
+              description: tool.description,
+              input_schema: tool.inputSchema,
+            })) as Tool[],
+          }
+        : {}),
+    };
+  }
+
+  private *emitStartDelta(block: ContentBlock): IterableIterator<ProviderStreamEvent> {
+    if (block.type === "text" && block.text && block.text.length > 0) {
+      yield { type: "assistant.delta", delta: block.text };
+      return;
+    }
+    if (block.type === "thinking" && block.thinking && block.thinking.length > 0) {
+      yield { type: "reasoning.delta", delta: block.thinking };
+    }
+  }
+
+  private *emitDelta(delta: { type?: string; text?: string; thinking?: string }): IterableIterator<ProviderStreamEvent> {
+    if (delta.type === "text_delta" && delta.text && delta.text.length > 0) {
+      yield { type: "assistant.delta", delta: delta.text };
+      return;
+    }
+    if (delta.type === "thinking_delta" && delta.thinking && delta.thinking.length > 0) {
+      yield { type: "reasoning.delta", delta: delta.thinking };
+    }
+  }
+
+  private toProviderResponse(message: Message): ProviderResponse {
+    const assistantMessage = this.contentText(message.content, "text");
+    const reasoningMessage = this.contentText(message.content, "thinking");
+    const toolCalls = message.content
+      .filter((block): block is ToolUseBlock => block.type === "tool_use")
+      .map((block) => {
+        const input = block.input;
+        if (input && typeof input === "object" && !Array.isArray(input)) {
+          return { name: block.name, input: input as Record<string, unknown> };
+        }
+        const raw = typeof input === "string" ? input : JSON.stringify(input);
+        try {
+          return { name: block.name, input: JSON.parse(raw) as Record<string, unknown> };
+        } catch {
+          return { name: block.name, input: { raw }, malformedInput: true };
+        }
+      });
+
+    return {
+      assistantMessage,
       ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
-      toolCalls:
-        payload.content
-          ?.filter((item) => item.type === "tool_use")
-          .map((item) => ({
-            name: item.name ?? "unknown",
-            input: item.input ?? {},
-          })) ?? [],
-      stop: stopReasonIndicatesStop(payload.stop_reason),
+      toolCalls,
+      stop: stopReasonIndicatesStop(message.stop_reason),
       usage: {
-        inputTokens: payload.usage?.input_tokens,
-        outputTokens: payload.usage?.output_tokens,
+        inputTokens: message.usage.input_tokens,
+        outputTokens: message.usage.output_tokens,
       },
     };
   }
-}
 
-function toAnthropicBody(request: CompletionRequest): Record<string, unknown> {
-  const systemMessage = request.messages
-    .filter((m) => m.role === "system" || m.role === "developer")
-    .map((m) => m.content)
-    .join("\n\n");
-  const messages = request.messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+  private asProviderError(error: unknown): ProviderError {
+    if (error instanceof ProviderError) {
+      return error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return new ProviderError(`Provider "anthropic" error: ${message}`);
+  }
 
-  return {
-    model: request.model,
-    max_tokens: request.maxTokens ?? 4096,
-    temperature: request.temperature ?? 0.2,
-    system: systemMessage,
-    messages,
-    ...(request.tools && request.tools.length > 0
-      ? {
-          tools: request.tools.map((tool) => ({
-            name: tool.name,
-            description: tool.description,
-            input_schema: tool.inputSchema,
-          })),
+  private contentText(blocks: ContentBlock[], type: "text" | "thinking"): string {
+    return blocks
+      .map((block) => {
+        if (type === "text" && block.type === "text") {
+          return block.text;
         }
-      : {}),
-  };
+        if (type === "thinking" && block.type === "thinking") {
+          return block.thinking;
+        }
+        return "";
+      })
+      .join("");
+  }
 }

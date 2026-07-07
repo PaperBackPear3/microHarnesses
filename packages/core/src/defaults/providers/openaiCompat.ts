@@ -6,7 +6,7 @@ type OpenAICompatContentPart = { type?: string; text?: string };
  * - `length` means truncated output and should continue in the next iteration.
  * - `tool_calls` / `function_call` expect tool execution → continue.
  */
-export function finishReasonIndicatesStop(reason: string | undefined): boolean {
+export function finishReasonIndicatesStop(reason: string | undefined | null): boolean {
   if (!reason) return false;
   return reason === "stop" || reason === "content_filter";
 }
@@ -27,13 +27,17 @@ export function parseToolCallArgs(rawArgs: string): ParsedToolCallArgs {
 export interface OpenAICompatResponse {
   choices?: Array<{
     message?: {
-      content?: string | OpenAICompatContentPart[];
-      reasoning?: string | OpenAICompatContentPart[];
-      reasoning_content?: string | OpenAICompatContentPart[];
+      content?: string | OpenAICompatContentPart[] | null;
+      reasoning?: string | OpenAICompatContentPart[] | null;
+      reasoning_content?: string | OpenAICompatContentPart[] | null;
       thinking?: string;
-      tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
+      tool_calls?: Array<
+        | { function?: { name?: string; arguments?: string } }
+        | { name?: string; input?: unknown }
+        | Record<string, unknown>
+      >;
     };
-    finish_reason?: string;
+    finish_reason?: string | null;
   }>;
   usage?: {
     prompt_tokens?: number;
@@ -48,20 +52,24 @@ export interface OpenAICompatResponse {
 export interface OpenAICompatStreamChunk {
   choices?: Array<{
     delta?: {
-      content?: string | OpenAICompatContentPart[];
-      reasoning?: string | OpenAICompatContentPart[];
-      reasoning_content?: string | OpenAICompatContentPart[];
+      content?: string | OpenAICompatContentPart[] | null;
+      reasoning?: string | OpenAICompatContentPart[] | null;
+      reasoning_content?: string | OpenAICompatContentPart[] | null;
       thinking?: string;
-      tool_calls?: Array<{ index?: number; function?: { name?: string; arguments?: string } }>;
+      tool_calls?: Array<
+        | { index?: number; function?: { name?: string; arguments?: string } }
+        | { index?: number; name?: string; input?: unknown }
+        | Record<string, unknown>
+      >;
     };
-    finish_reason?: string;
+    finish_reason?: string | null;
   }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
     prompt_eval_count?: number;
     eval_count?: number;
-  };
+  } | null;
   prompt_eval_count?: number;
   eval_count?: number;
 }
@@ -132,7 +140,11 @@ export function applyOpenAICompatStreamChunk(
     state.reasoningMessage += reasoningDelta;
   }
 
-  for (const [fallbackIndex, toolCall] of (choice.delta.tool_calls ?? []).entries()) {
+  const toolCalls = (choice.delta.tool_calls ?? []) as Array<{
+    index?: number;
+    function?: { name?: string; arguments?: string };
+  }>;
+  for (const [fallbackIndex, toolCall] of toolCalls.entries()) {
     const index = toolCall.index ?? fallbackIndex;
     const current = state.toolCalls.get(index) ?? { name: "", args: "" };
     if (toolCall.function?.name) {
@@ -184,7 +196,9 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
   return {
     assistantMessage: split.assistant,
     ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
-    toolCalls: (first.message.tool_calls ?? []).map((call) => {
+    toolCalls: ((first.message.tool_calls ?? []) as Array<{
+      function?: { name?: string; arguments?: string };
+    }>).map((call) => {
       const parsed = parseToolCallArgs(call.function?.arguments ?? "{}");
       return {
         name: call.function?.name ?? "unknown",
@@ -204,7 +218,7 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
   };
 }
 
-function splitContent(content: string | OpenAICompatContentPart[] | undefined): {
+function splitContent(content: string | OpenAICompatContentPart[] | null | undefined): {
   assistant: string;
   reasoning: string;
 } {
@@ -225,7 +239,7 @@ function splitContent(content: string | OpenAICompatContentPart[] | undefined): 
   return { assistant, reasoning };
 }
 
-function reasoningFieldToText(content: string | OpenAICompatContentPart[] | undefined): string {
+function reasoningFieldToText(content: string | OpenAICompatContentPart[] | null | undefined): string {
   if (!content) return "";
   if (typeof content === "string") return content;
   let text = "";

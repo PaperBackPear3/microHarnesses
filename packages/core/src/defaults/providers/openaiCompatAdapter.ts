@@ -1,3 +1,11 @@
+import OpenAI from "openai";
+import type {
+  ChatCompletion,
+  ChatCompletionChunk,
+  ChatCompletionCreateParamsBase,
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionCreateParamsStreaming,
+} from "openai/resources/chat/completions/completions";
 import type {
   CompletionRequest,
   ProviderAdapter,
@@ -8,13 +16,11 @@ import type {
 import { ProviderError } from "../../shared/errors";
 import {
   type OpenAICompatResponse,
-  type OpenAICompatStreamChunk,
   applyOpenAICompatStreamChunk,
   createOpenAICompatStreamState,
   finalizeOpenAICompatStream,
   parseOpenAICompatResponse,
 } from "./openaiCompat";
-import { readSseData } from "./sse";
 import { createOpenAICompatibleTokenCounter } from "./tokenCounter";
 
 export interface OpenAICompatAdapterOptions {
@@ -25,9 +31,9 @@ export interface OpenAICompatAdapterOptions {
   /** Base URL used when credentials do not supply one (e.g. "https://api.groq.com/openai/v1"). */
   defaultBaseUrl?: string;
   /**
-   * How the resolved API key is sent. `"bearer"` adds an
-   * `authorization: Bearer <key>` header; `"none"` sends no auth header
-   * (local servers such as Ollama / LM Studio). Default: `"bearer"`.
+   * How the resolved API key is sent. `"bearer"` adds the SDK auth header;
+   * `"none"` strips it from the outgoing request (useful for local servers).
+   * Default: `"bearer"`.
    */
   authStyle?: "bearer" | "none";
   /** Extra headers merged into every request (e.g. OpenRouter attribution headers). */
@@ -70,90 +76,99 @@ export class OpenAICompatAdapter implements ProviderAdapter {
     request: CompletionRequest,
     auth: ProviderAuth,
   ): AsyncIterable<ProviderStreamEvent> {
-    const response = await this.fetchImpl(this.endpoint(auth), {
-      method: "POST",
-      headers: this.headers(auth),
-      body: JSON.stringify({
-        ...this.toBody(request),
+    try {
+      const client = this.createClient(auth);
+      const body = {
+        ...(this.toBody(request) as Record<string, unknown>),
         stream: true,
         stream_options: { include_usage: true },
-      }),
-      signal: request.signal,
-    });
-    await this.ensureOk(response);
+      } as unknown as ChatCompletionCreateParamsStreaming;
+      const stream = await client.chat.completions.create(
+        body,
+        { signal: request.signal },
+      );
 
-    const state = createOpenAICompatStreamState();
-    for await (const data of readSseData(response)) {
-      if (data === "[DONE]") break;
-      const payload = this.parseStreamChunk(data);
-      if (!payload) continue;
-      const deltas = applyOpenAICompatStreamChunk(state, payload);
-      if (deltas.reasoningDelta.length > 0) {
-        yield { type: "reasoning.delta", delta: deltas.reasoningDelta };
+      const state = createOpenAICompatStreamState();
+      for await (const chunk of stream) {
+        const deltas = applyOpenAICompatStreamChunk(
+          state,
+          chunk as unknown as ChatCompletionChunk,
+        );
+        if (deltas.reasoningDelta.length > 0) {
+          yield { type: "reasoning.delta", delta: deltas.reasoningDelta };
+        }
+        if (deltas.assistantDelta.length > 0) {
+          yield { type: "assistant.delta", delta: deltas.assistantDelta };
+        }
       }
-      if (deltas.assistantDelta.length > 0) {
-        yield { type: "assistant.delta", delta: deltas.assistantDelta };
-      }
+
+      yield { type: "final", response: finalizeOpenAICompatStream(state) };
+    } catch (error: unknown) {
+      throw this.asProviderError(error);
     }
-
-    yield { type: "final", response: finalizeOpenAICompatStream(state) };
   }
 
   async complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse> {
-    const response = await this.fetchImpl(this.endpoint(auth), {
-      method: "POST",
-      headers: this.headers(auth),
-      body: JSON.stringify({ ...this.toBody(request), stream: false }),
-      signal: request.signal,
-    });
-    await this.ensureOk(response);
-
-    const payload = (await response.json()) as OpenAICompatResponse;
-    const parsed = parseOpenAICompatResponse(payload);
-    if (!parsed) {
-      throw new ProviderError(`${this.label()} returned no message`);
+    try {
+      const client = this.createClient(auth);
+      const body = {
+        ...(this.toBody(request) as Record<string, unknown>),
+        stream: false,
+      } as unknown as ChatCompletionCreateParamsNonStreaming;
+      const response = await client.chat.completions.create(
+        body,
+        { signal: request.signal },
+      );
+      const parsed = parseOpenAICompatResponse(
+        response as unknown as OpenAICompatResponse,
+      );
+      if (!parsed) {
+        throw new ProviderError(`${this.label()} returned no message`);
+      }
+      return parsed;
+    } catch (error: unknown) {
+      throw this.asProviderError(error);
     }
-    return parsed;
   }
 
   async createTokenCounter(model: string) {
     return createOpenAICompatibleTokenCounter(model);
   }
 
-  private endpoint(auth: ProviderAuth): string {
-    const baseUrl = auth.baseUrl ?? this.defaultBaseUrl;
-    if (!baseUrl) {
+  private createClient(auth: ProviderAuth): OpenAI {
+    const baseURL = auth.baseUrl ?? this.defaultBaseUrl;
+    if (!baseURL) {
       throw new ProviderError(
         `${this.label()}: no base URL configured (set credentials baseUrl or defaultBaseUrl)`,
       );
     }
-    return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+    return new OpenAI({
+      apiKey: auth.apiKey,
+      baseURL,
+      fetch: this.createFetch(),
+      defaultHeaders: this.extraHeaders,
+    });
   }
 
-  private headers(auth: ProviderAuth): Record<string, string> {
-    const headers: Record<string, string> = {
-      "content-type": "application/json",
-      ...this.extraHeaders,
+  private createFetch(): typeof fetch {
+    if (this.authStyle !== "none") {
+      return this.fetchImpl;
+    }
+
+    return async (input, init) => {
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      headers.delete("authorization");
+      headers.delete("Authorization");
+      return this.fetchImpl(input, { ...init, headers });
     };
-    if (this.authStyle === "bearer") {
-      headers.authorization = `Bearer ${auth.apiKey}`;
-    }
-    return headers;
   }
 
-  private async ensureOk(response: Response): Promise<void> {
-    if (response.ok) return;
-    const errorBody = await response.text();
-    throw new ProviderError(`${this.label()} error (${response.status}): ${errorBody}`);
-  }
-
-  private parseStreamChunk(data: string): OpenAICompatStreamChunk | undefined {
-    try {
-      return JSON.parse(data) as OpenAICompatStreamChunk;
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new ProviderError(`${this.label()} sent a malformed stream frame: ${message}`);
+  private asProviderError(error: unknown): ProviderError {
+    if (error instanceof ProviderError) {
+      return error;
     }
+    const message = error instanceof Error ? error.message : String(error);
+    return new ProviderError(`${this.label()} error: ${message}`);
   }
 
   private label(): string {
