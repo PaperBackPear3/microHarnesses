@@ -16,7 +16,6 @@ Composable, plugin-first library:
 
 - `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, policy, harness modes, provider adapters, skills, subagent primitive; extensible provider-aware capabilities)
 - `plugins/basic-tools` — workspace-scoped mutation + shell tools
-- `plugins/plan-mode` — read-only planning + exploration tools
 - `plugins/agentic-compression` — subagent-driven context compression
 - `plugins/example-tools` — reference `echo` / `time` tools
 - `apps/cli` — `@micro-harnesses/cli`, a thin composition + Ink TUI layer over core
@@ -55,7 +54,7 @@ Each domain owns its own `types.ts`:
 - `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), modes (`HarnessMode`/`ModeController`/`createModeAwareApprovalPolicy`/`withModeExecutionContract`), runObserver (`RunObserver`: run/iteration/model/action span tree + metrics + logs + stream), snapshotCadence
 - `subagents/` — types, inProcessSubagentRunner
 - `plugins/` — types, host, loader
-- `defaults/` — registerCoreDefaults, createCoreDefaultTools, read-only workspace tools, providers/ (`OpenAICompatAdapter` + OpenAI/Anthropic/Ollama presets, `createOpenAICompatProviderPlugin`, `EnvCredentials`, model profiles, Ollama context-window detection)
+- `defaults/` — registerCoreDefaults, createCoreDefaultTools, read-only workspace + plan-mode tools, providers/ (`OpenAICompatAdapter` + OpenAI/Anthropic/Ollama presets, `createOpenAICompatProviderPlugin`, `EnvCredentials`, model profiles, Ollama context-window detection)
 
 ### Plugin API (widened, capability-enforced)
 

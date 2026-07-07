@@ -151,7 +151,7 @@ Cycle with Shift+Tab; current mode shown in the StatusBar.
 
 | Mode | Tool scope | Approvals | Behavior |
 |---|---|---|---|
-| **Plan** | read-only (`capabilityScope.allowActions` = explore/read/plan tools; plan-mode plugin) | n/a (no mutations) | Produces a plan; no file/shell changes |
+| **Plan** | read-only (`capabilityScope.allowActions` = explore/read/plan tools from core defaults) | n/a (no mutations) | Produces a plan; no file/shell changes |
 | **Accept edits** | all tools | file edits + shell → `require_approval`; **diff preview** per edit | User approves/rejects each change (`always` to auto-approve that tool for the session) |
 | **Autopilot** | all tools | auto-approve everything | Full autonomy; still renders diffs + can interrupt |
 
@@ -232,7 +232,7 @@ telemetry summary (turns, tokens, errors) read from `sessions/<id>/telemetry/`.
 - `package.json`: rename to **`@micro-harnesses/cli`** (fix scope), version
   **1.0.0**, `bin: { mh, micro-harness }`, deps on real packages
   (`@micro-harnesses/core`, `@micro-harnesses/plugin-basic-tools`,
-  `@micro-harnesses/plugin-plan-mode`, `@micro-harnesses/plugin-example-tools`,
+  `@micro-harnesses/plugin-example-tools`,
   `ink`, `react`, `ink-spinner`, `ink-text-input`, `diff`), add `test` script.
 - Delete `src/**` and old `prompts/**`; write new persona prompts (coder + planner).
 - Root `workspaces`: `["packages/*", "plugins/*", "apps/*"]`.

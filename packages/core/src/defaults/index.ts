@@ -13,11 +13,16 @@ import {
   createWaitSubagentsTool,
 } from "./tools/spawnSubagentTool";
 import {
+  type PlanModeToolsOptions,
+  createPlanModeTools,
+} from "./tools/planMode";
+import {
   type ReadOnlyWorkspaceToolsOptions,
   createReadOnlyWorkspaceTools,
 } from "./tools/workspaceReadOnly";
 
 export * from "./providers";
+export * from "./tools/planMode";
 export * from "./tools/workspaceReadOnly";
 export * from "./tools/spawnSubagentTool";
 
@@ -52,6 +57,7 @@ export interface RegisterCoreDefaultsOptions {
 
 export interface CreateCoreDefaultToolsOptions {
   workspaceTools?: ReadOnlyWorkspaceToolsOptions;
+  planModeTools?: PlanModeToolsOptions;
   subagents?: SubagentService;
   spawnSubagent?: SpawnSubagentToolOptions;
 }
@@ -60,6 +66,9 @@ export function createCoreDefaultTools(options: CreateCoreDefaultToolsOptions): 
   const tools: ToolDefinition[] = [];
   if (options.workspaceTools) {
     tools.push(...createReadOnlyWorkspaceTools(options.workspaceTools));
+  }
+  if (options.planModeTools) {
+    tools.push(...createPlanModeTools(options.planModeTools));
   }
   if (options.subagents) {
     tools.push(createSpawnSubagentTool(options.subagents, options.spawnSubagent));

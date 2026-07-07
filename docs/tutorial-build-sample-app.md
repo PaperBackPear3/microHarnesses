@@ -138,6 +138,6 @@ Done. I echoed your prompt using a plugin tool.
 Next improvements:
 
 - Replace `DemoModel` with `ProviderModelAdapter` + provider registries.
-- Add `PluginHost` and register `@micro-harnesses/plugin-basic-tools` and `@micro-harnesses/plugin-plan-mode`.
+- Add `PluginHost` and register `@micro-harnesses/plugin-basic-tools`; use `createCoreDefaultTools({ planModeTools: ... })` for read-only planning tools.
 - Add `SessionStore` for durable runs and snapshots.
 - Add approval handling and command safety rules for high-risk tools.

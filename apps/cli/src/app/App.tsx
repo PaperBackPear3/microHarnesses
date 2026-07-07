@@ -6,7 +6,7 @@ import type { ReactElement } from "react";
 import type { CliComposition } from "../runtime/composition.js";
 import { type UiScreen, parseSlashCommand } from "../slash/commands.js";
 import { buildChatLines } from "./chatLines.js";
-import { Composer } from "./components/Composer.js";
+import { Composer, estimateComposerRows } from "./components/Composer.js";
 import { FooterStatusBar } from "./components/FooterStatusBar.js";
 import { HelpScreen, Screen } from "./components/Screens.js";
 import { handleSlashCommand } from "./slashController.js";
@@ -66,7 +66,7 @@ export function App({
   );
 
   const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
-  const composerRows = 1;
+  const composerRows = estimateComposerRows(input, Math.max(20, terminalColumns - 10));
   const footerRows = 3;
   const contentRows = Math.max(1, viewportHeight - composerRows - footerRows);
 

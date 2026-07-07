@@ -12,6 +12,7 @@ This page documents package functionality and the concepts each package is respo
 - Tool/skill/channel registries and execution engines
 - Filesystem skills (`FsSkillSource`: `SKILL.md` + optional `skill.meta.json` bundles loaded as executable skills)
 - Harness modes (`HarnessMode`, `ModeController`, mode-aware approval policy, autopilot execution contract)
+- Core read-only planning tools (`plan_agent`, `explore_agent`, `plan_mode_info`) via `createCoreDefaultTools({ planModeTools: ... })`
 - Context + session persistence (`ContextManager`, `SessionStore`)
 - Policy model (`DefaultPolicyEngine`, `CompositePolicyEngine`, `PolicyRule`)
 - Plugin host + capability enforcement (`PluginHost`)
@@ -50,24 +51,6 @@ This page documents package functionality and the concepts each package is respo
 - **Workspace confinement** via root directory resolution.
 - **Bounded execution** for shell calls (timeout, output caps, abort support).
 - **High-risk classification** so policy engines can gate mutation/command tools.
-
----
-
-## `@micro-harnesses/plugin-plan-mode`
-
-**Role**: read-only planning and exploration.
-
-### Tools
-
-- `plan_agent`
-- `explore_agent`
-- `plan_mode_info`
-
-### Concepts
-
-- **Read-only guarantees**: no writes, no process execution, no network calls.
-- **Planning-first workflow**: generate ordered steps before mutating code.
-- **Targeted exploration**: query and inspect repository files safely.
 
 ---
 

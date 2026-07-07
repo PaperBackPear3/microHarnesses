@@ -78,6 +78,14 @@ test("help lines include commands and shortcuts discoverability", () => {
     "expected mode-cycle shortcut",
   );
   assert(
+    shortcuts.some((line) => line.startsWith("Option+Enter")),
+    "expected multiline composer shortcut",
+  );
+  assert(
+    shortcuts.some((line) => line.startsWith("← / →")),
+    "expected cursor movement shortcut",
+  );
+  assert(
     shortcuts.some((line) => line.startsWith("Ctrl+D")),
     "expected exit shortcut",
   );
@@ -89,6 +97,7 @@ test("help lines include commands and shortcuts discoverability", () => {
     shortcuts.some((line) => line.startsWith("Esc / Ctrl+C")),
     "expected interrupt shortcut",
   );
+  assert.match(compactShortcutHintLine(), /Opt\+Enter newline/);
   assert.match(compactShortcutHintLine(), /Ctrl\+Y diagnostics/);
   assert.match(compactShortcutHintLine(), /\/help commands\+shortcuts/);
 });

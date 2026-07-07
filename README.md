@@ -39,10 +39,9 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 | --- | --- |
 | [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, policy engine, harness modes, session/context system, plugin host, provider adapters (OpenAI/Anthropic/Ollama + generic OpenAI-compatible), subagent runner/supervisor primitives. |
 | [`@micro-harnesses/plugin-basic-tools`](plugins/basic-tools) | Workspace-scoped file mutation tools and shell execution tool. |
-| [`@micro-harnesses/plugin-plan-mode`](plugins/plan-mode) | Read-only planning and code exploration tools. |
 | [`@micro-harnesses/plugin-agentic-compression`](plugins/agentic-compression) | Subagent-driven context compression (summarizes older turns via a spawned agent). |
 | [`@micro-harnesses/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |
-| [`@micro-harnesses/cli`](apps/cli) | Agentic coding CLI (React/Ink TUI) built as a thin composition layer over core and the plugins. |
+| [`@micro-harnesses/cli`](apps/cli) | Agentic coding CLI (React/Ink TUI) built as a thin composition layer over core and plugins. |
 
 ## Design principles
 
@@ -75,7 +74,7 @@ release workflow.
 ## Install packages
 
 ```bash
-npm install @micro-harnesses/core @micro-harnesses/plugin-basic-tools @micro-harnesses/plugin-plan-mode @micro-harnesses/plugin-example-tools @micro-harnesses/cli
+npm install @micro-harnesses/core @micro-harnesses/plugin-basic-tools @micro-harnesses/plugin-example-tools @micro-harnesses/cli
 ```
 
 ## Plugin capabilities

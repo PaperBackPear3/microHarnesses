@@ -23,20 +23,32 @@ Each plugin must declare the surfaces it uses:
 
 ```ts
 import {
+  createCoreDefaultTools,
   CompositePolicyEngine,
   DefaultPolicyEngine,
+  registerCoreDefaults,
   PluginHost,
   ToolRegistry,
   ProviderRegistry,
   CredentialsRegistry,
 } from "@micro-harnesses/core";
 import { basicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
-import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 
 const tools = new ToolRegistry();
 const providers = new ProviderRegistry();
 const credentials = new CredentialsRegistry();
 const policy = new CompositePolicyEngine(new DefaultPolicyEngine());
+
+registerCoreDefaults({
+  providerRegistry: providers,
+  credentialsRegistry: credentials,
+  toolRegistry: tools,
+  includeBuiltInProviders: false,
+  tools: createCoreDefaultTools({
+    workspaceTools: { rootDir: process.cwd() },
+    planModeTools: { rootDir: process.cwd(), maxExploreFiles: 30, maxDepth: 6 },
+  }),
+});
 
 const pluginHost = new PluginHost({
   tools,
@@ -56,7 +68,6 @@ const pluginHost = new PluginHost({
 
 await pluginHost.register([
   basicToolsPlugin,
-  new PlanModePlugin({ rootDir: process.cwd(), maxExploreFiles: 30, maxDepth: 6 }),
 ]);
 ```
 

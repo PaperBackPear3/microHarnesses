@@ -17,7 +17,6 @@ const repoRoot = process.cwd();
 const packageJsonPaths = [
   "package.json",
   "packages/core/package.json",
-  "plugins/plan-mode/package.json",
   "plugins/example-tools/package.json",
   "plugins/basic-tools/package.json",
   "plugins/agentic-compression/package.json",

@@ -1,0 +1,51 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  deleteBackward,
+  deleteForward,
+  estimateComposerRows,
+  insertAtCursor,
+  lineEnd,
+  lineStart,
+  moveCursorVertically,
+  withCursor,
+} from "./Composer.js";
+
+test("insertAtCursor inserts full pasted chunks at cursor", () => {
+  const inserted = insertAtCursor("hello world", 5, " brave\nnew");
+  assert.equal(inserted.text, "hello brave\nnew world");
+  assert.equal(inserted.cursor, 15);
+});
+
+test("deleteBackward and deleteForward remove characters around cursor", () => {
+  assert.deepEqual(deleteBackward("hello", 5), { text: "hell", cursor: 4 });
+  assert.deepEqual(deleteForward("hello", 1), { text: "hllo", cursor: 1 });
+  assert.equal(deleteBackward("hello", 0), undefined);
+  assert.equal(deleteForward("hello", 5), undefined);
+});
+
+test("lineStart and lineEnd resolve current logical line bounds", () => {
+  const value = "ab\ncdef\ng";
+  assert.equal(lineStart(value, 4), 3);
+  assert.equal(lineEnd(value, 4), 7);
+});
+
+test("moveCursorVertically keeps preferred column across lines", () => {
+  const value = "abcd\nef\nghij";
+  const fromFirstLine = moveCursorVertically(value, 3, 1);
+  assert.equal(fromFirstLine, 7);
+  const backUp = moveCursorVertically(value, fromFirstLine, -1);
+  assert.equal(backUp, 2);
+});
+
+test("withCursor always renders a visible cursor", () => {
+  assert.equal(withCursor("", 0), "█");
+  assert.equal(withCursor("hello", 2), "he█llo");
+  assert.equal(withCursor("hello", 99), "hello█");
+});
+
+test("estimateComposerRows accounts for wrapping and caps growth", () => {
+  assert.equal(estimateComposerRows("", 20), 1);
+  assert.equal(estimateComposerRows("1234567890", 5), 3);
+  assert.equal(estimateComposerRows("a\nb\nc\nd\ne\nf\ng\nh", 20), 6);
+});

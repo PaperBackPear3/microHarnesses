@@ -90,9 +90,17 @@ test("registerCoreDefaults accepts custom providers", () => {
 test("createCoreDefaultTools composes optional bundles", () => {
   const tools = createCoreDefaultTools({
     workspaceTools: { rootDir: process.cwd() },
+    planModeTools: { rootDir: process.cwd() },
   });
   const names = tools.map((tool) => tool.name);
-  assert.deepEqual(names, ["fs_list", "fs_read", "grep_search"]);
+  assert.deepEqual(names, [
+    "fs_list",
+    "fs_read",
+    "grep_search",
+    "plan_agent",
+    "explore_agent",
+    "plan_mode_info",
+  ]);
 });
 
 test("createCoreDefaultTools registers wait tool for subagent supervisors", () => {

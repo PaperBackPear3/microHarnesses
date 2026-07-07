@@ -40,7 +40,6 @@ import {
 import { AgenticCompressionPlugin } from "@micro-harnesses/plugin-agentic-compression";
 import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
-import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 import type { CliConfig } from "../config/config.js";
 import { SessionService } from "../session/sessionService.js";
 import { UiStream } from "../streaming/uiStream.js";
@@ -237,6 +236,7 @@ export async function buildComposition(
     includeBuiltInProviders: false,
     tools: createCoreDefaultTools({
       workspaceTools: { rootDir: process.cwd() },
+      planModeTools: { rootDir: process.cwd() },
       subagents,
     }),
   });
@@ -265,7 +265,6 @@ export async function buildComposition(
   await pluginHost.register([
     ...builtInProviderPlugins(),
     new BasicToolsPlugin({ rootDir: process.cwd() }),
-    new PlanModePlugin({ rootDir: process.cwd() }),
     new AgenticCompressionPlugin(),
     exampleToolsPlugin,
   ]);

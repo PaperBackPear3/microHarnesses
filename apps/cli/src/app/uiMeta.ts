@@ -38,6 +38,10 @@ const HELP_COMMAND_LINES_BASE = [
 
 const KEYBOARD_SHORTCUTS: readonly Shortcut[] = [
   { keys: "Enter", description: "send prompt" },
+  { keys: "Option+Enter", description: "insert newline in composer" },
+  { keys: "← / →", description: "move cursor in composer" },
+  { keys: "Home / End", description: "jump to line start/end in composer" },
+  { keys: "↑ / ↓", description: "move cursor between composer lines" },
   { keys: "Shift+Tab", description: "cycle mode (plan → edits → autopilot)" },
   { keys: "Ctrl+T", description: "toggle collapse for all reasoning" },
   { keys: "Ctrl+Y", description: "toggle diagnostics expand/collapse" },
@@ -71,7 +75,7 @@ export function contextBadgeStyle(status: StatusState): LabeledColor {
 }
 
 export function compactShortcutHintLine(): string {
-  return "Shift+Tab mode · Ctrl+T thinking · Ctrl+Y diagnostics · ↑/↓ scroll · PgUp/PgDn page · Esc/Ctrl+C stop · /help commands+shortcuts";
+  return "Opt+Enter newline · arrows move cursor · Shift+Tab mode · Ctrl+T thinking · Ctrl+Y diagnostics · PgUp/PgDn page · Esc/Ctrl+C stop · /help commands+shortcuts";
 }
 
 export function helpCommandLines(modelChoices: string[]): string[] {
