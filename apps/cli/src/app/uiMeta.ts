@@ -84,7 +84,7 @@ export function helpCommandLines(modelChoices: string[]): string[] {
     HELP_COMMAND_LINES_BASE[0],
     HELP_COMMAND_LINES_BASE[1],
     HELP_COMMAND_LINES_BASE[2],
-    `/model [id] (no args lists available models; choices: ${modelChoices.join(", ") || "provider defaults"}; "auto" clears override)`,
+    `/model [id] (no args lists models across all configured providers; choices: ${modelChoices.join(", ") || "provider defaults"}; "auto" clears override)`,
     ...HELP_COMMAND_LINES_BASE.slice(3),
   ];
 }

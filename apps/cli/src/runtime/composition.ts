@@ -21,6 +21,7 @@ import {
   type ModelRoute,
   type ModelRoutingPreference,
   PluginHost,
+  type ProviderAuth,
   ProviderModelAdapter,
   ProviderRegistry,
   type RunOptions,
@@ -81,9 +82,9 @@ export interface CliComposition {
   runOptions(): RunOptions;
   sessionStore: SessionStore;
   subagents: SubagentSupervisor;
-  /** Current cached route catalog for the active provider (profile routes merged with discovery). */
+  /** Current cached route catalog across all registered providers with resolvable credentials (profile routes merged with discovery). */
   listModelRoutes(): ModelRoute[];
-  /** Re-discovers routes for the active provider (profile + live discovery when supported) and updates the cache. */
+  /** Re-discovers routes for every registered provider (profile + live discovery when supported/credentialed) and updates the cache. */
   refreshModelRoutes(): Promise<ModelRoute[]>;
 }
 
@@ -165,6 +166,12 @@ export async function buildComposition(
 
   // Model router: opt-in (only used when a run passes `routing`, i.e. when
   // `runtimeState.routingPreference` is set via `/route` or `--routing-preference`).
+  // All providers registered via `builtInProviderPlugins()` (openai, anthropic,
+  // ollama) are available simultaneously — the catalog is aggregated across
+  // every provider with resolvable credentials, not just the active one, so
+  // the router (and per-invocation subagent routing) can pick whichever
+  // provider/model best fits a preference, e.g. Claude for intelligence,
+  // Ollama for zero cost, or a cheap OpenAI tier for speed.
   const modelRouter = new DefaultModelRouter();
   let routeCatalogCache: ModelRoute[] = routesForProviderProfile(
     runtimeState.provider,
@@ -172,19 +179,70 @@ export async function buildComposition(
   );
   const routeCatalog = () => routeCatalogCache;
 
-  async function refreshModelRoutes(): Promise<ModelRoute[]> {
-    const providerId = runtimeState.provider;
-    const profileRoutes = routesForProviderProfile(providerId, runtimeState.model);
+  async function routesForOneProvider(providerId: string): Promise<ModelRoute[]> {
+    const modelOverride = providerId === runtimeState.provider ? runtimeState.model : undefined;
+    const profileRoutes = routesForProviderProfile(providerId, modelOverride);
+    let auth: ProviderAuth;
+    try {
+      auth = await credentials.get(providerId).resolve();
+    } catch {
+      // No credentials configured for this provider (e.g. missing API key
+      // env var): keep the active provider usable with its static profile
+      // (matches prior single-provider behavior), but exclude other
+      // providers entirely since their models genuinely can't be invoked.
+      return providerId === runtimeState.provider ? profileRoutes : [];
+    }
+    let routes: ModelRoute[];
     try {
       const adapter = providers.get(providerId);
-      const auth = await credentials.get(providerId).resolve();
       const discovered = await discoverProviderRoutes(providerId, adapter, auth);
-      routeCatalogCache = mergeProviderRoutes(profileRoutes, discovered);
+      routes = mergeProviderRoutes(profileRoutes, discovered);
     } catch {
-      // Keep profile routes usable even when discovery/credentials fail
-      // (e.g. Ollama server unreachable, missing hosted API key).
-      routeCatalogCache = profileRoutes;
+      routes = profileRoutes;
     }
+    if (providerId === "ollama") {
+      routes = await withOllamaContextWindows(routes, auth);
+    }
+    return routes;
+  }
+
+  /**
+   * Ollama is the one provider where real per-model context window is
+   * knowable automatically (via the local `/api/show` endpoint) rather than
+   * from a static pricing table, since locally pulled models vary by
+   * quantization/tag. Best-effort and bounded by `detectOllamaContextWindowTokens`'s
+   * own timeout; failures leave the route's existing metadata untouched.
+   */
+  async function withOllamaContextWindows(
+    routes: ModelRoute[],
+    auth: { baseUrl?: string },
+  ): Promise<ModelRoute[]> {
+    const baseUrl = auth.baseUrl ?? "http://127.0.0.1:11434/v1";
+    return Promise.all(
+      routes.map(async (route) => {
+        try {
+          const detected = await detectOllamaContextWindowTokens({ baseUrl, model: route.model });
+          if (!detected || detected <= 0) return route;
+          return {
+            ...route,
+            metadata: {
+              ...route.metadata,
+              contextWindowTokens: detected,
+              contextWindowSource: "discovered" as const,
+            },
+          };
+        } catch {
+          return route;
+        }
+      }),
+    );
+  }
+
+  async function refreshModelRoutes(): Promise<ModelRoute[]> {
+    const perProvider = await Promise.all(
+      providers.list().map((a) => routesForOneProvider(a.providerId)),
+    );
+    routeCatalogCache = perProvider.flat();
     return routeCatalogCache;
   }
 

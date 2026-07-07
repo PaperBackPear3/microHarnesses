@@ -69,7 +69,7 @@ test("help lines include commands and shortcuts discoverability", () => {
   assert(commands.includes("/wait"));
   assert(
     commands.includes(
-      '/model [id] (no args lists available models; choices: gpt-5.3-codex, claude-sonnet-5; "auto" clears override)',
+      '/model [id] (no args lists models across all configured providers; choices: gpt-5.3-codex, claude-sonnet-5; "auto" clears override)',
     ),
     "expected dynamic model line to be rendered in help commands",
   );

@@ -15,9 +15,9 @@ export function profileForProvider(provider: string, modelOverride?: string): Mo
 
   if (provider === "anthropic") {
     return {
-      defaultModel: "claude-sonnet-4-5",
-      fastModel: "claude-3-5-haiku-latest",
-      reasoningModel: "claude-opus-4-1",
+      defaultModel: "claude-sonnet-5",
+      fastModel: "claude-haiku-4-5",
+      reasoningModel: "claude-opus-4-8",
     };
   }
   if (provider === "ollama") {
@@ -28,9 +28,9 @@ export function profileForProvider(provider: string, modelOverride?: string): Mo
     };
   }
   return {
-    defaultModel: "gpt-4.1",
-    fastModel: "gpt-4.1-mini",
-    reasoningModel: "o4-mini",
+    defaultModel: "gpt-5.4",
+    fastModel: "gpt-5.4-mini",
+    reasoningModel: "gpt-5.5",
   };
 }
 

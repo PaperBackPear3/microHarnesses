@@ -55,19 +55,31 @@ export async function handleSlashCommand(args: Args): Promise<void> {
     return;
   }
   if (command.type === "list-models") {
-    const provider = composition.runtimeState.provider;
-    const routes = composition.listModelRoutes().filter((route) => route.providerId === provider);
+    const activeProvider = composition.runtimeState.provider;
     const activeModel = composition.runtimeState.model;
-    if (routes.length === 0) {
-      chatStore.appendSystemMessage(`No known models for provider ${provider}.`);
+    const allRoutes = composition.listModelRoutes();
+    if (allRoutes.length === 0) {
+      chatStore.appendSystemMessage("No known models for any configured provider.");
       return;
     }
-    const lines = routes.map((route) => describeModelRoute(route, activeModel));
+    const byProvider = new Map<string, ModelRoute[]>();
+    for (const route of allRoutes) {
+      const list = byProvider.get(route.providerId) ?? [];
+      list.push(route);
+      byProvider.set(route.providerId, list);
+    }
+    const sections = [...byProvider.entries()].map(([providerId, routes]) => {
+      const header = providerId === activeProvider ? `${providerId} (active provider)` : providerId;
+      const lines = routes.map((route) =>
+        describeModelRoute(route, providerId === activeProvider ? activeModel : undefined),
+      );
+      return [`${header}:`, ...lines].join("\n");
+    });
     const preferenceLine = composition.runtimeState.routingPreference
-      ? `Routing preference: ${composition.runtimeState.routingPreference}`
-      : "Routing preference: off (using effort-based profile selection)";
+      ? `Routing preference: ${composition.runtimeState.routingPreference} (router may pick across any provider above)`
+      : "Routing preference: off (using effort-based profile selection for the active provider)";
     chatStore.appendSystemMessage(
-      [`Models for provider ${provider}:`, ...lines, preferenceLine].join("\n"),
+      ["Models across all configured providers:", ...sections, preferenceLine].join("\n\n"),
     );
     return;
   }
@@ -291,11 +303,30 @@ function describeModelRoute(route: ModelRoute, activeModel: string | undefined):
   const marker = route.model === activeModel ? "* " : "  ";
   const meta = route.metadata;
   const details: string[] = [];
-  if (meta?.cost !== undefined) details.push(`cost=${meta.cost}`);
+  if (
+    meta?.inputCostPerMillionTokens !== undefined ||
+    meta?.outputCostPerMillionTokens !== undefined
+  ) {
+    const input = meta.inputCostPerMillionTokens?.toFixed(2) ?? "?";
+    const output = meta.outputCostPerMillionTokens?.toFixed(2) ?? "?";
+    details.push(`$${input}/$${output} per 1M tok`);
+  } else if (meta?.cost !== undefined) {
+    details.push(`cost=${meta.cost}`);
+  }
+  if (meta?.contextWindowTokens !== undefined) {
+    details.push(`ctx=${formatContextWindow(meta.contextWindowTokens)}`);
+  }
   if (meta?.speed !== undefined) details.push(`speed=${meta.speed}`);
   if (meta?.intelligence !== undefined) details.push(`intelligence=${meta.intelligence}`);
   if (meta?.tags && meta.tags.length > 0) details.push(`tags=${meta.tags.join(",")}`);
   const availability = route.available === false ? " (unavailable)" : "";
   const suffix = details.length > 0 ? ` [${details.join(", ")}]` : "";
   return `${marker}${route.providerId}/${route.model}${availability}${suffix}`;
+}
+
+function formatContextWindow(tokens: number): string {
+  if (tokens >= 1_000_000)
+    return `${(tokens / 1_000_000).toFixed(tokens % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k`;
+  return `${tokens}`;
 }

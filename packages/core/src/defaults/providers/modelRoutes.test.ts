@@ -11,7 +11,7 @@ test("routesForProviderProfile builds fast/default/reasoning routes for openai",
   const routes = routesForProviderProfile("openai");
   assert.deepEqual(
     routes.map((r) => r.model),
-    ["gpt-4.1-mini", "gpt-4.1", "o4-mini"],
+    ["gpt-5.4-mini", "gpt-5.4", "gpt-5.5"],
   );
   assert.equal(routes[0]?.metadata?.tags?.[0], "fast");
   assert.equal(routes[2]?.metadata?.tags?.[0], "reasoning");
@@ -58,6 +58,39 @@ test("discoverProviderRoutes returns undefined when listModels throws", async ()
   assert.equal(result, undefined);
 });
 
+test("routesForProviderProfile fills real cost/context metadata for catalog-known openai models", () => {
+  // modelProfiles.ts's openai defaults (gpt-5.4-mini/gpt-5.4/gpt-5.5) are
+  // current-generation and present in the catalog, so this exercises the
+  // catalog-hit path directly against the real built-in defaults.
+  const routes = routesForProviderProfile("openai");
+  const mini = routes.find((r) => r.model === "gpt-5.4-mini");
+  assert.equal(mini?.metadata?.costSource, "catalog");
+  assert.equal(mini?.metadata?.contextWindowSource, "catalog");
+  assert.equal(mini?.metadata?.contextWindowTokens, 400_000);
+  assert.equal(mini?.metadata?.inputCostPerMillionTokens, 0.75);
+  assert.equal(mini?.metadata?.outputCostPerMillionTokens, 4.5);
+  // Mid tier should score as the middle relative bucket.
+  assert.equal(mini?.metadata?.cost, 2);
+});
+
+test("routesForProviderProfile falls back to heuristic metadata once a model ages out of the catalog", () => {
+  // Simulates a model no longer in the 365-day freshness window (e.g. a
+  // deployment still pinned to a superseded id via an explicit override).
+  // It should fall back to heuristic tier ratings rather than keeping stale
+  // pricing/context data.
+  const routes = routesForProviderProfile("openai", "gpt-4.1-mini");
+  assert.equal(routes[0]?.metadata?.costSource, "heuristic");
+  assert.equal(routes[0]?.metadata?.contextWindowTokens, undefined);
+});
+
+test("routesForProviderProfile falls back to heuristic metadata for unknown/local models", () => {
+  const routes = routesForProviderProfile("ollama");
+  for (const route of routes) {
+    assert.equal(route.metadata?.costSource, "heuristic");
+    assert.equal(route.metadata?.contextWindowTokens, undefined);
+  }
+});
+
 test("discoverProviderRoutes maps discovered models to routes", async () => {
   const adapter: ProviderAdapter = {
     providerId: "ollama",
@@ -75,6 +108,22 @@ test("discoverProviderRoutes maps discovered models to routes", async () => {
   );
   assert.equal(result?.[0]?.id, "ollama:llama3.1:8b");
   assert.equal(result?.[0]?.metadata?.tags?.[0], "discovered");
+});
+
+test("discoverProviderRoutes cross-references the catalog for known hosted models", async () => {
+  const adapter: ProviderAdapter = {
+    providerId: "openai",
+    async complete() {
+      throw new Error("not used");
+    },
+    async listModels(_auth: ProviderAuth) {
+      return [{ id: "gpt-5.4" }];
+    },
+  };
+  const result = await discoverProviderRoutes("openai", adapter, { apiKey: "x" });
+  assert.equal(result?.[0]?.metadata?.costSource, "catalog");
+  assert.equal(result?.[0]?.metadata?.contextWindowSource, "catalog");
+  assert.equal(result?.[0]?.metadata?.contextWindowTokens, 1_000_000);
 });
 
 test("mergeProviderRoutes keeps profile metadata for matching discovered models", () => {

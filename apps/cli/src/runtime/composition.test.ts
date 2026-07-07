@@ -96,3 +96,50 @@ test("autopilot uses the configured iteration budget", async () => {
     await rm(stateDir, { recursive: true, force: true });
   }
 });
+
+test("model route catalog aggregates across configured providers, not just the active one", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-composition-"));
+  const originalOpenAiKey = process.env.OPENAI_API_KEY;
+  const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  try {
+    const composition = await buildComposition(makeConfig(stateDir), "s-test-route-catalog-1");
+    const routes = composition.listModelRoutes();
+    // Active provider (openai) keeps its static profile routes even without
+    // credentials, matching prior single-provider fallback behavior.
+    assert.ok(routes.some((r) => r.providerId === "openai"));
+    // Ollama always resolves credentials (keyless local default) so it is
+    // always included alongside the active provider.
+    assert.ok(routes.some((r) => r.providerId === "ollama"));
+    // Anthropic has no credentials configured and isn't the active provider,
+    // so its models genuinely can't be invoked and are excluded.
+    assert.ok(!routes.some((r) => r.providerId === "anthropic"));
+  } finally {
+    if (originalOpenAiKey !== undefined) process.env.OPENAI_API_KEY = originalOpenAiKey;
+    if (originalAnthropicKey !== undefined) process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("model route catalog includes a non-active provider once its credentials are configured", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-composition-"));
+  const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "test-key";
+  try {
+    const composition = await buildComposition(makeConfig(stateDir), "s-test-route-catalog-2");
+    const routes = composition.listModelRoutes();
+    const anthropicRoutes = routes.filter((r) => r.providerId === "anthropic");
+    assert.ok(anthropicRoutes.length > 0);
+    // Known Anthropic models get real cost/context metadata from the
+    // maintained catalog rather than the coarse tier heuristic.
+    assert.ok(anthropicRoutes.some((r) => r.metadata?.costSource === "catalog"));
+  } finally {
+    if (originalAnthropicKey === undefined) {
+      delete process.env.ANTHROPIC_API_KEY;
+    } else {
+      process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+    }
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});

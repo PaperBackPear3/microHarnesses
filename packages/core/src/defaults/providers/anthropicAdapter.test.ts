@@ -75,3 +75,33 @@ test("complete maps tool_use blocks into tool calls", async () => {
   assert.deepEqual(response.toolCalls, [{ name: "search", input: { query: "hello" } }]);
   assert.equal(response.stop, false);
 });
+
+test("listModels surfaces real context window from max_input_tokens", async () => {
+  const fetchImpl: typeof fetch = async () =>
+    new Response(
+      JSON.stringify({
+        data: [
+          {
+            type: "model",
+            id: "claude-sonnet-4-5",
+            display_name: "Claude Sonnet 4.5",
+            created_at: "2025-01-01T00:00:00Z",
+            max_input_tokens: 200_000,
+            max_tokens: 64_000,
+            capabilities: null,
+          },
+        ],
+        has_more: false,
+        first_id: "claude-sonnet-4-5",
+        last_id: "claude-sonnet-4-5",
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+
+  const adapter = new AnthropicAdapter({ fetchImpl });
+  const models = await adapter.listModels({ apiKey: "k" });
+  assert.equal(models.length, 1);
+  assert.equal(models[0]?.id, "claude-sonnet-4-5");
+  assert.equal(models[0]?.label, "Claude Sonnet 4.5");
+  assert.equal(models[0]?.contextWindowTokens, 200_000);
+});

@@ -75,6 +75,16 @@ export interface ModelAdapter {
  * Relative, provider-agnostic ratings used to compare candidate routes.
  * Values are unit-less and only meaningful relative to other routes in the
  * same catalog; consumers may leave any field unset when unknown.
+ *
+ * `cost`/`speed`/`intelligence` drive {@link ModelRouter} scoring and are
+ * always populated (derived from real pricing via a maintained catalog when
+ * known, otherwise a coarse fast/default/reasoning heuristic — see
+ * `costSource`). `inputCostPerMillionTokens`/`outputCostPerMillionTokens` and
+ * `contextWindowTokens` are the real, absolute figures used for
+ * user-facing display (e.g. `/model`) when available; no public provider API
+ * currently returns pricing, so these come from a manually maintained table
+ * (`defaults/providers/modelCatalog.ts`) that must be updated as providers
+ * change pricing/specs.
  */
 export interface ModelRouteMetadata {
   /** Relative cost rating; lower is cheaper. */
@@ -84,12 +94,20 @@ export interface ModelRouteMetadata {
   /** Relative capability rating; higher is more intelligent/capable. */
   intelligence?: number;
   contextWindowTokens?: number;
+  /** Real USD price per 1M input tokens, when known from a maintained catalog. */
+  inputCostPerMillionTokens?: number;
+  /** Real USD price per 1M output tokens, when known from a maintained catalog. */
+  outputCostPerMillionTokens?: number;
+  /** Where `cost` came from: a maintained pricing table, or a coarse tier heuristic. */
+  costSource?: "catalog" | "heuristic";
+  /** Where `contextWindowTokens` came from: live discovery, a maintained table, or a heuristic default. */
+  contextWindowSource?: "discovered" | "catalog" | "heuristic";
   tags?: string[];
 }
 
 /** A single provider/model combination a {@link ModelRouter} can select. */
 export interface ModelRoute {
-  /** Stable identifier for this route, e.g. `"openai:gpt-4.1"`. */
+  /** Stable identifier for this route, e.g. `"openai:gpt-5.4"`. */
   id: string;
   providerId: string;
   model: string;

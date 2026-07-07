@@ -6,6 +6,7 @@ export * from "./anthropicAdapter";
 export * from "./ollamaAdapter";
 export * from "./credentials";
 export * from "./plugins";
+export * from "./modelCatalog";
 export * from "./modelProfiles";
 export * from "./modelRoutes";
 export * from "./contextWindow";

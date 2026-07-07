@@ -1,5 +1,6 @@
 import type { ModelRoute, ModelRouteMetadata } from "../../model/types";
 import type { ProviderAdapter, ProviderAuth } from "../../providers/types";
+import { costRatingFromPricing, lookupKnownModelInfo } from "./modelCatalog";
 import { profileForProvider } from "./modelProfiles";
 
 type ProfileTier = "fast" | "default" | "reasoning";
@@ -27,16 +28,47 @@ export function routesForProviderProfile(providerId: string, modelOverride?: str
       providerId,
       model: entry.model,
       available: true,
-      metadata: metadataForTier(entry.tier),
+      metadata: metadataForModel(entry.model, entry.tier),
     });
   }
   return routes;
 }
 
+/**
+ * Builds route metadata for a model, preferring real cost/context data from
+ * the maintained {@link lookupKnownModelInfo} catalog and falling back to a
+ * coarse fast/default/reasoning heuristic rating when the model is unknown
+ * (e.g. a local Ollama model, or a hosted model released after this table
+ * was last updated).
+ */
+function metadataForModel(model: string, tier: ProfileTier): ModelRouteMetadata {
+  const known = lookupKnownModelInfo(model);
+  const heuristic = metadataForTier(tier);
+  if (!known) return heuristic;
+
+  const cost = costRatingFromPricing(known) ?? heuristic.cost;
+  return {
+    ...heuristic,
+    cost,
+    costSource: costRatingFromPricing(known) !== undefined ? "catalog" : "heuristic",
+    ...(known.contextWindowTokens
+      ? { contextWindowTokens: known.contextWindowTokens, contextWindowSource: "catalog" }
+      : {}),
+    ...(known.inputCostPerMillionTokens !== undefined
+      ? { inputCostPerMillionTokens: known.inputCostPerMillionTokens }
+      : {}),
+    ...(known.outputCostPerMillionTokens !== undefined
+      ? { outputCostPerMillionTokens: known.outputCostPerMillionTokens }
+      : {}),
+  };
+}
+
 function metadataForTier(tier: ProfileTier): ModelRouteMetadata {
-  if (tier === "fast") return { cost: 1, speed: 3, intelligence: 1, tags: ["fast"] };
-  if (tier === "reasoning") return { cost: 3, speed: 1, intelligence: 3, tags: ["reasoning"] };
-  return { cost: 2, speed: 2, intelligence: 2, tags: ["default"] };
+  if (tier === "fast")
+    return { cost: 1, speed: 3, intelligence: 1, costSource: "heuristic", tags: ["fast"] };
+  if (tier === "reasoning")
+    return { cost: 3, speed: 1, intelligence: 3, costSource: "heuristic", tags: ["reasoning"] };
+  return { cost: 2, speed: 2, intelligence: 2, costSource: "heuristic", tags: ["default"] };
 }
 
 /**
@@ -44,6 +76,12 @@ function metadataForTier(tier: ProfileTier): ModelRouteMetadata {
  * Returns `undefined` (rather than throwing) when the adapter doesn't
  * implement discovery or the call fails, so callers can fall back to static
  * catalog routes without special-casing any one provider.
+ *
+ * Provider APIs generally don't return pricing/context window, so each
+ * discovered model is cross-referenced against the maintained
+ * {@link lookupKnownModelInfo} table to fill those fields in when possible;
+ * models absent from that table are still returned with `available: true`
+ * but without cost/context metadata (surfaced as "discovered" only).
  */
 export async function discoverProviderRoutes(
   providerId: string,
@@ -54,16 +92,37 @@ export async function discoverProviderRoutes(
   try {
     const models = await adapter.listModels(auth);
     if (models.length === 0) return undefined;
-    return models.map((model) => ({
-      id: `${providerId}:${model.id}`,
-      providerId,
-      model: model.id,
-      available: true,
-      metadata: {
-        ...(model.contextWindowTokens ? { contextWindowTokens: model.contextWindowTokens } : {}),
-        tags: ["discovered"],
-      },
-    }));
+    return models.map((model) => {
+      const known = lookupKnownModelInfo(model.id);
+      const cost = known ? costRatingFromPricing(known) : undefined;
+      return {
+        id: `${providerId}:${model.id}`,
+        providerId,
+        model: model.id,
+        available: true,
+        metadata: {
+          ...(cost !== undefined ? { cost, costSource: "catalog" as const } : {}),
+          ...(known?.inputCostPerMillionTokens !== undefined
+            ? { inputCostPerMillionTokens: known.inputCostPerMillionTokens }
+            : {}),
+          ...(known?.outputCostPerMillionTokens !== undefined
+            ? { outputCostPerMillionTokens: known.outputCostPerMillionTokens }
+            : {}),
+          ...(model.contextWindowTokens
+            ? {
+                contextWindowTokens: model.contextWindowTokens,
+                contextWindowSource: "discovered" as const,
+              }
+            : known?.contextWindowTokens
+              ? {
+                  contextWindowTokens: known.contextWindowTokens,
+                  contextWindowSource: "catalog" as const,
+                }
+              : {}),
+          tags: ["discovered"],
+        },
+      };
+    });
   } catch {
     return undefined;
   }

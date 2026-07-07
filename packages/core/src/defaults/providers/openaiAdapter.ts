@@ -5,7 +5,7 @@ export interface OpenAIAdapterOptions {
   defaultModel?: string;
 }
 
-const DEFAULT_MODEL = "gpt-4.1-mini";
+const DEFAULT_MODEL = "gpt-5.4-mini";
 
 /** OpenAI preset of the generic OpenAI-compatible adapter. */
 export class OpenAIAdapter extends OpenAICompatAdapter {

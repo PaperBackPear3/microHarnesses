@@ -101,6 +101,11 @@ export class AnthropicAdapter implements ProviderAdapter {
   /**
    * Lists models via the Anthropic Models API. Callers should treat a thrown
    * error as "discovery unavailable" and fall back to static routes.
+   *
+   * Anthropic's model list response includes real `max_input_tokens` (unlike
+   * OpenAI's, which only returns id/created/object/owned_by) — surfaced here
+   * as `contextWindowTokens` so it doesn't have to come from the manually
+   * maintained catalog. Pricing is still not exposed by any provider API.
    */
   async listModels(auth: ProviderAuth): Promise<ProviderModelInfo[]> {
     try {
@@ -108,7 +113,11 @@ export class AnthropicAdapter implements ProviderAdapter {
       const page = await client.models.list();
       const models: ProviderModelInfo[] = [];
       for await (const model of page) {
-        models.push({ id: model.id, label: model.display_name });
+        models.push({
+          id: model.id,
+          label: model.display_name,
+          ...(model.max_input_tokens ? { contextWindowTokens: model.max_input_tokens } : {}),
+        });
       }
       return models;
     } catch (error: unknown) {
