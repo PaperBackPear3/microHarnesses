@@ -5,7 +5,7 @@ import { HeuristicTokenCounter } from "../observability/tokenCounter";
 import type { TokenCounter } from "../observability/types";
 import type { Turn } from "../runtime/state";
 import { isNodeError } from "../shared/nodeError";
-import { truncate } from "../shared/text";
+import { renderToolResultFeedback } from "../tools/resultFeedback";
 import { defaultCompressor } from "./defaultCompressor";
 import { type OverflowPlan, computeOverflowPlan } from "./overflowPlan";
 import type { CompressionResult, CompressorFn, ContextWindowStats, WorkingContext } from "./types";
@@ -484,24 +484,7 @@ export class ContextManager {
 }
 
 function renderToolResultFeedbackForEstimation(turn: Turn): string {
-  const callLines = turn.toolCalls.map((call, index) => {
-    const input = truncate(JSON.stringify(call.input), 300);
-    return `${index + 1}. ${call.name} input=${input}`;
-  });
-  const resultLines = turn.toolResults.map((result, index) => {
-    if (!result.ok) {
-      return `${index + 1}. error=${result.error ?? "unknown error"}`;
-    }
-    return `${index + 1}. output=${truncate(JSON.stringify(result.output), 500)}`;
-  });
-  return [
-    "Tool execution feedback from the previous step:",
-    "Tool calls:",
-    ...(callLines.length > 0 ? callLines : ["(none)"]),
-    "Tool results:",
-    ...(resultLines.length > 0 ? resultLines : ["(none)"]),
-    "Use this feedback to decide the next action. If the request is satisfied, return the final answer.",
-  ].join("\n");
+  return renderToolResultFeedback(turn.toolCalls, turn.toolResults);
 }
 
 function clampRatio(value: number): number {

@@ -377,6 +377,107 @@ test("includes prior tool execution feedback in subsequent messages", async () =
   assert.match(feedback?.content ?? "", /2026-01-01T00:00:00.000Z/);
 });
 
+test("tool feedback includes long shell stdout for file lists", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  const fileList = Array.from({ length: 140 }, (_, i) => `packages/core/src/file-${i}.ts`).join("\n");
+  await model.nextStep(
+    makeInput({
+      workingTurns: [
+        {
+          id: "t1",
+          iteration: 1,
+          userMessage: "List changed files",
+          assistantMessage: "",
+          toolCalls: [{ name: "shell_exec", input: { command: "git diff --name-only HEAD^ HEAD" } }],
+          toolResults: [
+            {
+              ok: true,
+              output: {
+                stdout: fileList,
+                stderr: "",
+                truncated: false,
+                stdoutTruncated: false,
+                stderrTruncated: false,
+                exitCode: 0,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  const feedback = adapter.seenRequest?.messages.find((m) =>
+    m.content.includes("Tool execution feedback from the previous step:"),
+  );
+  assert.ok(feedback);
+  assert.match(feedback?.content ?? "", /file-139\.ts/);
+});
+
+test("tool feedback includes tool_output_read hints when artifacts are present", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(
+    makeInput({
+      workingTurns: [
+        {
+          id: "t1",
+          iteration: 1,
+          userMessage: "Show the patch",
+          assistantMessage: "",
+          toolCalls: [{ name: "shell_exec", input: { command: "git show -p" } }],
+          toolResults: [
+            {
+              ok: true,
+              output: {
+                stdout: "partial output",
+                stdoutTruncated: true,
+                truncated: true,
+                stdoutArtifact: { id: "artifact-1", path: "artifact-1.txt" },
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  );
+
+  const feedback = adapter.seenRequest?.messages.find((m) =>
+    m.content.includes("Tool execution feedback from the previous step:"),
+  );
+  assert.ok(feedback);
+  assert.match(feedback?.content ?? "", /tool_output_read id=artifact-1/);
+});
+
 test("adds session continuity instruction when working turns exist", async () => {
   const adapter = new FakeAdapter("m", {
     assistantMessage: "ok",

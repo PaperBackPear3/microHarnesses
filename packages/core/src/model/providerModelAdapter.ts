@@ -3,6 +3,7 @@ import type { ProviderRegistry } from "../providers/registry";
 import type { CompletionRequest, ProviderId, ProviderMessage } from "../providers/types";
 import { ConfigError } from "../shared/errors";
 import { truncate } from "../shared/text";
+import { renderToolResultFeedback } from "../tools/resultFeedback";
 import type { ToolDescriptor } from "../tools/types";
 import type { ModelAdapter, StepInput, StepPlan } from "./types";
 
@@ -198,29 +199,5 @@ function renderToolCatalogInstruction(tools: ToolDescriptor[]): string {
     "Do not append parentheses to tool names (use `time`, not `time()`).",
     "Available tools:",
     entries,
-  ].join("\n");
-}
-
-function renderToolResultFeedback(
-  calls: Array<{ name: string; input: Record<string, unknown> }>,
-  results: Array<{ ok: boolean; output: Record<string, unknown>; error?: string }>,
-): string {
-  const callLines = calls.map((call, index) => {
-    const input = truncate(JSON.stringify(call.input), 300);
-    return `${index + 1}. ${call.name} input=${input}`;
-  });
-  const resultLines = results.map((result, index) => {
-    if (!result.ok) {
-      return `${index + 1}. error=${result.error ?? "unknown error"}`;
-    }
-    return `${index + 1}. output=${truncate(JSON.stringify(result.output), 500)}`;
-  });
-  return [
-    "Tool execution feedback from the previous step:",
-    "Tool calls:",
-    ...(callLines.length > 0 ? callLines : ["(none)"]),
-    "Tool results:",
-    ...(resultLines.length > 0 ? resultLines : ["(none)"]),
-    "Use this feedback to decide the next action. If the request is satisfied, return the final answer.",
   ].join("\n");
 }
