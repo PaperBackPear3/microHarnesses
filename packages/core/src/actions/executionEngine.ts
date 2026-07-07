@@ -225,9 +225,10 @@ export class ActionExecutionEngine {
 
     const startedAt = Date.now();
     try {
+      const timeoutMs = resolveToolTimeoutMs(tool, this.limits.toolTimeoutMs);
       const output = await withTimeout(
         (signal) => tool.execute(call.input, { signal, traceContext: span.context }),
-        this.limits.toolTimeoutMs,
+        timeoutMs,
         ctx.signal,
       );
       const durationMs = Date.now() - startedAt;
@@ -401,25 +402,28 @@ function safeJson(value: unknown): string {
  */
 async function withTimeout<T>(
   runner: (signal: AbortSignal) => Promise<T>,
-  timeoutMs: number,
+  timeoutMs: number | "none",
   externalSignal?: AbortSignal,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const controller = new AbortController();
     let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const finish = (fn: () => void): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeoutId);
+      if (timeoutId) clearTimeout(timeoutId);
       externalSignal?.removeEventListener("abort", onExternalAbort);
       fn();
     };
 
-    const timeoutId = setTimeout(() => {
-      controller.abort(`tool timeout ${timeoutMs}ms`);
-      finish(() => reject(new ToolTimeoutError(`Tool exceeded timeout of ${timeoutMs}ms`)));
-    }, timeoutMs);
+    if (timeoutMs !== "none") {
+      timeoutId = setTimeout(() => {
+        controller.abort(`tool timeout ${timeoutMs}ms`);
+        finish(() => reject(new ToolTimeoutError(`Tool exceeded timeout of ${timeoutMs}ms`)));
+      }, timeoutMs);
+    }
 
     function onExternalAbort(): void {
       controller.abort(externalSignal?.reason);
@@ -448,4 +452,14 @@ function normalizeToolCallName(call: ToolCall): ToolCall {
     return call;
   }
   return { ...call, name: normalizedName };
+}
+
+function resolveToolTimeoutMs(tool: ToolDefinition, defaultTimeoutMs: number): number | "none" {
+  if (tool.executionTimeoutMs === "none") {
+    return "none";
+  }
+  if (typeof tool.executionTimeoutMs === "number" && Number.isFinite(tool.executionTimeoutMs)) {
+    return Math.max(1, Math.floor(tool.executionTimeoutMs));
+  }
+  return defaultTimeoutMs;
 }

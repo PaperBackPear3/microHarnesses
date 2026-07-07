@@ -121,7 +121,7 @@ export class InProcessSubagentSupervisor implements SubagentSupervisor {
       const result = await runBuiltSubagent(built, tracked.request);
       tracked.status = "completed";
       tracked.completedAt = this.now();
-      tracked.summary = result.summary;
+      tracked.summary = resolveSummary(result);
       tracked.sessionId = result.state.sessionId ?? tracked.sessionId;
       return result;
     } catch (error) {
@@ -242,4 +242,17 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw new Error("subagent wait aborted");
   }
+}
+
+function resolveSummary(result: SubagentResult): string {
+  if (result.summary.trim().length > 0) {
+    return result.summary;
+  }
+  for (let index = result.state.turns.length - 1; index >= 0; index -= 1) {
+    const message = result.state.turns[index]?.assistantMessage?.trim();
+    if (message && message.length > 0) {
+      return message;
+    }
+  }
+  return result.summary;
 }

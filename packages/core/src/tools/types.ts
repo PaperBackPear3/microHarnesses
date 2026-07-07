@@ -18,6 +18,12 @@ export interface ToolDefinition {
   description: string;
   risk: "low" | "high";
   /**
+   * Optional execution timeout override for this tool.
+   * - number: timeout in milliseconds for this tool call.
+   * - "none": disable per-tool timeout; still aborted when the run is killed.
+   */
+  executionTimeoutMs?: number | "none";
+  /**
    * Optional richer risk/governance metadata. `risk` remains the canonical
    * coarse value used by default policy for backwards compatibility.
    */

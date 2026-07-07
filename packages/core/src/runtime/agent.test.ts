@@ -251,6 +251,93 @@ test("runtime streams limit event and exits gracefully when tool call limit is e
   );
 });
 
+test("tool executionTimeoutMs='none' bypasses default per-tool timeout", async () => {
+  const obs = makeObs();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "wait_forever",
+    description: "long wait",
+    risk: "low",
+    executionTimeoutMs: "none",
+    async execute() {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return { done: true };
+    },
+  });
+
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({
+      assistantMessage: "wait",
+      toolCalls: [{ name: "wait_forever", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+    limits: { toolTimeoutMs: 5, maxActionCallsPerRun: 10 },
+  });
+
+  const state = await runtime.run("hello", options);
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
+});
+
+test("tool executionTimeoutMs='none' still aborts when run is killed", async () => {
+  const obs = makeObs();
+  const tools = new ToolRegistry();
+  let started = false;
+  let resolveStarted: (() => void) | undefined;
+  const startedPromise = new Promise<void>((resolve) => {
+    resolveStarted = resolve;
+  });
+  tools.register({
+    name: "wait_for_abort",
+    description: "wait for cancellation",
+    risk: "low",
+    executionTimeoutMs: "none",
+    async execute(_input, context) {
+      started = true;
+      resolveStarted?.();
+      await new Promise<void>((_resolve, reject) => {
+        context?.signal.addEventListener(
+          "abort",
+          () => reject(new Error("cancelled by signal")),
+          { once: true },
+        );
+      });
+      return { unreachable: true };
+    },
+  });
+
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({
+      assistantMessage: "wait",
+      toolCalls: [{ name: "wait_for_abort", input: {} }],
+      stop: true,
+    }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+    limits: { toolTimeoutMs: 5, maxActionCallsPerRun: 10 },
+  });
+
+  const runPromise = runtime.run("hello", options);
+  await startedPromise;
+  runtime.kill("test kill");
+  const state = await runPromise;
+
+  assert.equal(started, true);
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, false);
+  assert.match(state.turns[0]?.toolResults[0]?.error ?? "", /run was cancelled/i);
+});
+
 test("runtime emits limit event when max iterations are exhausted", async () => {
   const obs = makeObs();
   const runtime = new Agent({

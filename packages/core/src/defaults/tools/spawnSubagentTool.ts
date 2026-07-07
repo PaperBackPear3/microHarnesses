@@ -94,6 +94,7 @@ export function createWaitSubagentsTool(
     description:
       "Wait for tracked subagents. By default returns the next completed subagent summary and remaining running subagents; use mode=all to join every currently running subagent.",
     risk: "low",
+    executionTimeoutMs: "none",
     capabilities: ["agent.wait", "subagent.join"],
     tags: ["subagent", "delegation", "wait"],
     inputSchema: {

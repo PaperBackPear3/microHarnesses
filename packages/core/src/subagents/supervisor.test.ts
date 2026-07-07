@@ -127,6 +127,47 @@ test("failed subagents are returned as completed wait records", async () => {
   assert.equal(waited.completed[0]?.error, "boom");
 });
 
+test("completed subagents fallback to last non-empty assistant message when summary is empty", async () => {
+  const completion = new Deferred<AgentRunResult>();
+  const supervisor = new InProcessSubagentSupervisor(factoryFor([completion]), parent, {
+    idFactory: sequentialIds(),
+    now: sequentialTimes(),
+  });
+
+  await supervisor.spawn({ prompt: "work" });
+  completion.resolve({
+    summary: "",
+    state: {
+      sessionId: "child-1",
+      runId: "run-child-1",
+      startedAt: "start",
+      turns: [
+        {
+          id: "t-1",
+          iteration: 1,
+          userMessage: "u",
+          assistantMessage: "intermediate answer",
+          toolCalls: [],
+          toolResults: [],
+        },
+        {
+          id: "t-2",
+          iteration: 2,
+          userMessage: "",
+          assistantMessage: "",
+          toolCalls: [],
+          toolResults: [],
+        },
+      ],
+    },
+    runId: "run-child-1",
+    sessionId: "child-1",
+  });
+
+  const waited = await supervisor.wait({ mode: "next" });
+  assert.equal(waited.completed[0]?.summary, "intermediate answer");
+});
+
 function factoryFor(deferreds: Deferred<AgentRunResult>[]): SubagentRuntimeFactory {
   let index = 0;
   return {
