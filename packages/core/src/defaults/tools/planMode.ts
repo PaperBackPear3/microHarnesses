@@ -81,11 +81,7 @@ interface ResolvedPlanModeOptions {
 
 export function createPlanModeTools(options: PlanModeToolsOptions): ToolDefinition[] {
   const resolved = resolvePlanModeOptions(options);
-  return [
-    createPlanAgentTool(),
-    createExploreAgentTool(resolved),
-    createPlanModeInfoTool(),
-  ];
+  return [createPlanAgentTool(), createExploreAgentTool(resolved), createPlanModeInfoTool()];
 }
 
 function resolvePlanModeOptions(options: PlanModeToolsOptions): ResolvedPlanModeOptions {

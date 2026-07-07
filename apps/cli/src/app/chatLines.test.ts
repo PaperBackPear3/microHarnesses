@@ -175,6 +175,9 @@ test("bounds long thinking blocks to avoid filling transcript", () => {
   const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
   assert(rendered.includes("... 2 line(s) hidden"));
-  assert.equal(lines.some((line) => line.indicator === "       " && line.text === "1"), false);
+  assert.equal(
+    lines.some((line) => line.indicator === "       " && line.text === "1"),
+    false,
+  );
   assert(rendered.includes("       10"));
 });

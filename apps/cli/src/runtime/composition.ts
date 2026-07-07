@@ -176,7 +176,10 @@ export async function buildComposition(
   const subagents = new InProcessSubagentSupervisor(
     {
       async build(request, parent) {
-        const childPromptName = await resolveSubagentPromptName(request.promptName, config.promptsDir);
+        const childPromptName = await resolveSubagentPromptName(
+          request.promptName,
+          config.promptsDir,
+        );
         const childSessionId = `s-${randomUUID()}`;
         const childTools = new ToolRegistry();
         for (const tool of tools.list()) {
@@ -299,7 +302,6 @@ export async function buildComposition(
           tokens = detected;
           source = "ollama-api";
         }
-
       } catch {
         // Keep conservative fallback for local models when detection is unavailable.
       }

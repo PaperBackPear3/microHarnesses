@@ -7,15 +7,12 @@ import type { SubagentService } from "../subagents/types";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
 import { registerBuiltInProviders, registerProviders } from "./providers/plugins";
+import { type PlanModeToolsOptions, createPlanModeTools } from "./tools/planMode";
 import {
   type SpawnSubagentToolOptions,
   createSpawnSubagentTool,
   createWaitSubagentsTool,
 } from "./tools/spawnSubagentTool";
-import {
-  type PlanModeToolsOptions,
-  createPlanModeTools,
-} from "./tools/planMode";
 import {
   type ReadOnlyWorkspaceToolsOptions,
   createReadOnlyWorkspaceTools,

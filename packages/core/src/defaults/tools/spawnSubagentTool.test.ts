@@ -41,7 +41,9 @@ test("wait_subagents is cancellation-only and returns wait results", async () =>
     },
     async wait() {
       return {
-        completed: [{ id: "sub-1", launchIndex: 1, prompt: "p", status: "completed", startedAt: "t" }],
+        completed: [
+          { id: "sub-1", launchIndex: 1, prompt: "p", status: "completed", startedAt: "t" },
+        ],
         running: [],
       };
     },

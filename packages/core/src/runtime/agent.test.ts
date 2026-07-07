@@ -302,11 +302,9 @@ test("tool executionTimeoutMs='none' still aborts when run is killed", async () 
       started = true;
       resolveStarted?.();
       await new Promise<void>((_resolve, reject) => {
-        context?.signal.addEventListener(
-          "abort",
-          () => reject(new Error("cancelled by signal")),
-          { once: true },
-        );
+        context?.signal.addEventListener("abort", () => reject(new Error("cancelled by signal")), {
+          once: true,
+        });
       });
       return { unreachable: true };
     },

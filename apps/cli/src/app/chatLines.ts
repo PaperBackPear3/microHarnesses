@@ -1,6 +1,6 @@
 import type { ApprovalView } from "../runtime/approvalHandler.js";
-import { tailTextLines } from "./viewport.js";
 import type { ChatEntry } from "./transcript.js";
+import { tailTextLines } from "./viewport.js";
 
 export interface SubagentStatus {
   sessionId: string;
@@ -113,13 +113,7 @@ export function buildChatLines(
         }
       }
       if (step.assistantText.length > 0) {
-        pushMultiline(
-          lines,
-          `${step.id}-assistant`,
-          assistantStyle,
-          step.assistantText,
-          columns,
-        );
+        pushMultiline(lines, `${step.id}-assistant`, assistantStyle, step.assistantText, columns);
       }
       for (const message of step.systemMessages) {
         if (preferences.diagnosticsExpanded) {
@@ -134,8 +128,7 @@ export function buildChatLines(
           hiddenStepSystemCount += 1;
         }
       }
-      const stepSubagents =
-        anchoredSubagents.get(anchorKey(entry.turn.id, step.iteration)) ?? [];
+      const stepSubagents = anchoredSubagents.get(anchorKey(entry.turn.id, step.iteration)) ?? [];
       for (const subagent of stepSubagents) {
         pushSubagentBlock(lines, subagent, columns, preferences.thinkingExpanded);
       }
@@ -350,7 +343,13 @@ function pushMultiline(
   };
   const segments = text.split(/\r?\n/);
   segments.forEach((segment, index) => {
-    pushWrapped(lines, `${idPrefix}-${index}`, index === 0 ? style : continuationStyle, segment, columns);
+    pushWrapped(
+      lines,
+      `${idPrefix}-${index}`,
+      index === 0 ? style : continuationStyle,
+      segment,
+      columns,
+    );
   });
 }
 

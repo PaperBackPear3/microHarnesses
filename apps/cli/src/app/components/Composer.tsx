@@ -14,11 +14,7 @@ interface Props {
 const CURSOR_GLYPH = "█";
 const MAX_COMPOSER_ROWS = 6;
 
-export function clipeRenderedToMaxRows(
-  rendered: string,
-  columns: number,
-  maxRows: number,
-): string {
+export function clipeRenderedToMaxRows(rendered: string, columns: number, maxRows: number): string {
   const safeColumns = Math.max(1, columns);
   const lines = rendered.split("\n");
   let currentRows = 0;
