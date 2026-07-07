@@ -19,7 +19,7 @@ export async function resolveSubagentPromptName(
   }
   if (!PROMPT_PACK_ID.test(candidate)) {
     throw new Error(
-      `Invalid subagent promptName "${candidate}". promptName must be a prompt-pack id (lowercase letters, digits, hyphens)${await describeAvailablePacks(promptsDir)}. Use "name" for display labels.`,
+      `Invalid subagent promptName "${candidate}". promptName must be a prompt-pack id (lowercase letters, digits, hyphens)${await describeAvailablePacks(promptsDir)}. For model ids use the "model" field (e.g. model: "ollama/lfm2.5:8b"). Use "name" for display labels.`,
     );
   }
   const promptFile = path.join(promptsDir, candidate, "system.md");

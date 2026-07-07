@@ -26,7 +26,7 @@ test("resolveSubagentPromptName requires installed prompt packs when specified",
     // Free-form label with a space -> rejected as an invalid id shape.
     await assert.rejects(
       () => resolveSubagentPromptName("letter echo", root),
-      /Invalid subagent promptName "letter echo"/,
+      /Invalid subagent promptName "letter echo".*use the "model" field/s,
     );
     // Path-traversal attempt -> rejected as an invalid id shape.
     await assert.rejects(
