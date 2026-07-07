@@ -54,6 +54,7 @@ function printHelp(): void {
       "",
       "Flags:",
       "  --provider <id>",
+      "  --print <prompt> (alias: -p)",
       "  --model <id>",
       "  --effort <low|medium|high>",
       "  --routing-preference <auto|cost|speed|intelligence|balanced>",

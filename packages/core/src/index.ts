@@ -45,6 +45,7 @@ export * from "./mcp/asTools";
 export * from "./model/types";
 export * from "./model/defaultModelSelector";
 export * from "./model/effortModelSelector";
+export * from "./model/profileSelection";
 export * from "./model/providerModelAdapter";
 export * from "./model/modelRouter";
 

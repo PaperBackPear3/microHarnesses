@@ -59,7 +59,7 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
     if (!args[0] || args[0].toLowerCase() === "off") {
       return { type: "set-routing-preference", preference: undefined };
     }
-    const preference = normalizeRoutingPreference(args[0]);
+    const preference = parseModelRoutingPreference(args[0]);
     if (preference) return { type: "set-routing-preference", preference };
   }
   if (command === "compact") return { type: "compact" };
@@ -71,8 +71,4 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
   if (command === "clear") return { type: "clear" };
   if (command === "exit" || command === "quit") return { type: "exit" };
   return undefined;
-}
-
-function normalizeRoutingPreference(value: string): ModelRoutingPreference | undefined {
-  return parseModelRoutingPreference(value);
 }

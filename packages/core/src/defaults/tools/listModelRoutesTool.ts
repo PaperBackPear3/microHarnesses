@@ -4,12 +4,11 @@ import type { ToolDefinition } from "../../tools/types";
 
 const ROUTING_PREFERENCES = ["cost", "speed", "intelligence", "balanced", "auto"] as const;
 
-/** Serialisable summary of a single `ModelRoute`. Undefined fields are omitted. */
+/** Serialisable summary of a single available `ModelRoute`. Undefined fields are omitted. */
 export interface ModelRouteSummary {
   id: string;
   providerId: string;
   model: string;
-  available: boolean;
   tags?: string[];
   /** Relative cost tier (1 = cheapest, 3 = most expensive). */
   cost?: number;
@@ -32,7 +31,6 @@ function toSummary(route: ModelRoute): ModelRouteSummary {
     id: route.id,
     providerId: route.providerId,
     model: route.model,
-    available: route.available !== false,
     ...(m?.tags?.length ? { tags: m.tags } : {}),
     ...(m?.cost !== undefined ? { cost: m.cost } : {}),
     ...(m?.speed !== undefined ? { speed: m.speed } : {}),
@@ -94,19 +92,17 @@ export function createListModelRoutesTool(routeCatalog: () => ModelRoute[]): Too
           ? (rawPref as ModelRoutingPreference)
           : undefined;
 
-      // Zip routes with their summaries so sorting never needs a re-lookup.
-      const paired = routes.map((route) => ({ route, summary: toSummary(route) }));
+      // Only expose routes that can actually be invoked. Showing unavailable
+      // routes to the model is pointless and leads to hallucinations where it
+      // picks a model it cannot actually use.
+      const available = routes.filter((r) => r.available !== false);
 
-      paired.sort((a, b) => {
-        // Always surface available routes before unavailable ones, regardless
-        // of preference score — an agent trusting sort order should not be
-        // directed to a dead route.
-        const aAvail = a.route.available !== false ? 1 : 0;
-        const bAvail = b.route.available !== false ? 1 : 0;
-        if (aAvail !== bAvail) return bAvail - aAvail;
-        if (!preference) return 0;
-        return scoreRoute(b.route, preference) - scoreRoute(a.route, preference);
-      });
+      // Zip routes with their summaries so sorting never needs a re-lookup.
+      const paired = available.map((route) => ({ route, summary: toSummary(route) }));
+
+      if (preference) {
+        paired.sort((a, b) => scoreRoute(b.route, preference) - scoreRoute(a.route, preference));
+      }
 
       const summaries = paired.map((p) => p.summary);
       return Promise.resolve({ routes: summaries, total: summaries.length });

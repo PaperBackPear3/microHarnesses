@@ -96,11 +96,12 @@ test("list_model_routes omits undefined metadata fields", async () => {
   assert.equal("contextWindowTokens" in route, false);
   assert.equal("inputCostPerMillionTokens" in route, false);
   assert.equal("tags" in route, false);
+  // `available` is no longer exposed — all returned routes are available.
+  assert.equal("available" in route, false);
   // Required fields are always present.
   assert.equal(route.id, "ollama:phi4:latest");
   assert.equal(route.providerId, "ollama");
   assert.equal(route.model, "phi4:latest");
-  assert.equal(route.available, true);
 });
 
 test("list_model_routes returns empty array when catalog is empty", async () => {
@@ -110,21 +111,20 @@ test("list_model_routes returns empty array when catalog is empty", async () => 
   assert.deepEqual(result.routes, []);
 });
 
-test("list_model_routes sorts available routes before unavailable ones", async () => {
+test("list_model_routes excludes unavailable routes entirely", async () => {
   const routes = [
     makeRoute("openai:gpt-5.5", "openai", "gpt-5.5", {}, false),
     makeRoute("openai:gpt-5.4-mini", "openai", "gpt-5.4-mini", {}, true),
   ];
   const tool = createListModelRoutesTool(() => routes);
   const result = await tool.execute({});
-  assert.equal(result.total, 2);
-  const summaries = result.routes as Array<{ available: boolean }>;
-  // Available route comes first regardless of input order.
-  assert.equal(summaries[0]?.available, true);
-  assert.equal(summaries[1]?.available, false);
+  // Only the available route is returned.
+  assert.equal(result.total, 1);
+  const ids = (result.routes as Array<{ id: string }>).map((r) => r.id);
+  assert.deepEqual(ids, ["openai:gpt-5.4-mini"]);
 });
 
-test("list_model_routes sorts available routes before unavailable even with preference", async () => {
+test("list_model_routes excludes unavailable routes even with preference", async () => {
   const routes = [
     // Cheapest but unavailable.
     makeRoute(
@@ -145,11 +145,10 @@ test("list_model_routes sorts available routes before unavailable even with pref
   ];
   const tool = createListModelRoutesTool(() => routes);
   const result = await tool.execute({ preference: "cost" });
-  const summaries = result.routes as Array<{ available: boolean; id: string }>;
-  // Even though ollama has lower cost, gpt-5.4-mini should be first because it's available.
-  assert.equal(summaries[0]?.id, "openai:gpt-5.4-mini");
-  assert.equal(summaries[0]?.available, true);
-  assert.equal(summaries[1]?.available, false);
+  // Unavailable route is filtered out; only the available one is returned.
+  assert.equal(result.total, 1);
+  const ids = (result.routes as Array<{ id: string }>).map((r) => r.id);
+  assert.deepEqual(ids, ["openai:gpt-5.4-mini"]);
 });
 
 test("list_model_routes includes real pricing and context window when known", async () => {

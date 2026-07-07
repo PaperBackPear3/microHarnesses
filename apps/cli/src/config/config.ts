@@ -153,8 +153,8 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
     unlimitedIterations,
     snapshotEvery:
       overrides.snapshotEvery ??
-      fromFile.snapshotEvery ??
       envSnapshotEvery ??
+      fromFile.snapshotEvery ??
       defaults.snapshotEvery,
     maxTokens: overrides.maxTokens ?? fromFile.maxTokens,
     noSafety: overrides.noSafety ?? fromFile.noSafety ?? defaults.noSafety,
