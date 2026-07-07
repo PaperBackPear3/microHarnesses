@@ -173,6 +173,8 @@ hooks can be registered through `beforeHooks` / `afterHooks` when
 When `createCoreDefaultTools` receives a `SubagentSupervisor`, it registers:
 
 - `spawn_subagent` — launches a tracked child and returns a handle immediately.
+  The tool accepts a display `name` (UI label) and a `promptName` (installed
+  prompt-pack persona) as separate inputs.
 - `wait_subagents` — waits for the next completed child by default, or all
   selected running children with `mode: "all"`, returning completed summaries
   plus the remaining running subagents.

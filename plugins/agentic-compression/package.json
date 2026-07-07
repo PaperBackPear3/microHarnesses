@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/plugin-agentic-compression",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Agentic context-compression plugin for @micro-harnesses/core. Spawns summarizer + goal-finder subagents to compress overflowed turns instead of scoring them heuristically.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "compression", "context", "subagents"],
@@ -34,6 +34,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harnesses/core": "^3.0.0"
+    "@micro-harnesses/core": "^3.0.1"
   }
 }

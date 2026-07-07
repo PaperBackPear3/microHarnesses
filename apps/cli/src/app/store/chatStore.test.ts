@@ -33,16 +33,30 @@ test("does not include subagent output in main transcript", () => {
   ui.push({
     type: "run.started",
     sessionId: "s-sub",
-    payload: { kind: "subagent", promptName: "goal-finder" },
+    payload: { kind: "subagent", promptName: "coder", displayName: "goal-finder" },
+  } as never);
+  ui.push({
+    type: "model.reasoning_delta",
+    sessionId: "s-sub",
+    payload: { delta: "thinking...", iteration: 1 },
   } as never);
   ui.push({
     type: "model.output_delta",
     sessionId: "s-sub",
     payload: { delta: "internal", iteration: 1 },
   } as never);
+  ui.push({
+    type: "tool.started",
+    sessionId: "s-sub",
+    payload: { action: "shell_exec", iteration: 1 },
+  } as never);
 
   const snapshot = store.getSnapshot();
   assert.equal(snapshot.entries[1]?.turn?.steps?.length, 0);
   assert.equal(snapshot.subagents[0]?.sessionId, "s-sub");
+  assert.equal(snapshot.subagents[0]?.name, "goal-finder");
+  assert.equal(snapshot.subagents[0]?.thinkingText, "thinking...");
+  assert.equal(snapshot.subagents[0]?.outputText, "internal");
+  assert.equal(snapshot.subagents[0]?.recentTools?.[0], "shell_exec started");
   store.dispose();
 });

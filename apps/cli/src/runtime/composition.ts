@@ -45,6 +45,7 @@ import { SessionService } from "../session/sessionService.js";
 import { UiStream } from "../streaming/uiStream.js";
 import { CLI_VERSION } from "../version.js";
 import { ApprovalController } from "./approvalHandler.js";
+import { resolveSubagentPromptName } from "./subagentPromptName.js";
 
 export interface RuntimeState {
   provider: string;
@@ -175,6 +176,7 @@ export async function buildComposition(
   const subagents = new InProcessSubagentSupervisor(
     {
       async build(request, parent) {
+        const childPromptName = await resolveSubagentPromptName(request.promptName, config.promptsDir);
         const childSessionId = `s-${randomUUID()}`;
         const childTools = new ToolRegistry();
         for (const tool of tools.list()) {
@@ -194,7 +196,7 @@ export async function buildComposition(
           nonTurnTokenReserve: config.nonTurnTokenReserve,
         });
         const childAgent = defineAgent({
-          name: request.promptName ?? "coder",
+          name: childPromptName,
           prompt: "",
           model,
           modelSelector,
@@ -218,6 +220,7 @@ export async function buildComposition(
             modelOverride: runtimeState.model,
             sessionId: childSessionId,
             goal: request.goal ?? request.prompt,
+            displayName: request.name ?? request.goal ?? childPromptName,
             parentSessionId: parent.sessionId,
             rootSessionId: rootSessionId,
             parentTrace: request.parentTrace,
@@ -238,6 +241,7 @@ export async function buildComposition(
       workspaceTools: { rootDir: process.cwd() },
       planModeTools: { rootDir: process.cwd() },
       subagents,
+      spawnSubagent: { defaultPromptName: "coder" },
     }),
   });
 
@@ -295,6 +299,7 @@ export async function buildComposition(
           tokens = detected;
           source = "ollama-api";
         }
+
       } catch {
         // Keep conservative fallback for local models when detection is unavailable.
       }

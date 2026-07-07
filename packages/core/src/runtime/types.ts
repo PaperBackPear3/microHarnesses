@@ -54,6 +54,8 @@ export interface RunOptions {
   parentRunId?: string;
   rootSessionId?: string;
   depth?: number;
+  /** Optional UI label for this run (for example a subagent display name). */
+  displayName?: string;
   spawnedByTool?: string;
   /** Parent span context, propagated so a subagent run joins the parent trace. */
   parentTrace?: TraceContext;

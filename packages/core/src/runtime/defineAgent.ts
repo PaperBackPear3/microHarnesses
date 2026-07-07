@@ -229,6 +229,7 @@ function createDeclarativeSubagents(
           profile: defaultProfileFor(child.promptName),
           sessionId: `s-${randomUUID()}`,
           goal: request.goal ?? request.prompt,
+          displayName: request.name ?? selectedName,
           parentSessionId: parent.sessionId,
           rootSessionId: parent.sessionId,
           parentTrace: request.parentTrace,

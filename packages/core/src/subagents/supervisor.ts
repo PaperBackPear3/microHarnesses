@@ -207,6 +207,7 @@ function toSnapshot(entry: TrackedSubagent): SubagentSnapshot {
   return {
     id: entry.id,
     launchIndex: entry.launchIndex,
+    ...(entry.request.name ? { name: entry.request.name } : {}),
     prompt: entry.request.prompt,
     ...(entry.request.promptName ? { promptName: entry.request.promptName } : {}),
     ...(entry.request.goal ? { goal: entry.request.goal } : {}),

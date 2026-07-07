@@ -117,10 +117,14 @@ export class ChatStore {
     if (isSubagentStart && eventSessionId) {
       this.upsertSubagent(eventSessionId, {
         sessionId: eventSessionId,
-        promptName: String(event.payload.promptName ?? "subagent"),
+        name: asString(event.payload.displayName),
+        promptName: asString(event.payload.promptName) ?? "subagent",
         goal: asString(event.payload.goal),
         status: "running",
         activity: "starting",
+        thinkingText: "",
+        outputText: "",
+        recentTools: [],
       });
       return false;
     }
@@ -132,37 +136,62 @@ export class ChatStore {
       if (event.type === "model.selected") {
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
-          promptName: "subagent",
           status: "running",
           model: asString(event.payload.model),
           activity: "model selected",
         });
       } else if (event.type === "model.reasoning_delta") {
+        const delta = asString(event.payload.delta) ?? "";
+        const existing = this.getSubagent(eventSessionId);
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
-          promptName: "subagent",
           status: "running",
           activity: "reasoning",
+          thinkingText: appendTrimmed(existing?.thinkingText ?? "", delta, 1200),
         });
       } else if (event.type === "model.output_delta") {
+        const delta = asString(event.payload.delta) ?? "";
+        const existing = this.getSubagent(eventSessionId);
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
-          promptName: "subagent",
           status: "running",
           activity: "responding",
+          outputText: appendTrimmed(existing?.outputText ?? "", delta, 1200),
         });
       } else if (event.type === "tool.started") {
         const action = asString(event.payload.action) ?? "tool";
+        const existing = this.getSubagent(eventSessionId);
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
-          promptName: "subagent",
           status: "running",
           activity: `tool: ${action}`,
+          recentTools: pushToolLog(existing?.recentTools ?? [], `${action} started`),
+        });
+      } else if (event.type === "tool.completed") {
+        const action = asString(event.payload.action) ?? "tool";
+        const ok = event.payload.ok === true;
+        const existing = this.getSubagent(eventSessionId);
+        this.upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          status: "running",
+          activity: `tool: ${action}`,
+          recentTools: pushToolLog(existing?.recentTools ?? [], `${action} ${ok ? "ok" : "error"}`),
+        });
+      } else if (event.type === "tool.blocked") {
+        const action = asString(event.payload.action) ?? "tool";
+        const reason = asString(event.payload.reason) ?? "blocked";
+        const existing = this.getSubagent(eventSessionId);
+        this.upsertSubagent(eventSessionId, {
+          sessionId: eventSessionId,
+          status: "running",
+          activity: `tool blocked: ${action}`,
+          recentTools: pushToolLog(existing?.recentTools ?? [], `${action} blocked (${reason})`),
         });
       } else if (event.type === "run.completed") {
         const summary = asString(event.payload.summary);
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
+          name: asString(event.payload.displayName),
           promptName: asString(event.payload.promptName) ?? "subagent",
           status: "completed",
           activity: "completed",
@@ -174,11 +203,14 @@ export class ChatStore {
           this.appendSystemMessage(`subagent completed (${eventSessionId}).`);
         }
       } else if (event.type === "run.failed") {
+        const reason = asString(event.payload.reason) ?? "failed";
         this.upsertSubagent(eventSessionId, {
           sessionId: eventSessionId,
+          name: asString(event.payload.displayName),
           promptName: asString(event.payload.promptName) ?? "subagent",
           status: "failed",
-          activity: asString(event.payload.reason) ?? "failed",
+          activity: reason,
+          error: reason,
         });
       }
       return false;
@@ -271,11 +303,26 @@ export class ChatStore {
       ? {
           ...existing,
           ...next,
-          promptName: next.promptName === "subagent" ? existing.promptName : next.promptName,
         }
       : next;
     const without = this.state.subagents.filter((entry) => entry.sessionId !== sessionId);
     const updated = [merged, ...without].slice(0, 24);
     this.setState({ ...this.state, subagents: updated });
   }
+
+  private getSubagent(sessionId: string): SubagentStatus | undefined {
+    return this.state.subagents.find((entry) => entry.sessionId === sessionId);
+  }
+}
+
+function appendTrimmed(current: string, delta: string, maxLen: number): string {
+  if (delta.length === 0) return current;
+  const combined = `${current}${delta}`;
+  if (combined.length <= maxLen) return combined;
+  return combined.slice(combined.length - maxLen);
+}
+
+function pushToolLog(current: string[], entry: string): string[] {
+  if (entry.length === 0) return current;
+  return [...current, entry].slice(-5);
 }

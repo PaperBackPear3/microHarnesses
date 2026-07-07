@@ -243,6 +243,7 @@ export class Agent implements AgentHandle {
         sessionId,
         kind: this.kind,
         promptName: this.promptName,
+        ...(options.displayName ? { displayName: options.displayName } : {}),
         summary: truncate(state.turns[state.turns.length - 1]?.assistantMessage ?? "", 800),
       });
       observer.runSpan.end();
@@ -261,6 +262,7 @@ export class Agent implements AgentHandle {
           reason: message,
           kind: this.kind,
           promptName: this.promptName,
+          ...(options.displayName ? { displayName: options.displayName } : {}),
         });
         observer.runSpan.end();
         await this.observability.forceFlush();
@@ -324,6 +326,7 @@ export class Agent implements AgentHandle {
       promptName,
       sessionId,
       kind: this.kind,
+      ...(options.displayName ? { displayName: options.displayName } : {}),
       resume: Boolean(options.resume),
       goal,
       parentSessionId: options.parentSessionId,

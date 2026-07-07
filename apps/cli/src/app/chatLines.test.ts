@@ -119,3 +119,32 @@ test("multi-line agent response has only one agent > prefix", () => {
   assert(continuationTexts.includes(""), "blank paragraph line should be a continuation");
   assert(continuationTexts.includes("line three"), "second paragraph should be a continuation");
 });
+
+test("renders subagent blocks with separate name, status, and stream content", () => {
+  const lines = buildChatLines(
+    [],
+    [
+      {
+        sessionId: "s-sub",
+        name: "goal-finder",
+        promptName: "coder",
+        model: "gpt-x",
+        status: "running",
+        activity: "responding",
+        thinkingText: "plan",
+        outputText: "answer",
+        recentTools: ["shell_exec started"],
+      },
+    ] satisfies SubagentStatus[],
+    false,
+    undefined,
+    120,
+    preferences,
+  );
+  const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
+  assert(rendered.includes("sub > goal-finder [running]"));
+  assert(rendered.includes("persona=coder"));
+  assert(rendered.includes("thinking:"));
+  assert(rendered.includes("output:"));
+  assert(rendered.includes("tools: shell_exec started"));
+});

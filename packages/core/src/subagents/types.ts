@@ -3,6 +3,8 @@ import type { RunState } from "../runtime/state";
 import type { AgentHandle, AgentInvokeRequest, RunOptions } from "../runtime/types";
 
 export interface SubagentRunOptions {
+  /** Human-friendly display name for UI/status surfaces. */
+  name?: string;
   prompt: string;
   /** Prompt-pack persona the child agent runs; defaults to the parent's persona. */
   promptName?: string;
@@ -28,6 +30,7 @@ export type SubagentStatus = "running" | "completed" | "failed";
 export interface SubagentSnapshot {
   id: string;
   launchIndex: number;
+  name?: string;
   prompt: string;
   promptName?: string;
   goal?: string;

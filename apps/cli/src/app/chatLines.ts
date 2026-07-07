@@ -3,12 +3,17 @@ import type { ChatEntry } from "./transcript.js";
 
 export interface SubagentStatus {
   sessionId: string;
-  promptName: string;
+  name?: string;
+  promptName?: string;
   goal?: string;
   model?: string;
   status: "running" | "completed" | "failed";
   activity?: string;
   summary?: string;
+  error?: string;
+  thinkingText?: string;
+  outputText?: string;
+  recentTools?: string[];
 }
 
 export interface ChatRenderLine {
@@ -119,21 +124,13 @@ export function buildChatLines(
     if (preferences.diagnosticsExpanded) {
       pushWrapped(
         lines,
-        "subagents-header",
+        "subagents-running-header",
         systemStyle,
         `subagents running ${runningSubagents.length}`,
         columns,
       );
       for (const subagent of runningSubagents) {
-        const activity = subagent.activity ? ` | ${subagent.activity}` : "";
-        const model = subagent.model ? ` | model=${subagent.model}` : "";
-        pushWrapped(
-          lines,
-          `subagent-${subagent.sessionId}`,
-          systemStyle,
-          `[running] ${subagent.promptName} (${subagent.sessionId})${activity}${model}`,
-          columns,
-        );
+        pushSubagentBlock(lines, subagent, columns);
       }
     } else {
       hiddenRunningSubagents = runningSubagents.length;
@@ -156,7 +153,11 @@ export function buildChatLines(
           : subagent.status === "failed"
             ? "[failed]"
             : "[stopped]";
-      const summary = subagent.summary ? ` ${subagent.summary}` : "";
+      const name = subagentDisplayName(subagent);
+      const summary =
+        subagent.status === "failed"
+          ? ` ${subagent.error ?? subagent.summary ?? ""}`.trimEnd()
+          : ` ${subagent.summary ?? ""}`.trimEnd();
       pushWrapped(
         lines,
         `subagent-finished-${subagent.sessionId}`,
@@ -164,7 +165,7 @@ export function buildChatLines(
           indicator: "sub > ",
           indicatorColor: subagent.status === "completed" ? "green" : "yellow",
         },
-        `${status} ${subagent.promptName}${summary}`,
+        `${name} ${status}${summary.length > 0 ? ` ${summary}` : ""}`,
         columns,
       );
     }
@@ -229,6 +230,80 @@ export function buildChatLines(
 
 function iterationPrefixFor(iteration: number | undefined): string {
   return typeof iteration === "number" && iteration > 1 ? `#${iteration} ` : "";
+}
+
+function pushSubagentBlock(
+  lines: ChatRenderLine[],
+  subagent: SubagentStatus,
+  columns: number,
+): void {
+  const name = subagentDisplayName(subagent);
+  pushWrapped(
+    lines,
+    `subagent-${subagent.sessionId}-header`,
+    { indicator: "sub > ", indicatorColor: "green" },
+    `${name} [running]`,
+    columns,
+  );
+
+  const details: string[] = [];
+  details.push(`session=${subagent.sessionId}`);
+  if (subagent.promptName) details.push(`persona=${subagent.promptName}`);
+  if (subagent.model) details.push(`model=${subagent.model}`);
+  if (subagent.activity) details.push(`activity=${subagent.activity}`);
+  if (subagent.goal) details.push(`goal=${subagent.goal}`);
+  pushWrapped(
+    lines,
+    `subagent-${subagent.sessionId}-meta`,
+    { indicator: "       ", textColor: "gray" },
+    details.join(" | "),
+    columns,
+  );
+  if (subagent.thinkingText && subagent.thinkingText.length > 0) {
+    pushWrapped(
+      lines,
+      `subagent-${subagent.sessionId}-thinking-label`,
+      { indicator: "       ", textColor: "yellow" },
+      "thinking:",
+      columns,
+    );
+    pushMultiline(
+      lines,
+      `subagent-${subagent.sessionId}-thinking`,
+      { indicator: "       ", textColor: "gray" },
+      subagent.thinkingText,
+      columns,
+    );
+  }
+  if (subagent.outputText && subagent.outputText.length > 0) {
+    pushWrapped(
+      lines,
+      `subagent-${subagent.sessionId}-output-label`,
+      { indicator: "       ", textColor: "green" },
+      "output:",
+      columns,
+    );
+    pushMultiline(
+      lines,
+      `subagent-${subagent.sessionId}-output`,
+      { indicator: "       ", textColor: "gray" },
+      subagent.outputText,
+      columns,
+    );
+  }
+  if (subagent.recentTools && subagent.recentTools.length > 0) {
+    pushWrapped(
+      lines,
+      `subagent-${subagent.sessionId}-tools`,
+      { indicator: "       ", textColor: "gray" },
+      `tools: ${subagent.recentTools.join(" | ")}`,
+      columns,
+    );
+  }
+}
+
+function subagentDisplayName(subagent: SubagentStatus): string {
+  return subagent.name ?? subagent.promptName ?? "subagent";
 }
 
 function pushMultiline(

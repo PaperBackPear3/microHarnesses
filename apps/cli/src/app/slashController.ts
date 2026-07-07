@@ -78,7 +78,7 @@ export async function handleSlashCommand(args: Args): Promise<void> {
     chatStore.appendSystemMessage(`Waiting for ${pending.length} subagent(s) to finish...`);
     const result = await composition.subagents.wait({ mode: "all" });
     for (const completed of result.completed) {
-      const name = completed.promptName ?? "subagent";
+      const name = completed.name ?? completed.promptName ?? "subagent";
       if (completed.status === "failed") {
         chatStore.appendSystemMessage(
           `${name} failed (${completed.sessionId ?? completed.id}): ${completed.error ?? "unknown error"}`,

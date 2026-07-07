@@ -63,7 +63,7 @@ test("wait next returns completions in deterministic finish order", async () => 
     now: sequentialTimes(),
   });
 
-  const a = await supervisor.spawn({ prompt: "a", promptName: "alpha" });
+  const a = await supervisor.spawn({ name: "first worker", prompt: "a", promptName: "alpha" });
   const b = await supervisor.spawn({ prompt: "b", promptName: "beta" });
   assert.deepEqual([a.id, b.id], ["subagent-1", "subagent-2"]);
 
@@ -73,6 +73,7 @@ test("wait next returns completions in deterministic finish order", async () => 
   assert.equal(next.completed.length, 1);
   assert.equal(next.completed[0]?.id, "subagent-2");
   assert.equal(next.completed[0]?.summary, "second done");
+  assert.equal(next.running[0]?.name, "first worker");
   assert.deepEqual(
     next.running.map((entry) => entry.id),
     ["subagent-1"],
@@ -84,6 +85,7 @@ test("wait next returns completions in deterministic finish order", async () => 
     remaining.completed.map((entry) => entry.id),
     ["subagent-1"],
   );
+  assert.equal(remaining.completed[0]?.name, "first worker");
   assert.equal(remaining.running.length, 0);
 });
 

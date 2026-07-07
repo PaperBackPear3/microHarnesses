@@ -20,13 +20,15 @@ export function createSpawnSubagentTool(
 
   return {
     name: toolName,
-    description: "Delegate a task to a fresh child agent and return a running subagent handle.",
+    description:
+      "Delegate a task to a fresh child agent and return a running subagent handle. Use name for UI label, promptName for installed prompt-pack persona.",
     risk: "high",
     capabilities: ["agent.spawn", "subagent.invoke"],
     tags: ["subagent", "delegation"],
     inputSchema: {
       type: "object",
       properties: {
+        name: { type: "string" },
         prompt: { type: "string" },
         promptName: { type: "string" },
         allowedTools: { type: "array", items: { type: "string" } },
@@ -45,6 +47,7 @@ export function createSpawnSubagentTool(
         typeof input.promptName === "string" && input.promptName.trim().length > 0
           ? input.promptName
           : defaultPromptName;
+      const requestedName = typeof input.name === "string" ? input.name.trim() : "";
       const requestedTools = Array.isArray(input.allowedTools)
         ? input.allowedTools.filter(
             (item): item is string => typeof item === "string" && item !== toolName,
@@ -57,6 +60,7 @@ export function createSpawnSubagentTool(
       const goal = typeof input.goal === "string" ? input.goal : undefined;
 
       const spawned = await subagents.spawn({
+        ...(requestedName.length > 0 ? { name: requestedName } : {}),
         prompt,
         promptName: requestedAgent,
         allowedTools: requestedTools,
@@ -69,6 +73,7 @@ export function createSpawnSubagentTool(
         subagentId: spawned.id,
         launchIndex: spawned.launchIndex,
         status: spawned.status,
+        ...(requestedName.length > 0 ? { name: requestedName } : {}),
         ...(spawned.sessionId ? { sessionId: spawned.sessionId } : {}),
       };
     },
