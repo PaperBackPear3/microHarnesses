@@ -21,6 +21,10 @@ export interface CliConfig {
   noSafety: boolean;
   privacyMode: boolean;
   sessionId?: string;
+  compactionTriggerUtilization: number;
+  compactionTargetUtilization: number;
+  turnCompactionTargetRatio: number;
+  nonTurnTokenReserve: number;
 }
 
 export interface ConfigOverrides {
@@ -37,6 +41,10 @@ export interface ConfigOverrides {
   noSafety?: boolean;
   privacyMode?: boolean;
   sessionId?: string;
+  compactionTriggerUtilization?: number;
+  compactionTargetUtilization?: number;
+  turnCompactionTargetRatio?: number;
+  nonTurnTokenReserve?: number;
 }
 
 interface FileConfig {
@@ -52,6 +60,10 @@ interface FileConfig {
   maxTokens?: number;
   noSafety?: boolean;
   privacyMode?: boolean;
+  compactionTriggerUtilization?: number;
+  compactionTargetUtilization?: number;
+  turnCompactionTargetRatio?: number;
+  nonTurnTokenReserve?: number;
 }
 
 export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConfig> {
@@ -66,6 +78,10 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
     snapshotEvery: 4,
     noSafety: false,
     privacyMode: false,
+    compactionTriggerUtilization: 0.85,
+    compactionTargetUtilization: 0.7,
+    turnCompactionTargetRatio: 0.75,
+    nonTurnTokenReserve: 1_500,
   };
 
   const envStateDir = process.env.MH_STATE_DIR || process.env.MICRO_HARNESS_STATE_DIR;
@@ -75,6 +91,10 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
   const envMode = parseMode(process.env.MH_MODE || process.env.MICRO_HARNESS_MODE);
   const envMaxIterations = parseEnvPositiveInt(process.env.MH_MAX_ITERATIONS);
   const envSnapshotEvery = parseEnvPositiveInt(process.env.MH_SNAPSHOT_EVERY);
+  const envCompactionTrigger = parseEnvRatio(process.env.MH_COMPACTION_TRIGGER);
+  const envCompactionTarget = parseEnvRatio(process.env.MH_COMPACTION_TARGET);
+  const envTurnCompactionTarget = parseEnvRatio(process.env.MH_TURN_COMPACTION_TARGET);
+  const envNonTurnTokenReserve = parseEnvPositiveInt(process.env.MH_NON_TURN_TOKEN_RESERVE);
 
   return {
     stateDir: overrides.stateDir ?? envStateDir ?? fromFile.stateDir ?? defaults.stateDir,
@@ -98,6 +118,26 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
     noSafety: overrides.noSafety ?? fromFile.noSafety ?? defaults.noSafety,
     privacyMode: overrides.privacyMode ?? fromFile.privacyMode ?? defaults.privacyMode,
     sessionId: overrides.sessionId,
+    compactionTriggerUtilization:
+      overrides.compactionTriggerUtilization ??
+      envCompactionTrigger ??
+      fromFile.compactionTriggerUtilization ??
+      defaults.compactionTriggerUtilization,
+    compactionTargetUtilization:
+      overrides.compactionTargetUtilization ??
+      envCompactionTarget ??
+      fromFile.compactionTargetUtilization ??
+      defaults.compactionTargetUtilization,
+    turnCompactionTargetRatio:
+      overrides.turnCompactionTargetRatio ??
+      envTurnCompactionTarget ??
+      fromFile.turnCompactionTargetRatio ??
+      defaults.turnCompactionTargetRatio,
+    nonTurnTokenReserve:
+      overrides.nonTurnTokenReserve ??
+      envNonTurnTokenReserve ??
+      fromFile.nonTurnTokenReserve ??
+      defaults.nonTurnTokenReserve,
   };
 }
 
@@ -107,6 +147,14 @@ function parseEnvPositiveInt(raw: string | undefined): number | undefined {
   if (!Number.isInteger(parsed) || parsed < 1) {
     return undefined;
   }
+  return parsed;
+}
+
+function parseEnvRatio(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return undefined;
+  if (parsed < 0 || parsed > 1) return undefined;
   return parsed;
 }
 

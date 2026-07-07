@@ -16,6 +16,10 @@ export interface GlobalCliArgs {
   maxTokens?: number;
   maxIterations?: number;
   snapshotEvery?: number;
+  compactionTriggerUtilization?: number;
+  compactionTargetUtilization?: number;
+  turnCompactionTargetRatio?: number;
+  nonTurnTokenReserve?: number;
 }
 
 export interface SessionsArgs {
@@ -39,6 +43,10 @@ const VALUE_FLAGS = new Set([
   "--max-tokens",
   "--iterations",
   "--snapshot-every",
+  "--compaction-trigger",
+  "--compaction-target",
+  "--turn-compaction-target",
+  "--non-turn-token-reserve",
 ]);
 
 export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
@@ -61,6 +69,22 @@ export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
     maxTokens: parseOptionalInt(getValue(args, "--max-tokens"), "--max-tokens"),
     maxIterations: parseOptionalInt(getValue(args, "--iterations"), "--iterations"),
     snapshotEvery: parseOptionalInt(getValue(args, "--snapshot-every"), "--snapshot-every"),
+    compactionTriggerUtilization: parseOptionalRatio(
+      getValue(args, "--compaction-trigger"),
+      "--compaction-trigger",
+    ),
+    compactionTargetUtilization: parseOptionalRatio(
+      getValue(args, "--compaction-target"),
+      "--compaction-target",
+    ),
+    turnCompactionTargetRatio: parseOptionalRatio(
+      getValue(args, "--turn-compaction-target"),
+      "--turn-compaction-target",
+    ),
+    nonTurnTokenReserve: parseOptionalInt(
+      getValue(args, "--non-turn-token-reserve"),
+      "--non-turn-token-reserve",
+    ),
   };
 }
 
@@ -90,6 +114,15 @@ function parseOptionalInt(raw: string | undefined, flag: string): number | undef
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed < 1) {
     throw new Error(`${flag} must be a positive integer`);
+  }
+  return parsed;
+}
+
+function parseOptionalRatio(raw: string | undefined, flag: string): number | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new Error(`${flag} must be a number between 0 and 1`);
   }
   return parsed;
 }

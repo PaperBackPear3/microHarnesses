@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -35,6 +35,29 @@ test("buildWorkingTurns reports context-window utilization stats", async () => {
     assert.equal(working.stats?.maxTokens, 1000);
     assert.equal(working.stats?.usedTokens > 0, true);
     assert.equal(working.stats!.utilization > 0 && working.stats!.utilization <= 1, true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("recordObservedUsage calibrates token estimates", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-calibrate-"));
+  try {
+    const manager = new ContextManager({
+      stateDir,
+      maxWorkingTurns: 6,
+      tokenCounter: { count: (text) => text.length },
+      contextWindowTokens: 1000,
+    });
+    await manager.init();
+    const turns = [makeTurn(1, "hello", "world")];
+
+    const before = await manager.buildWorkingTurns(turns);
+    assert.equal(before.stats?.usedTokens, 10);
+    manager.recordObservedUsage(before.recentTurns, 20);
+    const after = await manager.buildWorkingTurns(turns);
+    assert.equal((after.stats?.usedTokens ?? 0) > (before.stats?.usedTokens ?? 0), true);
+    assert.equal(after.stats?.estimator.startsWith("calibrated:"), true);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }
@@ -113,7 +136,7 @@ test("buildWorkingTurns batches token-trigger compaction with hysteresis", async
   }
 });
 
-test("buildWorkingTurns adopts a compressor's refinedGoal for later compression cycles", async () => {
+test("buildWorkingTurns does not replace an explicit goal with refinedGoal", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-refined-goal-"));
   try {
     const seenGoals: Array<string | undefined> = [];
@@ -140,7 +163,40 @@ test("buildWorkingTurns adopts a compressor's refinedGoal for later compression 
       makeTurn(3, "c", "3"),
     ]);
 
-    assert.deepEqual(seenGoals, ["original goal", "refined goal"]);
+    assert.deepEqual(seenGoals, ["original goal", "original goal"]);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("buildWorkingTurns adopts refinedGoal when no explicit goal is set", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-refined-goal-empty-"));
+  try {
+    const seenGoals: Array<string | undefined> = [];
+    const manager = new ContextManager({
+      stateDir,
+      maxWorkingTurns: 1,
+      goal: "",
+      compressor: (turns, context) => {
+        seenGoals.push(context.goal);
+        return {
+          summary: `compressed ${turns.length} turns`,
+          highlights: [],
+          supportHistory: [],
+          refinedGoal: "refined goal",
+        };
+      },
+    });
+    await manager.init();
+
+    await manager.buildWorkingTurns([makeTurn(1, "a", "1"), makeTurn(2, "b", "2")]);
+    await manager.buildWorkingTurns([
+      makeTurn(1, "a", "1"),
+      makeTurn(2, "b", "2"),
+      makeTurn(3, "c", "3"),
+    ]);
+
+    assert.deepEqual(seenGoals, ["", "refined goal"]);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }
@@ -186,10 +242,13 @@ test("compactNow forces compression even when turns do not overflow the window",
       },
     });
     await manager.init();
-    const result = await manager.compactNow([makeTurn(1, "a", "1"), makeTurn(2, "b", "2")]);
+    const turns = [makeTurn(1, "a", "1"), makeTurn(2, "b", "2")];
+    const result = await manager.compactNow(turns);
     assert.equal(result.compressed, true);
     assert.equal(result.forced, true);
-    assert.equal(result.deltaTurns, 2);
+    assert.equal(result.deltaTurns, 1);
+    const working = await manager.buildWorkingTurns(turns);
+    assert.equal(working.recentTurns.length, 1);
     assert.equal(calls, 1);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
@@ -219,6 +278,65 @@ test("compactNow uses overflow mode when there are uncompressed overflow turns",
     assert.equal(result.forced, false);
     assert.equal(result.overflowTurns, 2);
     assert.equal(result.deltaTurns, 2);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("compactNow forced mode is idempotent when no additional turns can be compacted", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-manual-idempotent-"));
+  try {
+    let calls = 0;
+    const manager = new ContextManager({
+      stateDir,
+      maxWorkingTurns: 8,
+      compressor: (turns) => {
+        calls += 1;
+        return {
+          summary: `forced ${turns.length}`,
+          highlights: [],
+          supportHistory: [],
+        };
+      },
+    });
+    await manager.init();
+    const turns = [makeTurn(1, "a", "1"), makeTurn(2, "b", "2")];
+    const first = await manager.compactNow(turns);
+    const second = await manager.compactNow(turns);
+    assert.equal(first.compressed, true);
+    assert.equal(first.deltaTurns, 1);
+    assert.equal(second.compressed, false);
+    assert.equal(second.deltaTurns, 0);
+    assert.equal(calls, 1);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("init loads latest summary by file mtime, not filename order", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-ctx-summary-order-"));
+  try {
+    const summaryDir = path.join(stateDir, "summaries");
+    await mkdir(summaryDir, { recursive: true });
+    await writeFile(
+      path.join(summaryDir, "summary-z.json"),
+      JSON.stringify({ summary: "older", highlights: [], support_history: [] }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(summaryDir, "summary-a.json"),
+      JSON.stringify({ summary: "newer", highlights: [], support_history: [] }),
+      "utf8",
+    );
+    const older = new Date("2025-01-01T00:00:00.000Z");
+    const newer = new Date("2025-01-01T00:00:01.000Z");
+    await utimes(path.join(summaryDir, "summary-z.json"), older, older);
+    await utimes(path.join(summaryDir, "summary-a.json"), newer, newer);
+
+    const manager = new ContextManager({ stateDir, maxWorkingTurns: 4 });
+    await manager.init();
+    const working = await manager.buildWorkingTurns([]);
+    assert.equal(working.summary?.summary, "newer");
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

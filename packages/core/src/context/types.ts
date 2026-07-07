@@ -6,8 +6,8 @@ export interface CompressionResult {
   supportHistory: string[];
   /**
    * Goal rediscovered mid-run by a goals-finder-style compressor (e.g. the
-   * agentic compressor plugin). When present, `ContextManager` adopts it as
-   * the working goal for subsequent compression cycles in the same run.
+   * agentic compressor plugin). When present and no explicit goal is set,
+   * `ContextManager` adopts it as the working goal for subsequent cycles.
    * `defaultCompressor` never sets this field.
    */
   refinedGoal?: string;
@@ -30,6 +30,8 @@ export interface ContextWindowStats {
   maxTokens: number;
   /** used / max, clamped to [0, 1]; 0 when maxTokens is 0. */
   utilization: number;
+  /** Name of the token estimator backing usedTokens/utilization. */
+  estimator: string;
 }
 
 /**

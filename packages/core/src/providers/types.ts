@@ -1,3 +1,4 @@
+import type { TokenCounter } from "../observability/types";
 import type { ToolDescriptor } from "../tools/types";
 
 export interface ProviderAuth {
@@ -75,4 +76,15 @@ export interface ProviderAdapter {
     auth: ProviderAuth,
   ): AsyncIterable<ProviderStreamEvent>;
   complete(request: CompletionRequest, auth: ProviderAuth): Promise<ProviderResponse>;
+  /**
+   * Optional provider/model-specific token counter used for context-window
+   * estimation (compaction thresholds, utilization stats).
+   */
+  createTokenCounter?(
+    model: string,
+    auth?: ProviderAuth,
+  ):
+    | TokenCounter
+    | { counter: TokenCounter; estimator?: string }
+    | Promise<TokenCounter | { counter: TokenCounter; estimator?: string }>;
 }

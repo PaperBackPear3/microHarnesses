@@ -7,6 +7,7 @@ import { runHeadlessPrompt } from "./cli/commands/run";
 import { sessionsCommand } from "./cli/commands/sessions";
 import { loadCliConfig } from "./config/config";
 import { buildComposition } from "./runtime/composition";
+import { CLI_VERSION } from "./version";
 
 async function main(): Promise<void> {
   const rawArgv = process.argv.slice(2);
@@ -21,7 +22,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === "version" || command === "--version" || command === "-v") {
-    process.stdout.write("2.0.0\n");
+    process.stdout.write(`${CLI_VERSION}\n`);
     return;
   }
 
@@ -43,7 +44,7 @@ async function main(): Promise<void> {
 function printHelp(): void {
   process.stdout.write(
     [
-      "micro-harness v2",
+      `micro-harness v${CLI_VERSION}`,
       "",
       "Usage:",
       '  mh -p "prompt" [--json]',
@@ -62,6 +63,10 @@ function printHelp(): void {
       "  --iterations <n>",
       "  --snapshot-every <n>",
       "  --max-tokens <n>",
+      "  --compaction-trigger <0..1>",
+      "  --compaction-target <0..1>",
+      "  --turn-compaction-target <0..1>",
+      "  --non-turn-token-reserve <n>",
       "  --no-safety",
     ].join("\n"),
   );

@@ -4,7 +4,7 @@ import type { ChannelRequest, ChannelResponse } from "../channels/types";
 import type { ContextManager } from "../context/manager";
 import type { ModelAdapter, ModelSelector } from "../model/types";
 import { NoopObservabilityProvider } from "../observability/noop";
-import type { ObservabilityProvider, Span } from "../observability/types";
+import type { ObservabilityProvider, Span, TokenCounter } from "../observability/types";
 import type { ToolPolicyEngine } from "../policy/types";
 import type { PromptSource } from "../prompts/types";
 import type { SessionStore } from "../session/sessionStore";
@@ -132,6 +132,10 @@ export class Agent implements AgentHandle {
     this.context.setContextWindowTokens(tokens);
   }
 
+  setTokenCounter(counter: TokenCounter, estimator = "custom"): void {
+    this.context.setTokenCounter(counter, estimator);
+  }
+
   async compactSession(sessionId: string): Promise<{
     sessionId: string;
     totalTurns: number;
@@ -146,13 +150,24 @@ export class Agent implements AgentHandle {
     }
 
     await this.context.init();
-    const manifest = await this.sessionStore.getSession(sessionId);
+    const manifest = await this.sessionStore.getSessionIfExists(sessionId);
+    if (!manifest) {
+      return {
+        sessionId,
+        totalTurns: 0,
+        compressed: false,
+        forced: true,
+        overflowTurns: 0,
+        deltaTurns: 0,
+        reason: "no_turns",
+      };
+    }
     this.context.setGoal(manifest.goal);
     const snapshot = await this.sessionStore.loadLatestSnapshot(sessionId);
     const turns = snapshot?.turns ?? [];
     const result = await this.context.compactNow(turns);
     const refinedGoal = result.summary?.refinedGoal?.trim();
-    if (refinedGoal && refinedGoal !== manifest.goal) {
+    if (refinedGoal && (!manifest.goal || manifest.goal.trim().length === 0)) {
       await this.sessionStore.updateGoal(sessionId, refinedGoal);
     }
     return {
@@ -553,6 +568,7 @@ export class Agent implements AgentHandle {
       );
     }
     if (step.usage) {
+      this.context.recordObservedUsage(working.recentTurns, step.usage.inputTokens);
       observer.countModelTokens(
         modelSelection.model,
         step.usage.inputTokens,

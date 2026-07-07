@@ -13,6 +13,7 @@ import {
   EffortModelSelector,
   FsPromptSource,
   FsSkillSource,
+  HeuristicTokenCounter,
   InProcessSubagentSupervisor,
   JsonlObservabilityExporter,
   ModeController,
@@ -23,6 +24,7 @@ import {
   type SessionStore,
   SkillRegistry,
   type SubagentSupervisor,
+  type TokenCounter,
   ToolRegistry,
   builtInProviderPlugins,
   createCommandSafetyRule,
@@ -41,6 +43,7 @@ import { PlanModePlugin } from "@micro-harnesses/plugin-plan-mode";
 import type { CliConfig } from "../config/config";
 import { SessionService } from "../session/sessionService";
 import { UiStream } from "../streaming/uiStream";
+import { CLI_VERSION } from "../version";
 import { ApprovalController } from "./approvalHandler";
 
 export interface RuntimeState {
@@ -57,22 +60,19 @@ export interface CliComposition {
   modelSelector: EffortModelSelector;
   sessionService: SessionService;
   rootSessionId: string;
+  cliVersion: string;
   runtimeState: RuntimeState;
   refreshContextWindowTokens(): Promise<{
     tokens: number;
     provider: string;
     model: string;
     source: "default" | "ollama-api" | "ollama-fallback";
+    estimator: string;
   }>;
   runOptions(): RunOptions;
   sessionStore: SessionStore;
   subagents: SubagentSupervisor;
 }
-
-const COMPRESSION_TRIGGER_UTILIZATION = 0.7;
-const COMPRESSION_TARGET_UTILIZATION = 0.45;
-const TURN_COMPACTION_TARGET_RATIO = 0.75;
-const NON_TURN_TOKEN_RESERVE = 1_500;
 
 export async function buildComposition(
   config: CliConfig,
@@ -93,7 +93,7 @@ export async function buildComposition(
   });
 
   const observability = new DefaultObservabilityProvider({
-    resource: { serviceName: "micro-harness-cli", serviceVersion: "2.0.0" },
+    resource: { serviceName: "micro-harness-cli", serviceVersion: CLI_VERSION },
     stream: uiStream,
     traceExporters: [telemetryExporter],
     metricExporters: [telemetryExporter],
@@ -130,10 +130,10 @@ export async function buildComposition(
     maxWorkingTurns: 16,
     goal: "",
     contextWindowTokens,
-    compressionTriggerUtilization: COMPRESSION_TRIGGER_UTILIZATION,
-    compressionTargetUtilization: COMPRESSION_TARGET_UTILIZATION,
-    turnCompactionTargetRatio: TURN_COMPACTION_TARGET_RATIO,
-    nonTurnTokenReserve: NON_TURN_TOKEN_RESERVE,
+    compressionTriggerUtilization: config.compactionTriggerUtilization,
+    compressionTargetUtilization: config.compactionTargetUtilization,
+    turnCompactionTargetRatio: config.turnCompactionTargetRatio,
+    nonTurnTokenReserve: config.nonTurnTokenReserve,
   });
   const prompts = new FsPromptSource({ rootDir: config.promptsDir });
   const modelSelector = new EffortModelSelector(runtimeState.effort);
@@ -187,10 +187,10 @@ export async function buildComposition(
           maxWorkingTurns: 6,
           goal: request.goal ?? request.prompt,
           contextWindowTokens,
-          compressionTriggerUtilization: COMPRESSION_TRIGGER_UTILIZATION,
-          compressionTargetUtilization: COMPRESSION_TARGET_UTILIZATION,
-          turnCompactionTargetRatio: TURN_COMPACTION_TARGET_RATIO,
-          nonTurnTokenReserve: NON_TURN_TOKEN_RESERVE,
+          compressionTriggerUtilization: config.compactionTriggerUtilization,
+          compressionTargetUtilization: config.compactionTargetUtilization,
+          turnCompactionTargetRatio: config.turnCompactionTargetRatio,
+          nonTurnTokenReserve: config.nonTurnTokenReserve,
         });
         const childAgent = new Agent({
           promptName: request.promptName ?? "coder",
@@ -272,6 +272,7 @@ export async function buildComposition(
     provider: string;
     model: string;
     source: "default" | "ollama-api" | "ollama-fallback";
+    estimator: string;
   }> {
     const provider = runtimeState.provider;
     const profile = profileForProvider(provider, runtimeState.model);
@@ -297,9 +298,30 @@ export async function buildComposition(
       }
     }
 
+    let estimator = "heuristic";
+    const fallbackCounter = new HeuristicTokenCounter();
+    try {
+      const adapter = providers.get(provider);
+      if (adapter.createTokenCounter) {
+        const auth = await credentials.get(provider).resolve();
+        const created = await adapter.createTokenCounter(model, auth);
+        if (isTokenCounterWithEstimator(created)) {
+          estimator = created.estimator ?? `provider:${provider}`;
+          agent.setTokenCounter(created.counter, estimator);
+        } else {
+          estimator = `provider:${provider}`;
+          agent.setTokenCounter(created, estimator);
+        }
+      } else {
+        agent.setTokenCounter(fallbackCounter, estimator);
+      }
+    } catch {
+      agent.setTokenCounter(fallbackCounter, estimator);
+    }
+
     contextWindowTokens = tokens;
     agent.setContextWindowTokens(tokens);
-    return { tokens, provider, model, source };
+    return { tokens, provider, model, source, estimator };
   }
 
   await refreshContextWindowTokens();
@@ -312,6 +334,7 @@ export async function buildComposition(
     modelSelector,
     sessionService,
     rootSessionId,
+    cliVersion: CLI_VERSION,
     runtimeState,
     refreshContextWindowTokens,
     sessionStore,
@@ -331,4 +354,10 @@ export async function buildComposition(
       };
     },
   };
+}
+
+function isTokenCounterWithEstimator(
+  value: TokenCounter | { counter: TokenCounter; estimator?: string },
+): value is { counter: TokenCounter; estimator?: string } {
+  return "counter" in value;
 }

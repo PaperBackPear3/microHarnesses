@@ -14,7 +14,7 @@ Use npm scripts from the root `package.json`:
 
 Composable, plugin-first library:
 
-- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, policy, harness modes, provider adapters, skills, subagent primitive; zero runtime deps)
+- `packages/core` — `@micro-harnesses/core` (agent loop, tools, sessions/context, policy, harness modes, provider adapters, skills, subagent primitive; extensible provider-aware capabilities)
 - `plugins/basic-tools` — workspace-scoped mutation + shell tools
 - `plugins/plan-mode` — read-only planning + exploration tools
 - `plugins/agentic-compression` — subagent-driven context compression
@@ -51,7 +51,7 @@ Each domain owns its own `types.ts`:
 - `skills/` — types, registry, asTool, fsSkillSource (loads executable skills from `<root>/<name>/SKILL.md` + optional `skill.meta.json`; prompt-expansion model)
 - `context/` — types, manager, defaultCompressor
 - `session/` — types, sessionStore
-- `observability/` — types, provider (`ObservabilityProvider`/`createObservability`), tracer, metrics, logger, sampler, redaction, tokenCounter, in-memory/console/jsonl exporters (zero-dep, OTel-shaped traces + metrics + logs + `StreamSink`)
+- `observability/` — types, provider (`ObservabilityProvider`/`createObservability`), tracer, metrics, logger, sampler, redaction, tokenCounter, in-memory/console/jsonl exporters (OTel-shaped traces + metrics + logs + `StreamSink`)
 - `runtime/` — types, state (`Turn`/`RunState`), agent (`Agent` class), modes (`HarnessMode`/`ModeController`/`createModeAwareApprovalPolicy`/`withModeExecutionContract`), runObserver (`RunObserver`: run/iteration/model/action span tree + metrics + logs + stream), snapshotCadence
 - `subagents/` — types, inProcessSubagentRunner
 - `plugins/` — types, host, loader
@@ -111,5 +111,6 @@ user-facing wait-all alias over the same supervisor state.
 - Cross-package deps use `peerDependencies` (semver ranges) so plugin packages don't duplicate core when installed by users.
 - Generic harness capabilities (modes, model selection, provider adapters, context-window heuristics) live in core; the CLI only composes them and owns TUI concerns (Ink rendering, keybindings, interactive approval prompts, status bar).
 - Providers: prefer `createOpenAICompatProviderPlugin` for new OpenAI-compatible endpoints instead of writing a bespoke adapter.
+- Provider adapters may implement `createTokenCounter(model, auth?)`; prefer best-available provider/model-specific tokenization over generic heuristics.
 - In the CLI TUI, keep input anchored at terminal bottom; render mode/model/context/usage in footer lines below input rather than inline with the composer.
 - For autopilot flows, prefer prompts/instructions that continue autonomously until the goal is actually complete (not just “next step announced”).

@@ -16,6 +16,7 @@ This page documents package functionality and the concepts each package is respo
 - Policy model (`DefaultPolicyEngine`, `CompositePolicyEngine`, `PolicyRule`)
 - Plugin host + capability enforcement (`PluginHost`)
 - Provider + credentials registries, built-in adapters (OpenAI, Anthropic, Ollama) and the generic `OpenAICompatAdapter` / `createOpenAICompatProviderPlugin` for any OpenAI-compatible endpoint
+- Provider-aware token counting (`ProviderAdapter.createTokenCounter`) with runtime calibration from observed model usage
 - Model selection (`DefaultModelSelector`, `EffortModelSelector`, default provider model profiles, Ollama context-window detection)
 - Subagent primitives (`InProcessSubagentRunner`, `InProcessSubagentSupervisor`)
 
@@ -105,6 +106,7 @@ This page documents package functionality and the concepts each package is respo
 
 - **Thin composition root**: wires core registries, plugins, providers, modes, skills, and observability in `runtime/composition.ts`.
 - **TUI ownership**: Ink rendering, keybindings, slash commands, interactive approval prompts, and status display stay in the app.
+- **Version visibility**: running CLI version is exposed in both `--version` output and the TUI footer/help view.
 
 ## Composition recommendation
 

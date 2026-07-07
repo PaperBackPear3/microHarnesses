@@ -56,12 +56,12 @@ const DEFAULT_MODEL = "claude-3-5-sonnet-latest";
 
 /**
  * Maps an Anthropic `stop_reason` to loop-stop semantics: terminal reasons
- * (`end_turn`, `max_tokens`, `stop_sequence`, `refusal`) stop the loop, while
- * `tool_use` expects tool execution and continues.
+ * (`end_turn`, `stop_sequence`, `refusal`) stop the loop, while `tool_use` and
+ * `max_tokens` continue so truncated generations can finish next iteration.
  */
 function stopReasonIndicatesStop(reason: string | undefined): boolean {
   if (!reason) return false;
-  return reason !== "tool_use";
+  return reason !== "tool_use" && reason !== "max_tokens";
 }
 
 export class AnthropicAdapter implements ProviderAdapter {

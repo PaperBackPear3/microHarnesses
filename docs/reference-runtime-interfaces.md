@@ -88,6 +88,10 @@ Templating:
 
 For local use, `ollama` is the quickest path because it works without mandatory API key configuration.
 
+Provider adapters may optionally implement `createTokenCounter(model, auth?)`
+to supply high-quality model-specific token estimation for context-window
+metrics and compaction thresholds.
+
 ## 7) Subagent lifecycle
 
 Core exposes two in-process delegation contracts:

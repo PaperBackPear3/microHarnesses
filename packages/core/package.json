@@ -32,5 +32,8 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "test": "node --test \"dist/**/*.test.js\""
+  },
+  "dependencies": {
+    "js-tiktoken": "^1.0.21"
   }
 }

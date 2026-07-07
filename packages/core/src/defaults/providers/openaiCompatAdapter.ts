@@ -15,6 +15,7 @@ import {
   parseOpenAICompatResponse,
 } from "./openaiCompat";
 import { readSseData } from "./sse";
+import { createOpenAICompatibleTokenCounter } from "./tokenCounter";
 
 export interface OpenAICompatAdapterOptions {
   /** Registry id for this provider (e.g. "openrouter", "groq", "azure-openai"). */
@@ -113,6 +114,10 @@ export class OpenAICompatAdapter implements ProviderAdapter {
       throw new ProviderError(`${this.label()} returned no message`);
     }
     return parsed;
+  }
+
+  async createTokenCounter(model: string) {
+    return createOpenAICompatibleTokenCounter(model);
   }
 
   private endpoint(auth: ProviderAuth): string {

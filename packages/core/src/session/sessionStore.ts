@@ -170,6 +170,11 @@ export class SessionStore {
     return this.readManifest(sessionId);
   }
 
+  async getSessionIfExists(sessionId: string): Promise<SessionManifest | undefined> {
+    const manifestPath = path.join(this.sessionDir(sessionId), "manifest.json");
+    return this.readManifestIfExists(manifestPath);
+  }
+
   private sessionDir(sessionId: string): string {
     return path.join(this.rootDir, sessionId);
   }

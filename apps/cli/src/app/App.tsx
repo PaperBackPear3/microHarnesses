@@ -54,7 +54,9 @@ export function App({
   onExit,
 }: Props): React.ReactElement {
   const [composition, setComposition] = useState<CliComposition>(initialComposition);
-  const [chatEntries, setChatEntries] = useState<ChatEntry[]>([]);
+  const [chatEntries, setChatEntries] = useState<ChatEntry[]>(() =>
+    appendSystemEntry([], randomUUID(), `micro-harness CLI v${initialComposition.cliVersion}`),
+  );
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [screen, setScreen] = useState<UiScreen>("chat");
@@ -250,7 +252,13 @@ export function App({
 
     setComposition(next);
     setActiveSessionId(next.rootSessionId);
-    setChatEntries([{ id: randomUUID(), type: "system", text: notice }]);
+    setChatEntries(
+      appendSystemEntry(
+        appendSystemEntry([], randomUUID(), `micro-harness CLI v${next.cliVersion}`),
+        randomUUID(),
+        notice,
+      ),
+    );
     setChatScrollOffset(0);
     activeTurnIdRef.current = undefined;
     setSubagents([]);
@@ -278,7 +286,7 @@ export function App({
       composition.modelSelector.setEffort(command.effort);
       const synced = await composition.refreshContextWindowTokens();
       appendSystemMessage(
-        `Effort set to ${command.effort}. Context window set to ${synced.tokens} tokens (${synced.source}).`,
+        `Effort set to ${command.effort}. Context window set to ${synced.tokens} tokens (${synced.source}, estimator=${synced.estimator}).${synced.source === "ollama-fallback" ? " Using conservative Ollama fallback until detection succeeds." : ""}`,
       );
       return;
     }
@@ -286,7 +294,7 @@ export function App({
       composition.runtimeState.model = command.model;
       const synced = await composition.refreshContextWindowTokens();
       appendSystemMessage(
-        `Model override set to ${command.model}. Context window set to ${synced.tokens} tokens (${synced.source}).`,
+        `Model override set to ${command.model}. Context window set to ${synced.tokens} tokens (${synced.source}, estimator=${synced.estimator}).${synced.source === "ollama-fallback" ? " Using conservative Ollama fallback until detection succeeds." : ""}`,
       );
       return;
     }
@@ -294,7 +302,7 @@ export function App({
       composition.runtimeState.provider = command.provider;
       const synced = await composition.refreshContextWindowTokens();
       appendSystemMessage(
-        `Provider set to ${command.provider}. Context window set to ${synced.tokens} tokens (${synced.source}).`,
+        `Provider set to ${command.provider}. Context window set to ${synced.tokens} tokens (${synced.source}, estimator=${synced.estimator}).${synced.source === "ollama-fallback" ? " Using conservative Ollama fallback until detection succeeds." : ""}`,
       );
       return;
     }
@@ -395,6 +403,7 @@ export function App({
           `used: ${status.contextUsedTokens ?? 0}`,
           `max: ${status.contextMaxTokens ?? 0}`,
           `utilization: ${typeof status.contextUtilization === "number" ? `${Math.round(status.contextUtilization * 100)}%` : "n/a"}`,
+          `estimator: ${status.contextEstimator ?? "n/a"}`,
         ].join("\n"),
       );
       setScreen("context");
@@ -640,7 +649,9 @@ export function App({
         )}
         {screen === "context" && <Screen title="Context Window">{contextView}</Screen>}
         {screen === "telemetry" && <Screen title="Telemetry">{telemetryView}</Screen>}
-        {screen === "help" && <HelpScreen modelChoices={modelChoices} />}
+        {screen === "help" && (
+          <HelpScreen modelChoices={modelChoices} cliVersion={composition.cliVersion} />
+        )}
       </Box>
 
       <Box>
@@ -662,6 +673,7 @@ export function App({
 
       <FooterStatusBar
         sessionId={activeSessionId}
+        cliVersion={composition.cliVersion}
         mode={mode}
         effort={composition.runtimeState.effort}
         provider={composition.runtimeState.provider}
@@ -679,6 +691,7 @@ export function App({
 
 function FooterStatusBar(props: {
   sessionId: string;
+  cliVersion: string;
   mode: HarnessMode;
   effort: EffortLevel;
   provider: string;
@@ -694,6 +707,7 @@ function FooterStatusBar(props: {
   const finishedSubagents = props.subagents.filter((entry) => entry.status !== "running").length;
   const line1 = trimToColumns(
     [
+      `v${props.cliVersion}`,
       `session=${props.sessionId}`,
       `mode=${props.mode}`,
       `effort=${props.effort}`,
@@ -747,10 +761,18 @@ function Screen({ title, children }: { title: string; children: string }): React
   );
 }
 
-function HelpScreen({ modelChoices }: { modelChoices: string[] }): React.ReactElement {
+function HelpScreen({
+  modelChoices,
+  cliVersion,
+}: {
+  modelChoices: string[];
+  cliVersion: string;
+}): React.ReactElement {
   const commandLines = helpCommandLines(modelChoices);
   const shortcutLines = helpShortcutLines();
   const lines = [
+    `Version: v${cliVersion}`,
+    "",
     "Slash commands:",
     ...commandLines.map((line) => `  ${line}`),
     "",

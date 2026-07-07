@@ -17,6 +17,9 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 - `FsSkillSource` now loads real executable skills from disk (`SKILL.md` +
   optional `skill.meta.json` and resource files); the CLI wires them up via
   `--skills-dir` (default `<state-dir>/skills`).
+- Context-window token estimation is now provider-aware: built-in OpenAI-compatible
+  providers use `js-tiktoken`, adapters can expose custom token counters, and
+  runtime usage is fed back to calibrate compaction/utilization over time.
 
 ## Documentation
 

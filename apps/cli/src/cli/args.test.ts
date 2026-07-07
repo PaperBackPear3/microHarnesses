@@ -12,11 +12,23 @@ test("parseGlobalCliArgs parses mode and effort", () => {
     "high",
     "--model",
     "gpt-4.1",
+    "--compaction-trigger",
+    "0.9",
+    "--compaction-target",
+    "0.72",
+    "--turn-compaction-target",
+    "0.8",
+    "--non-turn-token-reserve",
+    "2500",
   ]);
   assert.equal(parsed.prompt, "hello");
   assert.equal(parsed.mode, "autopilot");
   assert.equal(parsed.effort, "high");
   assert.equal(parsed.model, "gpt-4.1");
+  assert.equal(parsed.compactionTriggerUtilization, 0.9);
+  assert.equal(parsed.compactionTargetUtilization, 0.72);
+  assert.equal(parsed.turnCompactionTargetRatio, 0.8);
+  assert.equal(parsed.nonTurnTokenReserve, 2500);
 });
 
 test("parseSessionsArgs handles show subcommand", () => {

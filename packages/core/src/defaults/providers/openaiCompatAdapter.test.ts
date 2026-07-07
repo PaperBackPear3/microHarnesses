@@ -94,13 +94,13 @@ test("throws ProviderError on malformed stream frames", async () => {
 
 test("finishReasonIndicatesStop maps terminal and continuing reasons", () => {
   assert.equal(finishReasonIndicatesStop("stop"), true);
-  assert.equal(finishReasonIndicatesStop("length"), true);
+  assert.equal(finishReasonIndicatesStop("length"), false);
   assert.equal(finishReasonIndicatesStop("content_filter"), true);
   assert.equal(finishReasonIndicatesStop("tool_calls"), false);
   assert.equal(finishReasonIndicatesStop(undefined), false);
 });
 
-test("stream marks stop on length finish reason", async () => {
+test("stream keeps stop=false on length finish reason", async () => {
   const fetchImpl: typeof fetch = async () =>
     new Response(
       [
@@ -120,6 +120,6 @@ test("stream marks stop on length finish reason", async () => {
   const final = events[events.length - 1];
   assert.equal(final?.type, "final");
   if (final?.type === "final") {
-    assert.equal(final.response.stop, true);
+    assert.equal(final.response.stop, false);
   }
 });

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { ContextManager } from "../context/manager";
 import type {
   ModelAdapter,
   ModelProfile,
@@ -14,6 +18,7 @@ import { createObservability } from "../observability/provider";
 import type { ObservabilityProvider, StreamEvent, StreamSink } from "../observability/types";
 import type { ToolPolicyContext, ToolPolicyEngine, ToolPolicyEvaluation } from "../policy/types";
 import type { PromptBundle, PromptSource } from "../prompts/types";
+import { SessionStore } from "../session/sessionStore";
 import { SkillRegistry } from "../skills/registry";
 import { ToolRegistry } from "../tools/registry";
 import type { ToolCall, ToolDefinition } from "../tools/types";
@@ -116,6 +121,8 @@ class AllowPolicy implements ToolPolicyEngine {
 class FakeContextManager {
   setGoal(_goal: string): void {}
   async init(): Promise<void> {}
+  setTokenCounter(): void {}
+  recordObservedUsage(): void {}
   async buildWorkingTurns(state: RunState["turns"]): Promise<{ recentTurns: RunState["turns"] }> {
     return { recentTurns: state };
   }
@@ -624,6 +631,98 @@ class ThrowingModel implements ModelAdapter {
     throw new Error("model exploded");
   }
 }
+
+test("compactSession returns no_turns when the session does not exist", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-agent-compact-missing-"));
+  try {
+    const runtime = new Agent({
+      promptName: "default",
+      model: new FakeModel({ assistantMessage: "ok", toolCalls: [], stop: true }),
+      modelSelector: new FakeModelSelector(),
+      prompts: new FakePromptSource(),
+      tools: new ToolRegistry(),
+      context: new ContextManager({
+        stateDir: path.join(stateDir, "context"),
+        maxWorkingTurns: 8,
+      }),
+      policy: new AllowPolicy(),
+      observability: makeObs().provider,
+      sessionStore: new SessionStore(stateDir),
+    });
+
+    const result = await runtime.compactSession("s-missing");
+    assert.deepEqual(result, {
+      sessionId: "s-missing",
+      totalTurns: 0,
+      compressed: false,
+      forced: true,
+      overflowTurns: 0,
+      deltaTurns: 0,
+      reason: "no_turns",
+    });
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("compactSession does not overwrite an existing manifest goal with refinedGoal", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-agent-compact-goal-"));
+  try {
+    const sessionStore = new SessionStore(stateDir);
+    const manifest = await sessionStore.initSession({ sessionId: "s-goal", goal: "keep me" });
+    await sessionStore.saveSnapshot(manifest.sessionId, "run-1", {
+      sessionId: manifest.sessionId,
+      runId: "run-1",
+      startedAt: new Date().toISOString(),
+      turns: [
+        {
+          id: "t-1",
+          iteration: 1,
+          userMessage: "user one",
+          assistantMessage: "assistant one",
+          toolCalls: [],
+          toolResults: [],
+        },
+        {
+          id: "t-2",
+          iteration: 2,
+          userMessage: "user two",
+          assistantMessage: "assistant two",
+          toolCalls: [],
+          toolResults: [],
+        },
+      ],
+    });
+
+    const runtime = new Agent({
+      promptName: "default",
+      model: new FakeModel({ assistantMessage: "ok", toolCalls: [], stop: true }),
+      modelSelector: new FakeModelSelector(),
+      prompts: new FakePromptSource(),
+      tools: new ToolRegistry(),
+      context: new ContextManager({
+        stateDir: path.join(stateDir, "context"),
+        maxWorkingTurns: 8,
+        compressor: () => ({
+          summary: "forced",
+          highlights: [],
+          supportHistory: [],
+          refinedGoal: "new goal",
+        }),
+      }),
+      policy: new AllowPolicy(),
+      observability: makeObs().provider,
+      sessionStore,
+    });
+
+    const result = await runtime.compactSession("s-goal");
+    assert.equal(result.compressed, true);
+    const updated = await sessionStore.getSession("s-goal");
+    assert.equal(updated.goal, "keep me");
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
 
 test("run streams run.failed and rethrows when a step throws", async () => {
   const obs = makeObs();

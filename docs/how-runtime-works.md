@@ -59,6 +59,8 @@ Important: command safety is screening, not sandboxing.
 
 - `SessionStore` manages manifests, append-only event logs, support history, and snapshots.
 - `ContextManager` controls how many turns are sent to the model and can compress overflow.
+  It uses provider-specific token counters when available and calibrates
+  estimates from observed model usage.
 - `goal` is stored with session metadata and propagated through runs/subagents.
 
 ## Subagents

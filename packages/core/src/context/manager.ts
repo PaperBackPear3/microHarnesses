@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { HeuristicTokenCounter } from "../observability/tokenCounter";
 import type { TokenCounter } from "../observability/types";
@@ -87,7 +87,9 @@ export class ContextManager {
   private compressor: CompressorFn;
   private goal?: string;
   private latestSummary?: CompressionResult;
-  private readonly tokenCounter: TokenCounter;
+  private tokenCounter: TokenCounter;
+  private tokenEstimator = "heuristic";
+  private observedTokenScale = 1;
   private contextWindowTokens: number;
   private readonly compressionTriggerUtilization: number;
   private readonly compressionTargetUtilization: number;
@@ -101,6 +103,7 @@ export class ContextManager {
     this.compressor = options.compressor ?? defaultCompressor;
     this.goal = options.goal;
     this.tokenCounter = options.tokenCounter ?? new HeuristicTokenCounter();
+    this.tokenEstimator = options.tokenCounter ? "custom" : "heuristic";
     this.contextWindowTokens = options.contextWindowTokens ?? 128_000;
     this.compressionTriggerUtilization = clampRatio(options.compressionTriggerUtilization ?? 1);
     this.compressionTargetUtilization = clampRatio(
@@ -121,6 +124,28 @@ export class ContextManager {
   setContextWindowTokens(tokens: number): void {
     if (!Number.isFinite(tokens) || tokens <= 0) return;
     this.contextWindowTokens = Math.floor(tokens);
+  }
+
+  setTokenCounter(counter: TokenCounter, estimator = "custom"): void {
+    this.tokenCounter = counter;
+    this.tokenEstimator = estimator;
+    this.observedTokenScale = 1;
+  }
+
+  recordObservedUsage(workingTurns: Turn[], inputTokens?: number): void {
+    if (typeof inputTokens !== "number" || !Number.isFinite(inputTokens) || inputTokens <= 0) {
+      return;
+    }
+    const rawEstimate = this.estimateWorkingPayloadTokensRaw(workingTurns);
+    if (rawEstimate <= 0) {
+      return;
+    }
+    const ratio = inputTokens / rawEstimate;
+    if (!Number.isFinite(ratio) || ratio <= 0) {
+      return;
+    }
+    const bounded = Math.min(4, Math.max(0.25, ratio));
+    this.observedTokenScale = this.observedTokenScale * 0.7 + bounded * 0.3;
   }
 
   async init(): Promise<void> {
@@ -174,9 +199,8 @@ export class ContextManager {
    * - When there is uncompressed overflow (`turns.length > maxWorkingTurns` and
    *   `overflow > compressedTurnCount`), this behaves like the normal automatic
    *   compression path and advances summary state.
-   * - Otherwise, it still performs a forced compression over the current
-   *   working window to refresh/produce a summary immediately, but does not
-   *   advance overflow bookkeeping.
+   * - Otherwise, it force-compacts additional older turns while keeping the
+   *   most recent turn verbatim in working context.
    */
   async compactNow(
     turns: Turn[],
@@ -222,10 +246,22 @@ export class ContextManager {
       };
     }
 
-    const from = Math.max(0, turns.length - this.maxWorkingTurns);
-    const delta = turns.slice(from);
+    const keepRecentTurns = 1;
+    const nextCompressedTurnCount = Math.max(
+      summaryState.compressedTurnCount,
+      Math.max(0, turns.length - keepRecentTurns),
+    );
+    if (nextCompressedTurnCount <= summaryState.compressedTurnCount) {
+      return {
+        compressed: false,
+        forced: true,
+        overflowTurns: plan.targetOverflow,
+        deltaTurns: 0,
+      };
+    }
+    const delta = turns.slice(summaryState.compressedTurnCount, nextCompressedTurnCount);
     await hooks?.onCompressionStarted?.({
-      overflowTurns: plan.targetOverflow,
+      overflowTurns: nextCompressedTurnCount,
       deltaTurns: delta.length,
     });
     const compression = await this.compressor(delta, {
@@ -233,15 +269,16 @@ export class ContextManager {
       previousSummary: this.latestSummary,
     });
     this.applyCompressionResult(compression);
-    await this.persistSummary(compression, delta.length, from, true);
+    await this.persistSummary(compression, delta.length, summaryState.compressedTurnCount, true);
+    await this.writeSummaryState({ compressedTurnCount: nextCompressedTurnCount });
     await hooks?.onCompressionCompleted?.({
-      overflowTurns: plan.targetOverflow,
+      overflowTurns: nextCompressedTurnCount,
       deltaTurns: delta.length,
     });
     return {
       compressed: true,
       forced: true,
-      overflowTurns: plan.targetOverflow,
+      overflowTurns: nextCompressedTurnCount,
       deltaTurns: delta.length,
       summary: compression,
     };
@@ -258,6 +295,10 @@ export class ContextManager {
     const usedTokens = this.estimateWorkingPayloadTokens(workingTurns);
     const maxTokens = this.contextWindowTokens;
     const utilization = maxTokens > 0 ? Math.min(1, usedTokens / maxTokens) : 0;
+    const estimator =
+      Math.abs(this.observedTokenScale - 1) > 0.1
+        ? `calibrated:${this.tokenEstimator}`
+        : this.tokenEstimator;
     return {
       totalTurns,
       workingTurns: workingTurns.length,
@@ -269,6 +310,7 @@ export class ContextManager {
       usedTokens,
       maxTokens,
       utilization,
+      estimator,
     };
   }
 
@@ -338,14 +380,22 @@ export class ContextManager {
   }
 
   private estimateWorkingPayloadTokens(workingTurns: Turn[]): number {
-    let usedTokens = this.estimateSummaryTokens();
+    return this.scaleTokenEstimate(this.estimateWorkingPayloadTokensRaw(workingTurns));
+  }
+
+  private estimateWorkingPayloadTokensRaw(workingTurns: Turn[]): number {
+    let usedTokens = this.estimateSummaryTokensRaw();
     for (const turn of workingTurns) {
-      usedTokens += this.estimateTurnPayloadTokens(turn);
+      usedTokens += this.estimateTurnPayloadTokensRaw(turn);
     }
     return usedTokens;
   }
 
   private estimateSummaryTokens(): number {
+    return this.scaleTokenEstimate(this.estimateSummaryTokensRaw());
+  }
+
+  private estimateSummaryTokensRaw(): number {
     if (!this.latestSummary) return 0;
     let total = this.tokenCounter.count(this.latestSummary.summary);
     for (const highlight of this.latestSummary.highlights) {
@@ -355,6 +405,10 @@ export class ContextManager {
   }
 
   private estimateTurnPayloadTokens(turn: Turn): number {
+    return this.scaleTokenEstimate(this.estimateTurnPayloadTokensRaw(turn));
+  }
+
+  private estimateTurnPayloadTokensRaw(turn: Turn): number {
     let total = 0;
     total += this.tokenCounter.count(turn.userMessage);
     total += this.tokenCounter.count(turn.assistantMessage);
@@ -364,19 +418,37 @@ export class ContextManager {
     return total;
   }
 
+  private scaleTokenEstimate(raw: number): number {
+    if (raw <= 0) return 0;
+    return Math.max(1, Math.floor(raw * this.observedTokenScale));
+  }
+
   private async loadLatestSummary(): Promise<CompressionResult | undefined> {
-    let names: string[];
+    let names: Array<{ name: string; mtimeMs: number }>;
     try {
-      names = (await readdir(this.summaryDir))
-        .filter((name) => name.startsWith("summary-") && name.endsWith(".json"))
-        .sort();
+      const candidates = (await readdir(this.summaryDir)).filter(
+        (name) => name.startsWith("summary-") && name.endsWith(".json"),
+      );
+      names = await Promise.all(
+        candidates.map(async (name) => {
+          const summaryPath = path.join(this.summaryDir, name);
+          const file = await stat(summaryPath);
+          return { name, mtimeMs: file.mtimeMs };
+        }),
+      );
+      names.sort((a, b) => {
+        if (a.mtimeMs !== b.mtimeMs) {
+          return a.mtimeMs - b.mtimeMs;
+        }
+        return a.name.localeCompare(b.name);
+      });
     } catch (error: unknown) {
       if (isNodeError(error) && error.code === "ENOENT") {
         return undefined;
       }
       throw error;
     }
-    const latest = names.at(-1);
+    const latest = names.at(-1)?.name;
     if (!latest) {
       return undefined;
     }
@@ -416,10 +488,9 @@ export class ContextManager {
 
   private applyCompressionResult(compression: CompressionResult): void {
     this.latestSummary = compression;
-    // A goals-finder-style compressor may rediscover a more accurate goal
-    // mid-run; adopt it so later compression cycles in this run see it.
+    // Only adopt rediscovered goals when no explicit goal is currently set.
     const refinedGoal = compression.refinedGoal?.trim();
-    if (refinedGoal) {
+    if (refinedGoal && (!this.goal || this.goal.trim().length === 0)) {
       this.setGoal(refinedGoal);
     }
   }
@@ -430,7 +501,8 @@ export class ContextManager {
     from: number,
     forced: boolean,
   ): Promise<void> {
-    const summaryFile = path.join(this.summaryDir, `summary-${randomUUID()}.json`);
+    const timestamp = new Date().toISOString().replaceAll(":", "-");
+    const summaryFile = path.join(this.summaryDir, `summary-${timestamp}-${randomUUID()}.json`);
     await writeFile(
       summaryFile,
       JSON.stringify(

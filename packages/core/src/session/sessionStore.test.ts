@@ -59,6 +59,18 @@ test("support history is persisted without adding manifest path metadata", async
   }
 });
 
+test("getSessionIfExists returns undefined for unknown sessions", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-missing-"));
+  const store = new SessionStore(stateDir);
+
+  try {
+    const manifest = await store.getSessionIfExists("missing-session");
+    assert.equal(manifest, undefined);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("loadLatestSnapshot reconstructs turns across snapshot resets", async () => {
   const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-merge-"));
   const store = new SessionStore(stateDir);

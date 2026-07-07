@@ -11,6 +11,7 @@ export interface StatusState {
   contextUsedTokens?: number;
   contextMaxTokens?: number;
   contextUtilization?: number;
+  contextEstimator?: string;
 }
 
 export function createStatusState(): StatusState {
@@ -44,6 +45,7 @@ export function reduceStatus(state: StatusState, event: StreamEvent): StatusStat
       contextUsedTokens: asNumber(event.payload.usedTokens),
       contextMaxTokens: asNumber(event.payload.maxTokens),
       contextUtilization: asNumber(event.payload.utilization),
+      contextEstimator: asString(event.payload.estimator),
     };
   }
   if (event.type === "run.completed") {

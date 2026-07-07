@@ -2,12 +2,13 @@ type OpenAICompatContentPart = { type?: string; text?: string };
 
 /**
  * Maps an OpenAI-compatible `finish_reason` to loop-stop semantics:
- * - `stop` / `length` / `content_filter` terminate generation → stop.
+ * - `stop` / `content_filter` terminate generation → stop.
+ * - `length` means truncated output and should continue in the next iteration.
  * - `tool_calls` / `function_call` expect tool execution → continue.
  */
 export function finishReasonIndicatesStop(reason: string | undefined): boolean {
   if (!reason) return false;
-  return reason === "stop" || reason === "length" || reason === "content_filter";
+  return reason === "stop" || reason === "content_filter";
 }
 
 export interface ParsedToolCallArgs {
