@@ -58,6 +58,7 @@ npx @micro-harnesses/cli@latest
   `--routing-preference` opts into router-based provider/model selection.
 - Modes and personas are aligned by default: `/plan` uses persona `planner`,
   while `/edits` and `/autopilot` use persona `coder`.
+- Drag-and-drop file paths from your terminal are treated as staged attachments.
 
 ## Context compression
 
@@ -148,7 +149,7 @@ compressor.
 ## Keybindings
 
 - `Enter` send prompt
-- `Option+Enter` insert newline
+- `Shift+Enter` insert newline
 - Arrow keys move through multi-line composer text; when input is empty, arrows scroll transcript
 - `Shift+Tab` cycle mode (Plan → Accept-edits → Autopilot)
 - `Ctrl+T` toggle reasoning collapse

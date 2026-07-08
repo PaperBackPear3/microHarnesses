@@ -10,7 +10,12 @@ import type { ReactElement } from "react";
 import type { CliComposition } from "../runtime/composition.js";
 import { resolveMainPromptName } from "../runtime/subagentPromptName.js";
 import { type UiScreen, parseSlashCommand } from "../slash/commands.js";
-import { type StagedAttachment, formatBytes, stageAttachment } from "./attachments.js";
+import {
+  type StagedAttachment,
+  formatBytes,
+  parseDroppedAttachmentPaths,
+  stageAttachment,
+} from "./attachments.js";
 import { buildChatLines } from "./chatLines.js";
 import { Composer, estimateComposerRows } from "./components/Composer.js";
 import { FooterStatusBar } from "./components/FooterStatusBar.js";
@@ -182,6 +187,17 @@ export function App({
     async (value: string) => {
       const trimmed = value.trim();
       if (trimmed.length === 0 || running || switchingSession) {
+        setInput("");
+        return;
+      }
+
+      const droppedFiles = await tryStageDroppedFiles(trimmed);
+      if (droppedFiles) {
+        setStagedAttachments((current) => [...current, ...droppedFiles]);
+        const lines = droppedFiles.map(
+          (entry) => `${entry.filename} (${entry.mimeType}, ${formatBytes(entry.sizeBytes)})`,
+        );
+        chatStore.appendSystemMessage(`Attached from drop:\n${lines.join("\n")}`);
         setInput("");
         return;
       }
@@ -438,4 +454,18 @@ function ensureAttachmentSupport(provider: string, stagedAttachments: StagedAtta
   throw new Error(
     `Provider "${provider}" does not support non-image file attachments in the current configuration`,
   );
+}
+
+async function tryStageDroppedFiles(input: string): Promise<StagedAttachment[] | undefined> {
+  const candidates = parseDroppedAttachmentPaths(input);
+  if (candidates.length === 0) return undefined;
+  const staged: StagedAttachment[] = [];
+  for (const candidate of candidates) {
+    try {
+      staged.push(await stageAttachment(candidate));
+    } catch {
+      return undefined;
+    }
+  }
+  return staged.length > 0 ? staged : undefined;
 }

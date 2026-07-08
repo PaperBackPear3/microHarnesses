@@ -52,3 +52,58 @@ export function formatBytes(bytes: number): string {
   if (bytes >= 1024) return `${Math.round(bytes / 1024)}KB`;
   return `${bytes}B`;
 }
+
+/**
+ * Parses terminal drag-and-drop payloads into path candidates.
+ * Supports:
+ * - single bare path
+ * - quoted paths ("..." or '...')
+ * - escaped spaces (\ )
+ * - multiple paths in one payload
+ */
+export function parseDroppedAttachmentPaths(input: string): string[] {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return [];
+  const result: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | undefined;
+  let escaping = false;
+
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index] ?? "";
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = undefined;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current.trim().length > 0) {
+        result.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (current.trim().length > 0) {
+    result.push(current);
+  }
+  return result;
+}

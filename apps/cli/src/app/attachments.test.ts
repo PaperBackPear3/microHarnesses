@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { formatBytes, stageAttachment } from "./attachments.js";
+import { formatBytes, parseDroppedAttachmentPaths, stageAttachment } from "./attachments.js";
 
 test("stageAttachment resolves file metadata and mime type", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-attachments-"));
@@ -24,4 +24,18 @@ test("formatBytes keeps user-friendly units", () => {
   assert.equal(formatBytes(12), "12B");
   assert.equal(formatBytes(2048), "2KB");
   assert.equal(formatBytes(2 * 1024 * 1024), "2.0MB");
+});
+
+test("parseDroppedAttachmentPaths supports quoted and escaped terminal payloads", () => {
+  assert.deepEqual(parseDroppedAttachmentPaths("/tmp/image.png"), ["/tmp/image.png"]);
+  assert.deepEqual(parseDroppedAttachmentPaths("'/tmp/file with spaces.png'"), [
+    "/tmp/file with spaces.png",
+  ]);
+  assert.deepEqual(parseDroppedAttachmentPaths("/tmp/file\\ with\\ spaces.png"), [
+    "/tmp/file with spaces.png",
+  ]);
+  assert.deepEqual(parseDroppedAttachmentPaths('"/tmp/a one.png" "/tmp/b two.png"'), [
+    "/tmp/a one.png",
+    "/tmp/b two.png",
+  ]);
 });

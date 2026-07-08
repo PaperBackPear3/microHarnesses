@@ -63,7 +63,7 @@ export function Composer({ value, disabled, columns, onChange, onSubmit }: Props
       if (disabled) return;
 
       if (key.return) {
-        if (key.meta) {
+        if (key.shift) {
           insertChunk("\n");
           return;
         }
