@@ -53,7 +53,7 @@ const HELP_COMMAND_LINES_BASE = [
 
 const KEYBOARD_SHORTCUTS: readonly Shortcut[] = [
   { keys: "Enter", description: "send prompt" },
-  { keys: "Shift+Enter", description: "insert newline in composer" },
+  { keys: "Shift+Enter", description: "insert newline in composer (terminal support required)" },
   { keys: "← / →", description: "move cursor in composer" },
   { keys: "Home / End", description: "jump to line start/end in composer" },
   { keys: "↑ / ↓", description: "move cursor between composer lines" },
@@ -92,7 +92,7 @@ export function contextBadgeStyle(status: StatusState): LabeledColor {
 }
 
 export function compactShortcutHintLine(): string {
-  return "Shift+Enter newline · drag to select text · PgUp/PgDn scroll · Ctrl+T thinking · Ctrl+Y diagnostics · /copy clipboard";
+  return "Shift+Enter newline (terminal support) · drag to select text · PgUp/PgDn scroll · Ctrl+T thinking · Ctrl+Y diagnostics · /copy clipboard";
 }
 
 export function helpCommandLines(modelChoices: string[]): string[] {

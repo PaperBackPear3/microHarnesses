@@ -50,7 +50,7 @@ function printHelp(): void {
       '  mh --print "prompt" [--json]',
       "  mh sessions list",
       "  mh sessions show <session-id>",
-      "  mh",
+      "  mh  (interactive full-screen chat)",
       "",
       "Flags:",
       "  --provider <id>",

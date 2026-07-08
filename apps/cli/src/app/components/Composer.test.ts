@@ -113,7 +113,7 @@ test("classifyComposerEnterAction distinguishes submit vs shift-enter newline", 
     "newline",
   );
   assert.equal(
-    classifyComposerEnterAction("\u001b[13;2u", {
+    classifyComposerEnterAction("[13;2u", {
       return: false,
       shift: false,
       ctrl: false,
@@ -121,7 +121,7 @@ test("classifyComposerEnterAction distinguishes submit vs shift-enter newline", 
     "newline",
   );
   assert.equal(
-    classifyComposerEnterAction("\u001b[27;2;13~", {
+    classifyComposerEnterAction("[27;2;13~", {
       return: false,
       shift: false,
       ctrl: false,
@@ -133,7 +133,7 @@ test("classifyComposerEnterAction distinguishes submit vs shift-enter newline", 
     "submit",
   );
   assert.equal(
-    classifyComposerEnterAction("\u001b[13;1u", {
+    classifyComposerEnterAction("[13;1u", {
       return: false,
       shift: false,
       ctrl: false,
@@ -141,7 +141,7 @@ test("classifyComposerEnterAction distinguishes submit vs shift-enter newline", 
     "submit",
   );
   assert.equal(
-    classifyComposerEnterAction("\u001b[27;1;13~", {
+    classifyComposerEnterAction("[27;1;13~", {
       return: false,
       shift: false,
       ctrl: false,
@@ -151,5 +151,12 @@ test("classifyComposerEnterAction distinguishes submit vs shift-enter newline", 
   assert.equal(
     classifyComposerEnterAction("x", { return: false, shift: false, ctrl: false }),
     undefined,
+  );
+});
+
+test("classifyComposerEnterAction treats bare return as submit when shift metadata is unavailable", () => {
+  assert.equal(
+    classifyComposerEnterAction("\r", { return: true, shift: false, ctrl: false }),
+    "submit",
   );
 });

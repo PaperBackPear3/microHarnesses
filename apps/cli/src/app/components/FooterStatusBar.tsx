@@ -19,6 +19,7 @@ export function FooterStatusBar(props: {
   subagents: SubagentStatus[];
   shortcutHint: string;
   columns: number;
+  compact?: boolean;
 }): ReactElement {
   const runningSubagents = props.subagents.filter((entry) => entry.status === "running").length;
   const finishedSubagents = props.subagents.filter((entry) => entry.status !== "running").length;
@@ -52,6 +53,13 @@ export function FooterStatusBar(props: {
       .join(" | "),
     props.columns,
   );
+  if (props.compact) {
+    return (
+      <Box flexDirection="column" marginTop={1} paddingX={1} backgroundColor="black">
+        <Text color="gray">{line2}</Text>
+      </Box>
+    );
+  }
   return (
     <Box
       flexDirection="column"

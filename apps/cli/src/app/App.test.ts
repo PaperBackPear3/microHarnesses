@@ -1,45 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildCopyPayload, buildScrollbarRail } from "./App.js";
+import { buildCopyPayload, buildScrollbarRail, computeLayoutRowBudget } from "./App.js";
 
-test("layout row budget calculation", () => {
-  const viewportHeight = 30;
-  const composerRows = 3;
-  const composerBoxRows = 2;
-  const composerMarginRows = 1;
-  const footerRows = 6;
-  const controlRows = composerRows + composerBoxRows + composerMarginRows + footerRows;
-  const contentRows = Math.max(1, viewportHeight - controlRows);
-
-  assert.equal(controlRows, 12);
-  assert.equal(contentRows, 18);
+test("layout row budget uses full terminal rows in expanded mode", () => {
+  const budget = computeLayoutRowBudget(30, 3);
+  assert.equal(budget.viewportHeight, 30);
+  assert.equal(budget.footerRows, 6);
+  assert.equal(budget.controlRows, 12);
+  assert.equal(budget.contentRows, 18);
+  assert.equal(budget.transcriptRows, 16);
 });
 
-test("layout row budget ensures content is visible", () => {
-  const viewportHeight = 24;
-  const composerRows = 2;
-  const composerBoxRows = 2;
-  const composerMarginRows = 1;
-  const footerRows = 6;
-  const controlRows = composerRows + composerBoxRows + composerMarginRows + footerRows;
-  const contentRows = Math.max(1, viewportHeight - controlRows);
-
-  assert(contentRows > 0);
-  assert.equal(contentRows + controlRows, 24);
+test("layout row budget keeps transcript visible on short terminals", () => {
+  const budget = computeLayoutRowBudget(8, 6);
+  assert.equal(budget.viewportHeight, 8);
+  assert.equal(budget.footerRows, 2);
+  assert.equal(budget.contentRows, 1);
+  assert.equal(budget.transcriptRows, 1);
 });
 
 test("layout row budget accounts for max composer rows", () => {
-  const viewportHeight = 24;
-  const maxComposerRows = 6;
-  const composerBoxRows = 2;
-  const composerMarginRows = 1;
-  const footerRows = 6;
-  const maxControlRows = maxComposerRows + composerBoxRows + composerMarginRows + footerRows;
-
-  assert(maxControlRows <= 15);
-  assert.equal(maxControlRows, 15);
-  const contentRows = Math.max(1, viewportHeight - maxControlRows);
-  assert(contentRows >= 9);
+  const budget = computeLayoutRowBudget(24, 6);
+  assert.equal(budget.footerRows, 6);
+  assert.equal(budget.controlRows, 15);
+  assert.equal(budget.contentRows, 9);
+  assert.equal(budget.transcriptRows, 7);
 });
 
 test("scrollbar thumb tracks newest content at the bottom", () => {

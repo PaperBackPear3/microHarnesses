@@ -41,6 +41,40 @@ interface Props {
   onExit(): void;
 }
 
+export interface LayoutRowBudget {
+  viewportHeight: number;
+  contentRows: number;
+  transcriptRows: number;
+  footerRows: number;
+  controlRows: number;
+}
+
+const COMPOSER_BOX_ROWS = 2;
+const COMPOSER_MARGIN_ROWS = 1;
+const FOOTER_EXPANDED_ROWS = 6;
+const FOOTER_COMPACT_ROWS = 2;
+
+export function computeLayoutRowBudget(
+  viewportRows: number,
+  composerRows: number,
+): LayoutRowBudget {
+  const viewportHeight = Math.max(1, Math.floor(viewportRows));
+  const requestedComposerRows = Math.max(1, composerRows);
+  const minControlRows = COMPOSER_BOX_ROWS + COMPOSER_MARGIN_ROWS + FOOTER_COMPACT_ROWS;
+  const availableComposerRows = Math.max(1, viewportHeight - minControlRows - 1);
+  const boundedComposerRows = Math.min(requestedComposerRows, availableComposerRows);
+
+  const expandedControlRows =
+    boundedComposerRows + COMPOSER_BOX_ROWS + COMPOSER_MARGIN_ROWS + FOOTER_EXPANDED_ROWS;
+  const footerRows =
+    expandedControlRows < viewportHeight ? FOOTER_EXPANDED_ROWS : FOOTER_COMPACT_ROWS;
+  const controlRows = boundedComposerRows + COMPOSER_BOX_ROWS + COMPOSER_MARGIN_ROWS + footerRows;
+  const contentRows = Math.max(1, viewportHeight - controlRows);
+  const transcriptRows = Math.max(1, contentRows - 2);
+
+  return { viewportHeight, contentRows, transcriptRows, footerRows, controlRows };
+}
+
 export function App({
   composition: initialComposition,
   buildForSession,
@@ -90,14 +124,12 @@ export function App({
     [composition.runtimeState.provider],
   );
 
-  const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
+  const viewportHeight = process.stdout.rows ?? 24;
   const composerRows = estimateComposerRows(input, composerColumns);
-  const composerBoxRows = 2;
-  const composerMarginRows = 1;
-  const footerRows = 6;
-  const controlRows = composerRows + composerBoxRows + composerMarginRows + footerRows;
-  const contentRows = Math.max(1, viewportHeight - controlRows);
-  const transcriptRows = Math.max(1, contentRows - 2);
+  const { contentRows, transcriptRows, footerRows } = computeLayoutRowBudget(
+    viewportHeight,
+    composerRows,
+  );
 
   const chatLines = useMemo(
     () =>
@@ -521,6 +553,7 @@ export function App({
         subagents={subagents}
         shortcutHint={shortcutHint}
         columns={terminalColumns}
+        compact={footerRows === FOOTER_COMPACT_ROWS}
       />
     </Box>
   );

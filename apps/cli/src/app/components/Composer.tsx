@@ -14,8 +14,9 @@ interface Props {
 
 const CURSOR_GLYPH = "█";
 const MAX_COMPOSER_ROWS = 6;
-const ENTER_SUBMIT_SEQUENCES = new Set(["\u001b[13;1u", "\u001b[27;1;13~"]);
-const ENTER_NEWLINE_SEQUENCES = new Set(["\u001b[13;2u", "\u001b[27;2;13~"]);
+// Ink strips the leading ESC byte from unresolved terminal escape sequences.
+const ENTER_SUBMIT_SEQUENCES = new Set(["[13;1u", "[27;1;13~"]);
+const ENTER_NEWLINE_SEQUENCES = new Set(["[13;2u", "[27;2;13~"]);
 
 export function clipeRenderedToMaxRows(rendered: string, columns: number, maxRows: number): string {
   const safeColumns = Math.max(1, columns);

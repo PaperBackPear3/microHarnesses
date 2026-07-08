@@ -50,6 +50,7 @@ npx @micro-harnesses/cli@latest
 
 ## UX notes
 
+- `mh` chat runs in a dedicated full-screen terminal application (alternate screen buffer) and restores your previous shell screen on exit.
 - Chat input/composer is anchored at the bottom of the terminal.
 - Runtime status (mode/model/context/usage/subagents/compression) is rendered in a footer below input to keep the typing area clean.
 - Running and recently completed subagents are shown in the transcript so delegated work is not hidden.
@@ -150,7 +151,7 @@ compressor.
 ## Keybindings
 
 - `Enter` send prompt
-- `Shift+Enter` insert newline
+- `Shift+Enter` insert newline (on terminals that expose Shift+Enter distinctly)
 - Mouse drag uses native terminal text selection for copy/paste
 - Arrow keys move through multi-line composer text; when input is empty, arrows scroll transcript
 - `Shift+Tab` cycle mode (Plan → Accept-edits → Autopilot)

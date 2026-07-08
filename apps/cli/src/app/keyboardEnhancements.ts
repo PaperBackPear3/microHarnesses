@@ -4,9 +4,11 @@ const ENABLE_KITTY_KEYBOARD = "\u001b[>1u";
 const DISABLE_KITTY_KEYBOARD = "\u001b[>0u";
 
 export function enableKeyboardEnhancements(): void {
+  if (!process.stdout.isTTY) return;
   process.stdout.write(`${ENABLE_MODIFY_OTHER_KEYS}${ENABLE_KITTY_KEYBOARD}`);
 }
 
 export function disableKeyboardEnhancements(): void {
+  if (!process.stdout.isTTY) return;
   process.stdout.write(`${DISABLE_KITTY_KEYBOARD}${DISABLE_MODIFY_OTHER_KEYS}`);
 }
