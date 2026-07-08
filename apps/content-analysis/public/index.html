@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Content Analysis</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header>
+    <h1>Content Analysis</h1>
+    <div id="status-bar" class="status-bar">
+      <span id="status-text">Loading…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="input-panel" id="input-panel">
+      <form id="analyze-form" novalidate>
+
+        <!-- File drop zone -->
+        <div class="form-group">
+          <label>Files</label>
+          <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="Upload files">
+            <div class="drop-zone__icon">📂</div>
+            <div class="drop-zone__text">Drag &amp; drop files here, or <span class="link">click to browse</span></div>
+            <input type="file" id="file-input" multiple hidden />
+          </div>
+          <div id="file-chips" class="chips"></div>
+        </div>
+
+        <!-- URL inputs -->
+        <div class="form-group">
+          <label for="url-input">URLs</label>
+          <div class="url-row">
+            <input type="url" id="url-input" placeholder="https://example.com/file.png" />
+            <button type="button" id="add-url-btn" class="btn btn-secondary">Add</button>
+          </div>
+          <div id="url-chips" class="chips"></div>
+        </div>
+
+        <!-- Context and instructions -->
+        <div class="form-group">
+          <label for="text-input">Context <span class="hint">(optional)</span></label>
+          <textarea id="text-input" rows="2" placeholder="Additional context about the content…"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="instructions-input">Instructions <span class="hint">(optional)</span></label>
+          <textarea id="instructions-input" rows="2" placeholder="Focus on…, look for…, ignore…"></textarea>
+        </div>
+
+        <div id="form-error" class="form-error" hidden></div>
+
+        <button type="submit" id="submit-btn" class="btn btn-primary">
+          <span id="submit-label">Analyze</span>
+          <span id="submit-spinner" class="spinner" hidden></span>
+        </button>
+      </form>
+    </section>
+
+    <section id="results-panel" class="results-panel" hidden>
+      <div class="results-header">
+        <h2>Results</h2>
+        <button type="button" id="new-analysis-btn" class="btn btn-secondary btn-sm">New analysis</button>
+      </div>
+
+      <div class="result-card" id="summary-card">
+        <h3>Summary</h3>
+        <p id="summary-text"></p>
+      </div>
+
+      <div class="result-card" id="categories-card">
+        <h3>Categories</h3>
+        <div id="categories-list" class="tag-list"></div>
+      </div>
+
+      <div class="result-card" id="clarifications-card" hidden>
+        <h3>Clarifications</h3>
+        <div id="clarifications-list"></div>
+      </div>
+
+      <div class="result-card" id="items-card" hidden>
+        <h3>Items</h3>
+        <div id="items-list"></div>
+      </div>
+
+      <details class="result-card raw-card">
+        <summary>Raw assistant message</summary>
+        <pre id="raw-text"></pre>
+      </details>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
