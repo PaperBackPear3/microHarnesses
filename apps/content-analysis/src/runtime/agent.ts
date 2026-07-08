@@ -97,9 +97,12 @@ export function createAnalysisAgents(config: ContentAnalysisConfig): AnalysisAge
     name: "document-analysis",
     ...commonOptions,
   }) as unknown as AnalysisAgentHandle;
+  // Synthesis only merges JSON drafts — give it no tools so it cannot waste
+  // iterations trying to read files that may already be cleaned up.
   const synthesisAgent = defineAgent({
     name: "synthesis",
     ...commonOptions,
+    tools: [],
   }) as unknown as AnalysisAgentHandle;
 
   return {

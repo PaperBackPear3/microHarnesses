@@ -726,6 +726,71 @@ test("emits structured provider content parts for multimodal user turns", async 
   }
 });
 
+test("prepends userMessage text to image-only userContent so instructions reach the model", async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "mh-provider-model-textimg-"));
+  const adapter = new FakeAdapter(
+    "m",
+    { assistantMessage: "ok", toolCalls: [], stop: true },
+    { structuredTools: true },
+  );
+  adapter.features = { structuredTools: true, inputParts: { text: true, image: true, file: false } };
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+  try {
+    const imagePath = path.join(tmpDir, "crossword.png");
+    await writeFile(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await model.nextStep(
+      makeInput({
+        workingTurns: [
+          {
+            id: "t1",
+            iteration: 1,
+            // Instructions in userMessage, media-only in userContent
+            userMessage: "Analyze the attached image and return strict JSON.",
+            userContent: [{ type: "image", assetId: "asset-1", mimeType: "image/png" }],
+            assistantMessage: "",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+        resolveInputAsset: async (assetId) =>
+          assetId === "asset-1"
+            ? {
+                id: "asset-1",
+                filename: "crossword.png",
+                mimeType: "image/png",
+                sizeBytes: 4,
+                storagePath: imagePath,
+                createdAt: new Date().toISOString(),
+              }
+            : undefined,
+      }),
+    );
+
+    // The user message must contain BOTH the instruction text AND the image
+    const userMessage = adapter.seenRequest?.messages.find((m) => m.role === "user");
+    assert.ok(userMessage, "user message expected");
+    assert.ok(Array.isArray(userMessage?.content), "content should be an array (multimodal)");
+    if (Array.isArray(userMessage?.content)) {
+      assert.equal(userMessage.content[0]?.type, "text", "first part should be text instruction");
+      assert.equal(
+        (userMessage.content[0] as { type: string; text?: string }).text,
+        "Analyze the attached image and return strict JSON.",
+      );
+      assert.equal(userMessage.content[1]?.type, "image", "second part should be image");
+    }
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test("rejects multimodal input when provider does not declare support", async () => {
   const adapter = new FakeAdapter("m", { assistantMessage: "ok", toolCalls: [], stop: true });
   adapter.features = {

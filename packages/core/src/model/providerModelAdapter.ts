@@ -164,7 +164,18 @@ async function buildMessages(
     // internal loop iterations leave it empty to avoid repeating the prompt.
     const userContent = await mapTurnContentToProvider(turn.userContent, input.resolveInputAsset);
     if (userContent) {
-      messages.push({ role: "user", content: userContent });
+      // When the resolved content has no text parts (e.g. image-only), prepend the
+      // turn's text instruction so the model receives both instructions and media
+      // in a single message instead of getting only the raw image with no context.
+      const parts = Array.isArray(userContent)
+        ? userContent
+        : [{ type: "text" as const, text: String(userContent) }];
+      const hasTextPart = parts.some((p) => p.type === "text");
+      const combined =
+        !hasTextPart && turn.userMessage.trim().length > 0
+          ? [{ type: "text" as const, text: turn.userMessage }, ...parts]
+          : parts;
+      messages.push({ role: "user", content: combined });
     } else if (turn.userMessage.trim().length > 0) {
       messages.push({ role: "user", content: turn.userMessage });
     }

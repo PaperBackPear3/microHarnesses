@@ -12,9 +12,11 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "dependencies": {
-    "@micro-harnesses/core": "^3.3.1"
+    "@micro-harnesses/core": "^3.3.1",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
-    "@types/node": "^22.20.0"
+    "@types/node": "^22.20.0",
+    "@types/pdf-parse": "^1.1.4"
   }
 }

@@ -45,7 +45,15 @@ export async function analyzeSession(
     );
   }
 
-  const combinedDraft = drafts.length > 1 ? mergeAnalysisResults(drafts) : drafts[0];
+  // Skip synthesis entirely when there is only one draft — it adds a full LLM
+  // round-trip (~3–5 min on a local model) with no benefit. For single-source
+  // requests this is always the case.
+  if (drafts.length === 1) {
+    log("info", "synthesis", "Single draft — skipping synthesis pass");
+    return { ...drafts[0], rawAssistantMessage: JSON.stringify(drafts[0], null, 2) };
+  }
+
+  const combinedDraft = mergeAnalysisResults(drafts);
   const synthesisPrompt = [
     "You are the synthesis step for a multimodal content analysis pipeline.",
     "Return strict JSON using the same schema as the drafts.",
@@ -59,13 +67,15 @@ export async function analyzeSession(
   const response = await agents.synthesisAgent.invoke({
     prompt: synthesisPrompt,
     input: {
-      text: input.text ?? input.instructions ?? "",
-      content,
+      // Synthesis receives the full draft JSON in the prompt; passing extra text
+      // or media here would cause the model to try reading files it can't access.
+      text: synthesisPrompt,
     },
     execution: {
       sessionId: input.sessionId,
       goal: "Synthesize content analysis into structured JSON",
-      maxIterations: 4,
+      // Synthesis is a single-pass JSON merge — no tools, no iteration needed.
+      maxIterations: 1,
       snapshotEvery: 1,
       profile: { defaultModel: agents.config.model },
     },

@@ -807,8 +807,7 @@ export class Agent implements AgentHandle {
   }
 
   async invoke(request: AgentInvokeRequest): Promise<AgentRunResult> {
-    const prompt = request.input?.text ?? request.prompt;
-    const state = await this.runWithInput(prompt, request.execution, request.input);
+    const state = await this.runWithInput(request.prompt, request.execution, request.input);
     return {
       summary: state.turns[state.turns.length - 1]?.assistantMessage ?? "",
       state,

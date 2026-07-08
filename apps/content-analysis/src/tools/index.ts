@@ -176,6 +176,17 @@ function pathJoin(...parts: string[]): string {
 }
 
 async function readPreview(storagePath: string, mimeType: string, maxChars = 4000): Promise<string | undefined> {
+  if (mimeType === "application/pdf") {
+    try {
+      const pdfParse = (await import("pdf-parse")).default;
+      const bytes = await import("node:fs/promises").then((fs) => fs.readFile(storagePath));
+      const result = await pdfParse(bytes);
+      const text = result.text.trim();
+      return text.length > 0 ? text.slice(0, maxChars) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
   if (!isTextMimeType(mimeType)) return undefined;
   const bytes = await import("node:fs/promises").then((fs) => fs.readFile(storagePath));
   const text = bytes.toString("utf8").trim();

@@ -156,6 +156,9 @@ export async function buildAnalysisDraftPrompt(
 }
 
 async function buildPreview(asset: InputAsset): Promise<string | undefined> {
+  if (asset.mimeType === "application/pdf") {
+    return extractPdfText(asset.storagePath, 4000);
+  }
   if (!isTextMimeType(asset.mimeType)) {
     return undefined;
   }
@@ -166,6 +169,18 @@ async function buildPreview(asset: InputAsset): Promise<string | undefined> {
     return stripHtml(text).slice(0, 4000);
   }
   return text.slice(0, 4000);
+}
+
+async function extractPdfText(filePath: string, maxChars: number): Promise<string | undefined> {
+  try {
+    const pdfParse = (await import("pdf-parse")).default;
+    const bytes = await readFile(filePath);
+    const result = await pdfParse(bytes);
+    const text = result.text.trim();
+    return text.length > 0 ? text.slice(0, maxChars) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function stripHtml(html: string): string {
