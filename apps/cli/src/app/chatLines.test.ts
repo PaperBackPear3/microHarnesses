@@ -34,8 +34,8 @@ test("does not print literal iteration text for first iteration", () => {
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
 
   assert(!rendered.includes("iteration"));
-  assert(rendered.includes("think > [expanded]"));
-  assert(rendered.includes("agent > response"));
+  assert(rendered.includes("[expanded]"));
+  assert(rendered.includes("● response"));
 });
 
 test("uses #N prefix for iteration > 1", () => {
@@ -62,10 +62,10 @@ test("uses #N prefix for iteration > 1", () => {
 
   const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
-  assert(rendered.includes("think > #2 [expanded]"));
-  assert(rendered.includes("agent > response"));
-  assert(!rendered.includes("agent > #2"), "iteration prefix must not appear in agent text");
-  assert(rendered.includes("diag > #2 tool started: ls"));
+  assert(rendered.includes("#2 [expanded]"));
+  assert(rendered.includes("● response"));
+  assert(!rendered.includes("● #2"), "iteration prefix must not appear in agent text");
+  assert(rendered.includes("∙ #2 tool started: ls"));
 });
 
 test("shows approval prompt even when diagnostics are collapsed", () => {
@@ -86,6 +86,15 @@ test("shows approval prompt even when diagnostics are collapsed", () => {
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
   assert(rendered.includes("approval required: fs_write"));
   assert(rendered.includes("preview line"));
+});
+
+test("does not show collapsed diagnostics hint when nothing is hidden", () => {
+  const lines = buildChatLines([], [], false, undefined, 120, {
+    thinkingExpanded: true,
+    diagnosticsExpanded: false,
+  });
+  const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
+  assert.equal(rendered, "");
 });
 
 test("multi-line agent response has only one agent > prefix", () => {
@@ -110,8 +119,8 @@ test("multi-line agent response has only one agent > prefix", () => {
     },
   ];
   const lines = buildChatLines(entries, [], false, undefined, 120, preferences);
-  const indicatorLines = lines.filter((l) => l.indicator.trim() === "agent >").map((l) => l.text);
-  assert.equal(indicatorLines.length, 1, "only the first line should have the agent > indicator");
+  const indicatorLines = lines.filter((l) => l.indicator.trim() === "●").map((l) => l.text);
+  assert.equal(indicatorLines.length, 1, "only the first line should have the agent indicator");
   assert.equal(indicatorLines[0], "line one");
   const continuationTexts = lines
     .filter((l) => l.indicator.trim() === "" && l.indicator.length > 0)
@@ -143,7 +152,7 @@ test("renders subagent blocks with separate name, status, and stream content", (
   );
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
   assert(rendered.includes("sub > goal-finder [running]"));
-  assert(rendered.includes("diag > subagents"));
+  assert(rendered.includes("subagents"));
   assert(rendered.includes("persona=coder"));
   assert(rendered.includes("thinking [expanded]:"));
   assert(rendered.includes("output:"));
@@ -176,8 +185,8 @@ test("bounds long thinking blocks to avoid filling transcript", () => {
   const rendered = lines.map((line) => `${line.indicator}${line.text}`).join("\n");
   assert(rendered.includes("... 2 line(s) hidden"));
   assert.equal(
-    lines.some((line) => line.indicator === "       " && line.text === "1"),
+    lines.some((line) => line.indicator === "  " && line.text === "1"),
     false,
   );
-  assert(rendered.includes("       10"));
+  assert(lines.some((line) => line.text === "10"));
 });

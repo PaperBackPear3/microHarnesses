@@ -17,12 +17,15 @@ import {
   stageAttachment,
 } from "./attachments.js";
 import { buildChatLines } from "./chatLines.js";
+import { copyToClipboard } from "./clipboard.js";
 import { Composer, estimateComposerRows } from "./components/Composer.js";
 import { FooterStatusBar } from "./components/FooterStatusBar.js";
 import { HelpScreen, Screen } from "./components/Screens.js";
+import { containsTerminalMouseSequence, parseMouseWheelDelta } from "./mouseSequences.js";
 import { handleSlashCommand } from "./slashController.js";
 import { ChatStore } from "./store/chatStore.js";
 import { useChatStore } from "./store/useChatStore.js";
+import type { ChatEntry } from "./transcript.js";
 import {
   compactShortcutHintLine,
   contextBadgeStyle,
@@ -66,12 +69,20 @@ export function App({
 
   useEffect(() => () => chatStore.dispose(), [chatStore]);
 
+  useEffect(() => {
+    process.stdout.write("\u001b[?1000h\u001b[?1006h");
+    return () => {
+      process.stdout.write("\u001b[?1000l\u001b[?1006l");
+    };
+  }, []);
+
   const mode = composition.modeController.getMode();
   const modeStyle = modePromptStyle(mode);
   const contextStyle = contextBadgeStyle(status);
   const modelLabel = modelBadgeLabel(composition.runtimeState.model ?? status.model);
   const shortcutHint = compactShortcutHintLine();
   const terminalColumns = Math.max(process.stdout.columns ?? 120, 40);
+  const transcriptWidth = Math.max(28, terminalColumns - 8);
   const modelChoices = useMemo(
     () => availableModelChoices(composition.runtimeState.provider),
     [composition.runtimeState.provider],
@@ -79,15 +90,16 @@ export function App({
 
   const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
   const composerRows = estimateComposerRows(input, Math.max(20, terminalColumns - 10));
-  const composerBoxRows = 1;
+  const composerBoxRows = 2;
   const footerMarginRows = 1;
-  const footerTextRows = 3;
+  const footerTextRows = 5;
   const controlRows = composerRows + composerBoxRows + footerMarginRows + footerTextRows;
   const contentRows = Math.max(1, viewportHeight - controlRows);
+  const transcriptRows = Math.max(1, contentRows - 2);
 
   const chatLines = useMemo(
     () =>
-      buildChatLines(chatEntries, subagents, status.compressing, pendingApproval, terminalColumns, {
+      buildChatLines(chatEntries, subagents, status.compressing, pendingApproval, transcriptWidth, {
         diagnosticsExpanded,
         thinkingExpanded,
       }),
@@ -96,14 +108,14 @@ export function App({
       subagents,
       status.compressing,
       pendingApproval,
-      terminalColumns,
+      transcriptWidth,
       diagnosticsExpanded,
       thinkingExpanded,
     ],
   );
   const transcriptViewport = useMemo(
-    () => sliceFromBottom(chatLines, contentRows, chatScrollOffset),
-    [chatLines, contentRows, chatScrollOffset],
+    () => sliceFromBottom(chatLines, transcriptRows, chatScrollOffset),
+    [chatLines, transcriptRows, chatScrollOffset],
   );
 
   useEffect(() => {
@@ -113,9 +125,17 @@ export function App({
   }, [chatScrollOffset, transcriptViewport.maxOffset]);
 
   useInput((raw, key) => {
+    if (containsTerminalMouseSequence(raw)) {
+      const wheel = parseMouseWheelDelta(raw);
+      if (wheel !== 0 && screen === "chat" && !pendingApproval) {
+        setChatScrollOffset((offset) => Math.max(0, offset + wheel));
+      }
+      return;
+    }
+
     const canScrollTranscript = screen === "chat" && input.length === 0 && !pendingApproval;
     if (canScrollTranscript) {
-      const pageStep = Math.max(1, Math.floor(contentRows * 0.8));
+      const pageStep = Math.max(1, Math.floor(transcriptRows * 0.8));
       if (key.upArrow) {
         setChatScrollOffset((offset) => offset + 1);
         return;
@@ -204,6 +224,32 @@ export function App({
 
       const slash = parseSlashCommand(trimmed);
       if (slash) {
+        if (slash.type === "invalid-copy-scope") {
+          chatStore.appendSystemMessage(
+            `Unknown copy scope "${slash.value}". Use /copy [last|visible|all].`,
+          );
+          setInput("");
+          return;
+        }
+        if (slash.type === "copy-transcript") {
+          const payload = buildCopyPayload(
+            slash.scope,
+            chatEntries,
+            subagents,
+            chatLines,
+            transcriptViewport.visible,
+          );
+          if (!payload) {
+            chatStore.appendSystemMessage("Nothing available to copy.");
+          } else {
+            copyToClipboard(payload);
+            chatStore.appendSystemMessage(
+              `Copied ${slash.scope === "last" ? "last response" : `${slash.scope} transcript`} to clipboard.`,
+            );
+          }
+          setInput("");
+          return;
+        }
         if (slash.type === "attach-file") {
           try {
             const staged = await stageAttachment(slash.filePath);
@@ -338,6 +384,10 @@ export function App({
       status,
       onExit,
       stagedAttachments,
+      chatEntries,
+      subagents,
+      chatLines,
+      transcriptViewport.visible,
     ],
   );
 
@@ -377,21 +427,35 @@ export function App({
 
   return (
     <Box flexDirection="column" height={viewportHeight}>
-      <Box flexDirection="column" height={contentRows}>
+      <Box
+        flexDirection="column"
+        height={contentRows}
+        borderStyle="round"
+        borderColor="gray"
+        paddingX={1}
+      >
         {screen === "chat" ? (
-          <>
-            {transcriptViewport.visible.map((line) => (
-              <Text key={line.id}>
-                <Text color={line.indicatorColor}>{line.indicator}</Text>
-                <Text color={line.textColor}>{line.text}</Text>
-              </Text>
-            ))}
-            {transcriptViewport.offset > 0 ? (
-              <Text color="gray">
-                ↑ scrolled {transcriptViewport.offset} lines ({transcriptViewport.maxOffset} max)
-              </Text>
-            ) : null}
-          </>
+          <Box flexDirection="row" height={transcriptRows}>
+            <Box flexDirection="column" flexGrow={1}>
+              {transcriptViewport.visible.map((line) => (
+                <Text key={line.id} backgroundColor="blackBright">
+                  <Text color={line.indicatorColor}>{line.indicator}</Text>
+                  <Text color={line.textColor ?? "whiteBright"}>{line.text}</Text>
+                </Text>
+              ))}
+            </Box>
+            <Box flexDirection="column" width={1} marginLeft={1}>
+              {buildScrollbarRail(
+                Math.max(1, transcriptViewport.visible.length),
+                transcriptViewport.offset,
+                transcriptViewport.maxOffset,
+              ).map((entry) => (
+                <Text key={entry.id} color={entry.color}>
+                  {entry.char}
+                </Text>
+              ))}
+            </Box>
+          </Box>
         ) : null}
 
         {screen === "sessions" && <Screen title="Sessions">{screenContent}</Screen>}
@@ -403,27 +467,43 @@ export function App({
         )}
       </Box>
 
-      <Box>
-        <Text color={modeStyle.color}>[{modeStyle.label}] </Text>
-        <Text color={modeStyle.color}>› </Text>
-        {pendingApproval ? (
-          <Text color="yellow">awaiting approval (y/n/a)</Text>
-        ) : (
-          <Composer
-            value={input}
-            onChange={setInput}
-            onSubmit={submit}
-            disabled={switchingSession}
-            columns={Math.max(20, terminalColumns - 10)}
-          />
-        )}
-        {running && (
-          <Box marginLeft={1}>
-            <Text color="yellow">
-              <Spinner type="dots" /> running
-            </Text>
+      <Box flexDirection="column" marginTop={1}>
+        {stagedAttachments.length > 0 ? (
+          <Box flexWrap="wrap" marginBottom={1}>
+            {stagedAttachments.map((file, index) => (
+              <Text key={`attach-chip-${file.path}`} color="black" backgroundColor="cyan">
+                {" "}
+                {index + 1}:{file.filename}{" "}
+              </Text>
+            ))}
           </Box>
-        )}
+        ) : null}
+        <Box
+          borderStyle="round"
+          borderColor={modeStyle.color}
+          backgroundColor="blackBright"
+          paddingX={1}
+        >
+          <Text color={modeStyle.color}>▍ </Text>
+          {pendingApproval ? (
+            <Text color="yellow">awaiting approval (y/n/a)</Text>
+          ) : (
+            <Composer
+              value={input}
+              onChange={setInput}
+              onSubmit={submit}
+              disabled={switchingSession}
+              columns={Math.max(20, terminalColumns - 16)}
+            />
+          )}
+          {running && (
+            <Box marginLeft={1}>
+              <Text color="yellow">
+                <Spinner type="dots" /> running
+              </Text>
+            </Box>
+          )}
+        </Box>
       </Box>
 
       <FooterStatusBar
@@ -468,4 +548,88 @@ async function tryStageDroppedFiles(input: string): Promise<StagedAttachment[] |
     }
   }
   return staged.length > 0 ? staged : undefined;
+}
+
+export function buildScrollbarRail(
+  rows: number,
+  offset: number,
+  maxOffset: number,
+): Array<{
+  id: string;
+  char: string;
+  color: "gray" | "cyan";
+}> {
+  const safeRows = Math.max(1, rows);
+  if (maxOffset <= 0) {
+    return Array.from({ length: safeRows }, (_, index) => ({
+      id: `scrollbar-${index}`,
+      char: "│",
+      color: "gray" as const,
+    }));
+  }
+  const thumbSize = Math.max(1, Math.floor((safeRows * safeRows) / (safeRows + maxOffset)));
+  const travel = Math.max(0, safeRows - thumbSize);
+  const ratio = maxOffset > 0 ? (maxOffset - offset) / maxOffset : 0;
+  const start = Math.max(0, Math.min(travel, Math.round(travel * ratio)));
+  return Array.from({ length: safeRows }, (_, index) => {
+    const active = index >= start && index < start + thumbSize;
+    return {
+      id: `scrollbar-${index}`,
+      char: active ? "█" : "│",
+      color: active ? ("cyan" as const) : ("gray" as const),
+    };
+  });
+}
+
+export function buildCopyPayload(
+  scope: "last" | "visible" | "all",
+  entries: ChatEntry[],
+  subagents: Array<{ outputText?: string }>,
+  allLines: Array<{ indicator: string; text: string }>,
+  visibleLines: Array<{ indicator: string; text: string }>,
+): string | undefined {
+  if (scope === "visible") {
+    const text = visibleLines
+      .map((line) => `${line.indicator}${line.text}`)
+      .join("\n")
+      .trim();
+    return text.length > 0 ? text : undefined;
+  }
+  if (scope === "all") {
+    const text = allLines
+      .map((line) => `${line.indicator}${line.text}`)
+      .join("\n")
+      .trim();
+    return text.length > 0 ? text : undefined;
+  }
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i];
+    if (!entry || !entry.turn) continue;
+    for (let j = entry.turn.steps.length - 1; j >= 0; j -= 1) {
+      const step = entry.turn.steps[j];
+      if (step?.assistantText?.trim()) return step.assistantText.trim();
+    }
+  }
+  for (let i = subagents.length - 1; i >= 0; i -= 1) {
+    const outputText = subagents[i]?.outputText?.trim();
+    if (outputText) return outputText;
+  }
+  for (let i = allLines.length - 1; i >= 0; i -= 1) {
+    const line = allLines[i];
+    const text = line?.text?.trim();
+    if (!text) continue;
+    if (line.indicator === "∙ " || line.indicator === "❯ " || line.indicator === "◌ ") continue;
+    if (
+      text.startsWith("persona=") ||
+      text.startsWith("tools:") ||
+      text.startsWith("thinking [") ||
+      text === "output:" ||
+      text.startsWith("summary:") ||
+      text.startsWith("error:")
+    ) {
+      continue;
+    }
+    return text;
+  }
+  return undefined;
 }

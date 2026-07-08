@@ -139,6 +139,7 @@ compressor.
 - Modes: `/plan`, `/edits`, `/autopilot`, `/mode <...>`
 - Persona: `/persona` (show current), `/persona <name>` (set prompt pack)
 - Attachments: `/attach <path>`, `/attachments`, `/detach <index|name>`
+- Clipboard: `/copy [last|visible|all]`
 - Model/provider: `/model [id]`, `/provider <id>`, `/effort <...>`, `/route <auto|cost|speed|intelligence|balanced|off>`
 - Sessions: `/new`, `/sessions`, `/session <id>`, `/resume <id>`
 - Screens: `/chat`, `/context`, `/telemetry`, `/help` (or `/commands`)
@@ -150,6 +151,7 @@ compressor.
 
 - `Enter` send prompt
 - `Shift+Enter` insert newline
+- Mouse wheel scroll transcript
 - Arrow keys move through multi-line composer text; when input is empty, arrows scroll transcript
 - `Shift+Tab` cycle mode (Plan → Accept-edits → Autopilot)
 - `Ctrl+T` toggle reasoning collapse

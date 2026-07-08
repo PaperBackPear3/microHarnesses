@@ -2,6 +2,7 @@ import { Text, useInput, usePaste } from "ink";
 import type { Key } from "ink";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
+import { containsTerminalMouseSequence } from "../mouseSequences.js";
 
 interface Props {
   value: string;
@@ -61,6 +62,7 @@ export function Composer({ value, disabled, columns, onChange, onSubmit }: Props
   const handleInput = useCallback(
     (input: string, key: Key) => {
       if (disabled) return;
+      if (containsTerminalMouseSequence(input)) return;
 
       if (key.return) {
         if (key.shift) {

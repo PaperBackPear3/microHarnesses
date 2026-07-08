@@ -65,6 +65,9 @@ test("contextBadgeStyle maps utilization to colors", () => {
 test("help lines include commands and shortcuts discoverability", () => {
   const commands = helpCommandLines(["gpt-5.3-codex", "claude-sonnet-5"]);
   assert(commands.includes("/help | /commands"));
+  assert(commands.includes("Attachments:"));
+  assert(commands.includes("Utilities:"));
+  assert(commands.includes("/copy [last|visible|all]"));
   assert(commands.includes("/compact"));
   assert(commands.includes("/wait"));
   assert(
@@ -88,6 +91,14 @@ test("help lines include commands and shortcuts discoverability", () => {
     "expected multiline composer shortcut",
   );
   assert(
+    shortcuts.some((line) => line.startsWith("Mouse wheel")),
+    "expected mouse wheel shortcut",
+  );
+  assert(
+    shortcuts.some((line) => line.startsWith("/copy")),
+    "expected copy command shortcut hint",
+  );
+  assert(
     shortcuts.some((line) => line.startsWith("← / →")),
     "expected cursor movement shortcut",
   );
@@ -104,6 +115,7 @@ test("help lines include commands and shortcuts discoverability", () => {
     "expected interrupt shortcut",
   );
   assert.match(compactShortcutHintLine(), /Shift\+Enter newline/);
+  assert.match(compactShortcutHintLine(), /wheel\/PgUp\/PgDn scroll/);
+  assert.match(compactShortcutHintLine(), /\/copy clipboard/);
   assert.match(compactShortcutHintLine(), /Ctrl\+Y diagnostics/);
-  assert.match(compactShortcutHintLine(), /\/help commands\+shortcuts/);
 });

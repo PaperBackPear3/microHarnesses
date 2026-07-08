@@ -53,10 +53,17 @@ export function FooterStatusBar(props: {
     props.columns,
   );
   return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text>{line1}</Text>
-      <Text>{line2}</Text>
-      <Text color="gray">{trimToColumns(props.shortcutHint, props.columns)}</Text>
+    <Box
+      flexDirection="column"
+      marginTop={1}
+      borderStyle="single"
+      borderColor="gray"
+      paddingX={1}
+      backgroundColor="black"
+    >
+      <Text color="whiteBright">{line1}</Text>
+      <Text color="gray">{line2}</Text>
+      <Text color="cyan">{trimToColumns(props.shortcutHint, props.columns)}</Text>
     </Box>
   );
 }

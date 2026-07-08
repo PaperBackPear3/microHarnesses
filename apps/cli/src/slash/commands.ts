@@ -30,6 +30,8 @@ export type SlashCommand =
   | { type: "show-telemetry" }
   | { type: "show-help" }
   | { type: "show-chat" }
+  | { type: "invalid-copy-scope"; value: string }
+  | { type: "copy-transcript"; scope: "last" | "visible" | "all" }
   | { type: "clear" }
   | { type: "exit" };
 
@@ -86,6 +88,13 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
   if (command === "telemetry") return { type: "show-telemetry" };
   if (command === "help" || command === "commands") return { type: "show-help" };
   if (command === "chat") return { type: "show-chat" };
+  if (command === "copy") {
+    const scope = args[0]?.toLowerCase();
+    if (!scope || scope === "last") return { type: "copy-transcript", scope: "last" };
+    if (scope === "visible") return { type: "copy-transcript", scope: "visible" };
+    if (scope === "all") return { type: "copy-transcript", scope: "all" };
+    return { type: "invalid-copy-scope", value: args[0] };
+  }
   if (command === "clear") return { type: "clear" };
   if (command === "exit" || command === "quit") return { type: "exit" };
   return undefined;

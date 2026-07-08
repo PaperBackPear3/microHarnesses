@@ -41,6 +41,19 @@ test("parses attachment commands", () => {
   assert.deepEqual(parseSlashCommand("/detach 1"), { type: "detach-file", target: "1" });
 });
 
+test("parses copy command variants", () => {
+  assert.deepEqual(parseSlashCommand("/copy"), { type: "copy-transcript", scope: "last" });
+  assert.deepEqual(parseSlashCommand("/copy visible"), {
+    type: "copy-transcript",
+    scope: "visible",
+  });
+  assert.deepEqual(parseSlashCommand("/copy all"), { type: "copy-transcript", scope: "all" });
+  assert.deepEqual(parseSlashCommand("/copy invalid"), {
+    type: "invalid-copy-scope",
+    value: "invalid",
+  });
+});
+
 test("parses /model with no args as list-models", () => {
   assert.deepEqual(parseSlashCommand("/model"), { type: "list-models" });
 });

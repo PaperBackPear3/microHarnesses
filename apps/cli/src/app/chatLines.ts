@@ -23,9 +23,10 @@ export interface SubagentStatus {
 export interface ChatRenderLine {
   id: string;
   indicator: string;
-  indicatorColor?: "gray" | "cyan" | "yellow" | "green" | "blue";
+  indicatorColor?: "gray" | "cyan" | "yellow" | "green" | "blue" | "magenta" | "white";
   text: string;
-  textColor?: "gray" | "cyan" | "yellow" | "green";
+  textColor?: "gray" | "cyan" | "yellow" | "green" | "white" | "magenta";
+  backgroundColor?: "black" | "blackBright";
 }
 
 interface LineStyle {
@@ -67,12 +68,12 @@ export function buildChatLines(
     }
   }
 
-  const userStyle: LineStyle = { indicator: "user > ", indicatorColor: "blue" };
-  const thinkingHeaderStyle: LineStyle = { indicator: "think > ", indicatorColor: "yellow" };
-  const thinkingBodyStyle: LineStyle = { indicator: "       ", textColor: "gray" };
-  const assistantStyle: LineStyle = { indicator: "agent > ", indicatorColor: "green" };
+  const userStyle: LineStyle = { indicator: "❯ ", indicatorColor: "magenta", textColor: "magenta" };
+  const thinkingHeaderStyle: LineStyle = { indicator: "◌ ", indicatorColor: "yellow" };
+  const thinkingBodyStyle: LineStyle = { indicator: "  ", textColor: "gray" };
+  const assistantStyle: LineStyle = { indicator: "● ", indicatorColor: "cyan", textColor: "white" };
   const systemStyle: LineStyle = {
-    indicator: "diag > ",
+    indicator: "∙ ",
     indicatorColor: "gray",
     textColor: "gray",
   };
@@ -89,6 +90,13 @@ export function buildChatLines(
     if (!entry.turn) continue;
     if (entry.turn.userText) {
       pushWrapped(lines, `${entry.id}-user`, userStyle, entry.turn.userText, columns);
+      pushWrapped(
+        lines,
+        `${entry.id}-spacer-user`,
+        { indicator: "  ", textColor: "gray" },
+        "",
+        columns,
+      );
     }
     for (const step of entry.turn.steps) {
       if (step.thinkingText.length > 0) {
@@ -132,6 +140,7 @@ export function buildChatLines(
       for (const subagent of stepSubagents) {
         pushSubagentBlock(lines, subagent, columns, preferences.thinkingExpanded);
       }
+      pushWrapped(lines, `${step.id}-spacer`, { indicator: "  ", textColor: "gray" }, "", columns);
     }
   }
 
@@ -159,7 +168,7 @@ export function buildChatLines(
       lines,
       "approval-title",
       {
-        indicator: "diag > ",
+        indicator: "∙ ",
         indicatorColor: "yellow",
         textColor: "gray",
       },
@@ -170,7 +179,7 @@ export function buildChatLines(
       lines,
       "approval-preview",
       {
-        indicator: "diag > ",
+        indicator: "∙ ",
         indicatorColor: "gray",
         textColor: "gray",
       },
@@ -199,13 +208,15 @@ export function buildChatLines(
         columns,
       );
     }
-    pushWrapped(
-      lines,
-      "diag-hint",
-      { indicator: "diag > ", indicatorColor: "gray", textColor: "gray" },
-      "press Ctrl+Y to expand diagnostics",
-      columns,
-    );
+    if (hiddenTotal > 0 || hiddenSubagentCount > 0) {
+      pushWrapped(
+        lines,
+        "diag-hint",
+        { indicator: "∙ ", indicatorColor: "gray", textColor: "gray" },
+        "press Ctrl+Y to expand diagnostics",
+        columns,
+      );
+    }
   }
 
   return lines;
@@ -235,7 +246,7 @@ function pushSubagentBlock(
       indicator: "sub > ",
       indicatorColor:
         subagent.status === "running"
-          ? "green"
+          ? "cyan"
           : subagent.status === "completed"
             ? "green"
             : "yellow",

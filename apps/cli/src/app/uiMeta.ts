@@ -18,24 +18,34 @@ const MODE_PROMPT_STYLES: Record<HarnessMode, LabeledColor> = {
 };
 
 const HELP_COMMAND_LINES_BASE = [
+  "Agent mode & persona:",
   "/plan | /edits | /autopilot",
   "/mode <plan|accept-edits|autopilot>",
   "/persona [name]",
+  "",
+  "Attachments:",
   "/attach <path>",
   "/attachments",
   "/detach <index|name>",
+  "",
+  "Model routing:",
   "/effort <low|medium|high>",
   "/provider <openai|anthropic|ollama>",
   "/route <auto|cost|speed|intelligence|balanced|off>",
+  "",
+  "Sessions & panels:",
   "/new",
   "/sessions",
   "/session <id>",
   "/resume <id>",
   "/context",
-  "/compact",
-  "/wait",
   "/telemetry",
   "/chat",
+  "",
+  "Utilities:",
+  "/copy [last|visible|all]",
+  "/compact",
+  "/wait",
   "/clear",
   "/exit",
   "/help | /commands",
@@ -50,8 +60,10 @@ const KEYBOARD_SHORTCUTS: readonly Shortcut[] = [
   { keys: "Shift+Tab", description: "cycle mode (plan → edits → autopilot)" },
   { keys: "Ctrl+T", description: "toggle collapse for all reasoning" },
   { keys: "Ctrl+Y", description: "toggle diagnostics expand/collapse" },
+  { keys: "Mouse wheel", description: "scroll transcript" },
   { keys: "↑ / ↓", description: "scroll transcript (when input is empty)" },
   { keys: "PgUp / PgDn", description: "page transcript scroll (when input is empty)" },
+  { keys: "/copy", description: "copy transcript to clipboard" },
   { keys: "Esc / Ctrl+C", description: "interrupt current run" },
   { keys: "Ctrl+D", description: "exit chat" },
   { keys: "y / n / a", description: "approval: approve / reject / always" },
@@ -80,17 +92,14 @@ export function contextBadgeStyle(status: StatusState): LabeledColor {
 }
 
 export function compactShortcutHintLine(): string {
-  return "Shift+Enter newline · arrows move cursor · Shift+Tab mode · Ctrl+T thinking · Ctrl+Y diagnostics · PgUp/PgDn page · Esc/Ctrl+C stop · /help commands+shortcuts";
+  return "Shift+Enter newline · wheel/PgUp/PgDn scroll · Ctrl+T thinking · Ctrl+Y diagnostics · /copy clipboard · Esc/Ctrl+C stop";
 }
 
 export function helpCommandLines(modelChoices: string[]): string[] {
-  return [
-    HELP_COMMAND_LINES_BASE[0],
-    HELP_COMMAND_LINES_BASE[1],
-    HELP_COMMAND_LINES_BASE[2],
-    `/model [id] (no args lists models across all configured providers; choices: ${modelChoices.join(", ") || "provider defaults"}; "auto" clears override)`,
-    ...HELP_COMMAND_LINES_BASE.slice(3),
-  ];
+  const modelLine = `/model [id] (no args lists models across all configured providers; choices: ${modelChoices.join(", ") || "provider defaults"}; "auto" clears override)`;
+  return HELP_COMMAND_LINES_BASE.flatMap((line) =>
+    line === "Model routing:" ? [line, modelLine] : [line],
+  );
 }
 
 export function helpShortcutLines(): string[] {

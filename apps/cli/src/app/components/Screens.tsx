@@ -4,9 +4,9 @@ import { helpCommandLines, helpShortcutLines } from "../uiMeta.js";
 
 export function Screen({ title, children }: { title: string; children: string }): ReactElement {
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan">
-      <Text color="cyan">{title}</Text>
-      <Text>{children}</Text>
+    <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>
+      <Text color="cyanBright">{title}</Text>
+      <Text color="whiteBright">{children}</Text>
     </Box>
   );
 }
@@ -20,14 +20,21 @@ export function HelpScreen({
 }): ReactElement {
   const commandLines = helpCommandLines(modelChoices);
   const shortcutLines = helpShortcutLines();
-  const lines = [
-    `Version: v${cliVersion}`,
-    "",
-    "Slash commands:",
-    ...commandLines.map((line) => `  ${line}`),
-    "",
-    "Keyboard shortcuts:",
-    ...shortcutLines.map((line) => `  ${line}`),
-  ].join("\n");
-  return <Screen title="Commands & Shortcuts">{lines}</Screen>;
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Screen title="CLI HELP">
+        {`Version v${cliVersion}\nUse /commands anytime to reopen this panel.`}
+      </Screen>
+      <Box gap={1}>
+        <Box flexGrow={1}>
+          <Screen title="Slash Commands">
+            {commandLines.map((line) => `  ${line}`).join("\n")}
+          </Screen>
+        </Box>
+        <Box flexGrow={1}>
+          <Screen title="Shortcuts">{shortcutLines.map((line) => `  ${line}`).join("\n")}</Screen>
+        </Box>
+      </Box>
+    </Box>
+  );
 }
