@@ -105,3 +105,39 @@ test("listModels surfaces real context window from max_input_tokens", async () =
   assert.equal(models[0]?.label, "Claude Sonnet 4.5");
   assert.equal(models[0]?.contextWindowTokens, 200_000);
 });
+
+test("maps structured image/file content into Anthropic blocks", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return makeResponse("end_turn");
+  };
+  const adapter = new AnthropicAdapter({ fetchImpl });
+  await adapter.complete(
+    {
+      model: "claude-test",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "review attached docs" },
+            { type: "image", mimeType: "image/png", dataBase64: "iVBORw0KGgo=" },
+            {
+              type: "file",
+              mimeType: "application/pdf",
+              filename: "spec.pdf",
+              dataBase64: "JVBERi0xLjQ=",
+            },
+          ],
+        },
+      ],
+    },
+    { apiKey: "k" },
+  );
+
+  const messages = capturedBody?.messages as Array<{ content: Array<Record<string, unknown>> }>;
+  const parts = messages[0]?.content;
+  assert.equal(parts[0]?.type, "text");
+  assert.equal(parts[1]?.type, "image");
+  assert.equal(parts[2]?.type, "document");
+});

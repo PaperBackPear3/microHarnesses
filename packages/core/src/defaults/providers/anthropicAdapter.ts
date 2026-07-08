@@ -13,6 +13,7 @@ import type {
   CompletionRequest,
   ProviderAdapter,
   ProviderAuth,
+  ProviderContentPart,
   ProviderModelInfo,
   ProviderResponse,
   ProviderStreamEvent,
@@ -39,7 +40,10 @@ function stopReasonIndicatesStop(reason: string | undefined | null): boolean {
 export class AnthropicAdapter implements ProviderAdapter {
   readonly providerId = "anthropic" as const;
   readonly defaultModel: string;
-  readonly features = { structuredTools: true } as const;
+  readonly features = {
+    structuredTools: true,
+    inputParts: { text: true, image: true, file: true, inlineBinary: true },
+  } as const;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: AnthropicAdapterOptions = {}) {
@@ -143,7 +147,7 @@ export class AnthropicAdapter implements ProviderAdapter {
       .filter((m) => m.role === "user" || m.role === "assistant")
       .map((m) => ({
         role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content,
+        content: toAnthropicContent(m.content),
       }));
 
     return {
@@ -174,7 +178,11 @@ export class AnthropicAdapter implements ProviderAdapter {
     }
   }
 
-  private *emitDelta(delta: { type?: string; text?: string; thinking?: string }): IterableIterator<ProviderStreamEvent> {
+  private *emitDelta(delta: {
+    type?: string;
+    text?: string;
+    thinking?: string;
+  }): IterableIterator<ProviderStreamEvent> {
     if (delta.type === "text_delta" && delta.text && delta.text.length > 0) {
       yield { type: "assistant.delta", delta: delta.text };
       return;
@@ -235,4 +243,39 @@ export class AnthropicAdapter implements ProviderAdapter {
       })
       .join("");
   }
+}
+
+function toAnthropicContent(content: string | ProviderContentPart[]): MessageParam["content"] {
+  if (typeof content === "string") return content;
+  return content.map((part) => {
+    if (part.type === "text") {
+      return { type: "text", text: part.text };
+    }
+    if (part.type === "image") {
+      const mediaType =
+        part.mimeType === "image/jpeg" ||
+        part.mimeType === "image/png" ||
+        part.mimeType === "image/gif" ||
+        part.mimeType === "image/webp"
+          ? part.mimeType
+          : "image/png";
+      return {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: part.dataBase64,
+        },
+      };
+    }
+    return {
+      type: "document",
+      source: {
+        type: "base64",
+        media_type: part.mimeType,
+        data: part.dataBase64,
+      },
+      title: part.title ?? part.filename,
+    };
+  }) as unknown as MessageParam["content"];
 }

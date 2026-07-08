@@ -81,6 +81,31 @@ await pluginHost.register([
 ]);
 ```
 
+## Export telemetry to OTLP / Prometheus
+
+Use `@micro-harnesses/plugin-observability-otel` to bridge core traces/metrics/logs
+to OTLP backends (Collector, Tempo/Jaeger, Loki-compatible pipelines) or expose
+Prometheus pull metrics:
+
+```ts
+import { ObservabilityOtelPlugin } from "@micro-harnesses/plugin-observability-otel";
+
+await pluginHost.register([
+  new ObservabilityOtelPlugin({
+    endpoint: "http://127.0.0.1:4318",
+    metrics: { mode: "otlp", exportIntervalMillis: 2000 },
+  }),
+]);
+```
+
+Prometheus pull mode:
+
+```ts
+new ObservabilityOtelPlugin({
+  metrics: { mode: "prometheus", port: 9464, endpoint: "/metrics" },
+});
+```
+
 ## Minimal custom plugin
 
 ```ts

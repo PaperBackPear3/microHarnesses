@@ -87,6 +87,24 @@ This page documents package functionality and the concepts each package is respo
 
 ---
 
+## `@micro-harnesses/plugin-observability-otel`
+
+**Role**: concrete OTLP/Prometheus exporter plugin for core observability signals.
+
+### Main capabilities
+
+- Registers trace, metric, and log exporters through the `"observability"` plugin capability.
+- Exports to OTLP HTTP endpoints (`/v1/traces`, `/v1/metrics`, `/v1/logs`) with configurable headers and batching.
+- Supports Prometheus pull mode for metrics (`/metrics`) as an alternative to OTLP push.
+
+### Concepts
+
+- **Core remains zero-dependency**: this plugin owns backend export behavior.
+- **Signal-specific config**: independent trace/metric/log enablement and endpoints.
+- **Lifecycle-aware exporters**: exporters implement `forceFlush()` / `shutdown()`.
+
+---
+
 ## `@micro-harnesses/cli`
 
 **Role**: agentic coding CLI built on core.

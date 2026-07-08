@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { CredentialsRegistry } from "../providers/credentialsRegistry";
 import { ProviderRegistry } from "../providers/registry";
@@ -16,7 +19,7 @@ import type { StepInput } from "./types";
 
 class FakeAdapter implements ProviderAdapter {
   readonly providerId = "fake";
-  features?: { structuredTools?: boolean };
+  features?: ProviderAdapter["features"];
   constructor(
     readonly defaultModel: string | undefined,
     private readonly response: ProviderResponse,
@@ -80,6 +83,15 @@ function makeInput(overrides: Partial<StepInput> = {}): StepInput {
     iteration: 1,
     ...overrides,
   };
+}
+
+function contentText(
+  content: string | Array<{ type: "text"; text: string } | { type: string }>,
+): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((part) => ("type" in part && part.type === "text" && "text" in part ? part.text : ""))
+    .join("");
 }
 
 test("resolves model precedence: selectedModel > constructor model > defaultModel", async () => {
@@ -349,7 +361,7 @@ test("injects fallback tool catalog for providers without structured tools", asy
     }),
   );
 
-  const system = adapter.seenRequest?.messages[0]?.content ?? "";
+  const system = contentText(adapter.seenRequest?.messages[0]?.content ?? "");
   assert.match(system, /Runtime tool catalog/);
   assert.match(system, /time/);
   assert.match(system, /Do not append parentheses/);
@@ -384,7 +396,7 @@ test("does not inject fallback tool catalog for structured-tools providers", asy
     }),
   );
 
-  const system = adapter.seenRequest?.messages[0]?.content ?? "";
+  const system = contentText(adapter.seenRequest?.messages[0]?.content ?? "");
   assert.doesNotMatch(system, /Runtime tool catalog/);
 });
 
@@ -421,12 +433,12 @@ test("includes prior tool execution feedback in subsequent messages", async () =
   );
 
   const feedback = adapter.seenRequest?.messages.find((m) =>
-    m.content.includes("Tool execution feedback from the previous step:"),
+    contentText(m.content).includes("Tool execution feedback from the previous step:"),
   );
   assert.ok(feedback);
   assert.equal(feedback?.role, "user");
-  assert.match(feedback?.content ?? "", /time/);
-  assert.match(feedback?.content ?? "", /2026-01-01T00:00:00.000Z/);
+  assert.match(contentText(feedback?.content ?? ""), /time/);
+  assert.match(contentText(feedback?.content ?? ""), /2026-01-01T00:00:00.000Z/);
 });
 
 test("tool feedback includes long shell stdout for file lists", async () => {
@@ -446,7 +458,9 @@ test("tool feedback includes long shell stdout for file lists", async () => {
     providerId: "fake",
   });
 
-  const fileList = Array.from({ length: 140 }, (_, i) => `packages/core/src/file-${i}.ts`).join("\n");
+  const fileList = Array.from({ length: 140 }, (_, i) => `packages/core/src/file-${i}.ts`).join(
+    "\n",
+  );
   await model.nextStep(
     makeInput({
       workingTurns: [
@@ -455,7 +469,9 @@ test("tool feedback includes long shell stdout for file lists", async () => {
           iteration: 1,
           userMessage: "List changed files",
           assistantMessage: "",
-          toolCalls: [{ name: "shell_exec", input: { command: "git diff --name-only HEAD^ HEAD" } }],
+          toolCalls: [
+            { name: "shell_exec", input: { command: "git diff --name-only HEAD^ HEAD" } },
+          ],
           toolResults: [
             {
               ok: true,
@@ -475,10 +491,10 @@ test("tool feedback includes long shell stdout for file lists", async () => {
   );
 
   const feedback = adapter.seenRequest?.messages.find((m) =>
-    m.content.includes("Tool execution feedback from the previous step:"),
+    contentText(m.content).includes("Tool execution feedback from the previous step:"),
   );
   assert.ok(feedback);
-  assert.match(feedback?.content ?? "", /file-139\.ts/);
+  assert.match(contentText(feedback?.content ?? ""), /file-139\.ts/);
 });
 
 test("tool feedback includes tool_output_read hints when artifacts are present", async () => {
@@ -524,10 +540,10 @@ test("tool feedback includes tool_output_read hints when artifacts are present",
   );
 
   const feedback = adapter.seenRequest?.messages.find((m) =>
-    m.content.includes("Tool execution feedback from the previous step:"),
+    contentText(m.content).includes("Tool execution feedback from the previous step:"),
   );
   assert.ok(feedback);
-  assert.match(feedback?.content ?? "", /tool_output_read id=artifact-1/);
+  assert.match(contentText(feedback?.content ?? ""), /tool_output_read id=artifact-1/);
 });
 
 test("adds session continuity instruction when working turns exist", async () => {
@@ -564,7 +580,7 @@ test("adds session continuity instruction when working turns exist", async () =>
   const continuityInstruction = adapter.seenRequest?.messages.find(
     (message) =>
       message.role === "developer" &&
-      message.content.includes("Session history from prior turns is included below"),
+      contentText(message.content).includes("Session history from prior turns is included below"),
   );
   assert.ok(continuityInstruction);
 });
@@ -597,11 +613,12 @@ test("reinjects the compression summary of older turns as prior context", async 
 
   const summaryMessage = adapter.seenRequest?.messages.find(
     (message) =>
-      message.role === "developer" && message.content.includes("Summary of earlier turns"),
+      message.role === "developer" &&
+      contentText(message.content).includes("Summary of earlier turns"),
   );
   assert.ok(summaryMessage, "compression summary must be reinjected");
-  assert.match(summaryMessage?.content ?? "", /Earlier we chose PostgreSQL\./);
-  assert.match(summaryMessage?.content ?? "", /db=postgres/);
+  assert.match(contentText(summaryMessage?.content ?? ""), /Earlier we chose PostgreSQL\./);
+  assert.match(contentText(summaryMessage?.content ?? ""), /db=postgres/);
 });
 
 test("does not append duplicate task message when latest turn already has same user prompt", async () => {
@@ -643,6 +660,113 @@ test("does not append duplicate task message when latest turn already has same u
   );
 
   const userMessages = (adapter.seenRequest?.messages ?? []).filter((m) => m.role === "user");
-  const taskMentions = userMessages.filter((m) => m.content === "Use time then echo");
+  const taskMentions = userMessages.filter((m) => contentText(m.content) === "Use time then echo");
   assert.equal(taskMentions.length, 1);
+});
+
+test("emits structured provider content parts for multimodal user turns", async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), "mh-provider-model-multimodal-"));
+  const adapter = new FakeAdapter(
+    "m",
+    { assistantMessage: "ok", toolCalls: [], stop: true },
+    { structuredTools: true },
+  );
+  adapter.features = { structuredTools: true, inputParts: { text: true, image: true, file: true } };
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+  try {
+    const imagePath = path.join(tmpDir, "photo.png");
+    await writeFile(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await model.nextStep(
+      makeInput({
+        workingTurns: [
+          {
+            id: "t1",
+            iteration: 1,
+            userMessage: "Analyze",
+            userContent: [
+              { type: "text", text: "Analyze this image" },
+              { type: "image", assetId: "asset-1", mimeType: "image/png" },
+            ],
+            assistantMessage: "",
+            toolCalls: [],
+            toolResults: [],
+          },
+        ],
+        resolveInputAsset: async (assetId) =>
+          assetId === "asset-1"
+            ? {
+                id: "asset-1",
+                filename: "photo.png",
+                mimeType: "image/png",
+                sizeBytes: 4,
+                storagePath: imagePath,
+                createdAt: new Date().toISOString(),
+              }
+            : undefined,
+      }),
+    );
+
+    const userMessage = adapter.seenRequest?.messages.find((m) => m.role === "user");
+    assert.ok(userMessage);
+    assert.ok(Array.isArray(userMessage?.content));
+    if (Array.isArray(userMessage?.content)) {
+      assert.equal(userMessage.content[0]?.type, "text");
+      assert.equal(userMessage.content[1]?.type, "image");
+    }
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("rejects multimodal input when provider does not declare support", async () => {
+  const adapter = new FakeAdapter("m", { assistantMessage: "ok", toolCalls: [], stop: true });
+  adapter.features = {
+    structuredTools: true,
+    inputParts: { text: true, image: false, file: false },
+  };
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await assert.rejects(
+    () =>
+      model.nextStep(
+        makeInput({
+          workingTurns: [
+            {
+              id: "t1",
+              iteration: 1,
+              userMessage: "Analyze",
+              userContent: [{ type: "image", assetId: "asset-1", mimeType: "image/png" }],
+              assistantMessage: "",
+              toolCalls: [],
+              toolResults: [],
+            },
+          ],
+          resolveInputAsset: async () => ({
+            id: "asset-1",
+            filename: "photo.png",
+            mimeType: "image/png",
+            sizeBytes: 4,
+            storagePath: "/tmp/photo.png",
+            createdAt: new Date().toISOString(),
+          }),
+        }),
+      ),
+    /does not support image input parts/,
+  );
 });

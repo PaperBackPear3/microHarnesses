@@ -1,10 +1,16 @@
-import { availableModelChoices, withModeExecutionContract } from "@micro-harnesses/core";
+import {
+  type MessageContentPart,
+  availableModelChoices,
+  withModeExecutionContract,
+} from "@micro-harnesses/core";
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import type { CliComposition } from "../runtime/composition.js";
+import { resolveMainPromptName } from "../runtime/subagentPromptName.js";
 import { type UiScreen, parseSlashCommand } from "../slash/commands.js";
+import { type StagedAttachment, formatBytes, stageAttachment } from "./attachments.js";
 import { buildChatLines } from "./chatLines.js";
 import { Composer, estimateComposerRows } from "./components/Composer.js";
 import { FooterStatusBar } from "./components/FooterStatusBar.js";
@@ -51,6 +57,7 @@ export function App({
   const [thinkingExpanded, setThinkingExpanded] = useState(true);
   const [switchingSession, setSwitchingSession] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState(composition.rootSessionId);
+  const [stagedAttachments, setStagedAttachments] = useState<StagedAttachment[]>([]);
 
   useEffect(() => () => chatStore.dispose(), [chatStore]);
 
@@ -146,7 +153,19 @@ export function App({
     }
     if (key.tab && key.shift) {
       const next = composition.modeController.cycle();
-      chatStore.appendSystemMessage(`Mode changed to ${next}.`);
+      const defaultPersona = next === "plan" ? "planner" : "coder";
+      void resolveMainPromptName(defaultPersona, composition.promptsDir)
+        .then((promptName) => {
+          composition.runtimeState.promptName = promptName;
+          chatStore.appendSystemMessage(`Mode changed to ${next}. Persona set to ${promptName}.`);
+        })
+        .catch((error) => {
+          const message =
+            error instanceof Error ? error.message : "unknown persona validation error";
+          chatStore.appendSystemMessage(
+            `Mode changed to ${next}. Persona unchanged (${composition.runtimeState.promptName}). ${message}`,
+          );
+        });
       return;
     }
     if (key.ctrl && raw.toLowerCase() === "t") {
@@ -169,6 +188,50 @@ export function App({
 
       const slash = parseSlashCommand(trimmed);
       if (slash) {
+        if (slash.type === "attach-file") {
+          try {
+            const staged = await stageAttachment(slash.filePath);
+            setStagedAttachments((current) => [...current, staged]);
+            chatStore.appendSystemMessage(
+              `Attached ${staged.filename} (${staged.mimeType}, ${formatBytes(staged.sizeBytes)}).`,
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "unknown attachment error";
+            chatStore.appendSystemMessage(`Attach failed: ${message}`);
+          }
+          setInput("");
+          return;
+        }
+        if (slash.type === "list-attachments") {
+          if (stagedAttachments.length === 0) {
+            chatStore.appendSystemMessage("No staged attachments.");
+          } else {
+            const lines = stagedAttachments.map(
+              (entry, index) =>
+                `${index + 1}. ${entry.filename} (${entry.mimeType}, ${formatBytes(entry.sizeBytes)})`,
+            );
+            chatStore.appendSystemMessage(`Staged attachments:\n${lines.join("\n")}`);
+          }
+          setInput("");
+          return;
+        }
+        if (slash.type === "detach-file") {
+          const target = slash.target.trim();
+          const byIndex = Number.parseInt(target, 10);
+          const index = Number.isInteger(byIndex) ? byIndex - 1 : -1;
+          const removed =
+            index >= 0 && index < stagedAttachments.length
+              ? stagedAttachments[index]
+              : stagedAttachments.find((entry) => entry.filename === target);
+          if (!removed) {
+            chatStore.appendSystemMessage(`No staged attachment found for "${slash.target}".`);
+          } else {
+            setStagedAttachments((current) => current.filter((entry) => entry !== removed));
+            chatStore.appendSystemMessage(`Detached ${removed.filename}.`);
+          }
+          setInput("");
+          return;
+        }
         await handleSlashCommand({
           command: slash,
           composition,
@@ -198,15 +261,50 @@ export function App({
           trimmed,
           composition.modeController.getMode(),
         );
-        await composition.refreshContextWindowTokens();
-        const state = await composition.agent.run(effectivePrompt, {
-          ...composition.runOptions(),
-          sessionId: runSessionId,
-          resume: true,
-        });
-        if (state.sessionId) {
-          setActiveSessionId(state.sessionId);
+        const pendingAttachments = stagedAttachments;
+        ensureAttachmentSupport(composition.runtimeState.provider, pendingAttachments);
+        const inputContent: MessageContentPart[] = [];
+        if (effectivePrompt.trim().length > 0) {
+          inputContent.push({ type: "text", text: effectivePrompt });
         }
+        for (const attachment of pendingAttachments) {
+          const saved = await composition.sessionStore.saveInputAsset(
+            runSessionId,
+            attachment.path,
+            {
+              mimeType: attachment.mimeType,
+            },
+          );
+          if (attachment.mimeType.startsWith("image/")) {
+            inputContent.push({
+              type: "image",
+              assetId: saved.id,
+              mimeType: saved.mimeType,
+              detail: "auto",
+            });
+          } else {
+            inputContent.push({
+              type: "file",
+              assetId: saved.id,
+              mimeType: saved.mimeType,
+              filename: saved.filename,
+            });
+          }
+        }
+        await composition.refreshContextWindowTokens();
+        const result = await composition.agent.invoke({
+          prompt: effectivePrompt,
+          input: { text: effectivePrompt, content: inputContent },
+          execution: {
+            ...composition.runOptions(),
+            sessionId: runSessionId,
+            resume: true,
+          },
+        });
+        if (result.sessionId) {
+          setActiveSessionId(result.sessionId);
+        }
+        setStagedAttachments([]);
       } catch (error) {
         const message = error instanceof Error ? error.message : "unknown run failure";
         chatStore.appendSystemMessage(`Error: ${message}`);
@@ -215,7 +313,16 @@ export function App({
         chatStore.setActiveRunSession(undefined);
       }
     },
-    [composition, activeSessionId, chatStore, running, switchingSession, status, onExit],
+    [
+      composition,
+      activeSessionId,
+      chatStore,
+      running,
+      switchingSession,
+      status,
+      onExit,
+      stagedAttachments,
+    ],
   );
 
   async function switchToSession(sessionId: string, notice: string): Promise<void> {
@@ -232,6 +339,7 @@ export function App({
       next.runtimeState.provider = composition.runtimeState.provider;
       next.runtimeState.model = composition.runtimeState.model;
       next.runtimeState.effort = composition.runtimeState.effort;
+      next.runtimeState.promptName = composition.runtimeState.promptName;
       next.modelSelector.setEffort(composition.runtimeState.effort);
       next.modeController.setMode(composition.modeController.getMode());
       await next.refreshContextWindowTokens();
@@ -307,6 +415,7 @@ export function App({
         cliVersion={composition.cliVersion}
         mode={mode}
         effort={composition.runtimeState.effort}
+        promptName={composition.runtimeState.promptName}
         provider={composition.runtimeState.provider}
         modelLabel={modelLabel}
         routingPreference={composition.runtimeState.routingPreference}
@@ -318,5 +427,15 @@ export function App({
         columns={terminalColumns}
       />
     </Box>
+  );
+}
+
+function ensureAttachmentSupport(provider: string, stagedAttachments: StagedAttachment[]): void {
+  if (stagedAttachments.length === 0) return;
+  const fileAttachments = stagedAttachments.filter((entry) => !entry.mimeType.startsWith("image/"));
+  if (fileAttachments.length === 0) return;
+  if (provider === "anthropic") return;
+  throw new Error(
+    `Provider "${provider}" does not support non-image file attachments in the current configuration`,
   );
 }

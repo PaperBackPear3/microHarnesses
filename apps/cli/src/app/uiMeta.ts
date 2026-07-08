@@ -20,6 +20,10 @@ const MODE_PROMPT_STYLES: Record<HarnessMode, LabeledColor> = {
 const HELP_COMMAND_LINES_BASE = [
   "/plan | /edits | /autopilot",
   "/mode <plan|accept-edits|autopilot>",
+  "/persona [name]",
+  "/attach <path>",
+  "/attachments",
+  "/detach <index|name>",
   "/effort <low|medium|high>",
   "/provider <openai|anthropic|ollama>",
   "/route <auto|cost|speed|intelligence|balanced|off>",

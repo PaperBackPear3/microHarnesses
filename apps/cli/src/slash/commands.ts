@@ -14,6 +14,11 @@ export type SlashCommand =
   | { type: "show-sessions" }
   | { type: "show-session-details"; sessionId: string }
   | { type: "set-mode"; mode: HarnessMode }
+  | { type: "show-persona" }
+  | { type: "set-persona"; promptName: string }
+  | { type: "attach-file"; filePath: string }
+  | { type: "list-attachments" }
+  | { type: "detach-file"; target: string }
   | { type: "set-effort"; effort: "low" | "medium" | "high" }
   | { type: "list-models" }
   | { type: "set-model"; model: string | undefined }
@@ -45,6 +50,19 @@ export function parseSlashCommand(input: string): SlashCommand | undefined {
   if (command === "plan") return { type: "set-mode", mode: "plan" };
   if (command === "edits") return { type: "set-mode", mode: "accept-edits" };
   if (command === "autopilot") return { type: "set-mode", mode: "autopilot" };
+  if (command === "persona") {
+    if (!args[0]) return { type: "show-persona" };
+    return { type: "set-persona", promptName: args[0] };
+  }
+  if (command === "attach" && args.length > 0) {
+    return { type: "attach-file", filePath: args.join(" ") };
+  }
+  if (command === "attachments") {
+    return { type: "list-attachments" };
+  }
+  if (command === "detach" && args[0]) {
+    return { type: "detach-file", target: args.join(" ") };
+  }
   if (command === "effort" && args[0]) {
     const effort = parseEffort(args[0]);
     if (effort) return { type: "set-effort", effort };

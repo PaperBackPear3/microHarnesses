@@ -1,8 +1,13 @@
 import type { CredentialsRegistry } from "../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../providers/registry";
-import type { CompletionRequest, ProviderId, ProviderMessage } from "../providers/types";
+import type {
+  CompletionRequest,
+  ProviderContentPart,
+  ProviderId,
+  ProviderMessage,
+} from "../providers/types";
+import type { InputAsset, MessageContentPart } from "../runtime/content";
 import { ConfigError } from "../shared/errors";
-import { truncate } from "../shared/text";
 import { renderToolResultFeedback } from "../tools/resultFeedback";
 import type { ToolDescriptor } from "../tools/types";
 import type { ModelAdapter, StepInput, StepPlan } from "./types";
@@ -54,6 +59,7 @@ export class ProviderModelAdapter implements ModelAdapter {
     const providerId = (input.selectedProviderId as ProviderId | undefined) ?? current.providerId;
     const adapter = this.providerRegistry.get(providerId);
     const supportsStructuredTools = adapter.features?.structuredTools === true;
+    assertTurnContentSupport(input.workingTurns, adapter.features?.inputParts, providerId);
     const resolvedModel = input.selectedModel ?? current.model ?? adapter.defaultModel;
     if (!resolvedModel) {
       throw new ConfigError(
@@ -63,11 +69,12 @@ export class ProviderModelAdapter implements ModelAdapter {
     const auth = await this.credentialsRegistry.get(providerId).resolve();
     const request: CompletionRequest = {
       model: resolvedModel,
-      messages: buildMessages(input, !supportsStructuredTools),
+      messages: await buildMessages(input, !supportsStructuredTools),
       maxTokens: input.selectedMaxTokens ?? current.maxTokens ?? 4096,
       tools: input.availableTools,
       signal: input.signal,
     };
+    assertInputPartSupport(request.messages, adapter.features?.inputParts, providerId);
 
     if (adapter.streamComplete) {
       let finalResponse: Awaited<ReturnType<typeof adapter.complete>> | undefined;
@@ -117,7 +124,10 @@ function toStepPlan(response: {
   };
 }
 
-function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): ProviderMessage[] {
+async function buildMessages(
+  input: StepInput,
+  includeToolCatalogFallback: boolean,
+): Promise<ProviderMessage[]> {
   const systemParts = [input.bundle.system];
   for (const instruction of input.bundle.instructions) {
     if (instruction.role === "tools" || instruction.role === "custom") {
@@ -152,10 +162,19 @@ function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): P
   for (const turn of input.workingTurns) {
     // Only turns that carry an actual user/task message emit a `user` message;
     // internal loop iterations leave it empty to avoid repeating the prompt.
-    if (turn.userMessage.trim().length > 0) {
+    const userContent = await mapTurnContentToProvider(turn.userContent, input.resolveInputAsset);
+    if (userContent) {
+      messages.push({ role: "user", content: userContent });
+    } else if (turn.userMessage.trim().length > 0) {
       messages.push({ role: "user", content: turn.userMessage });
     }
-    if (turn.assistantMessage.trim().length > 0) {
+    const assistantContent = await mapTurnContentToProvider(
+      turn.assistantContent,
+      input.resolveInputAsset,
+    );
+    if (assistantContent) {
+      messages.push({ role: "assistant", content: assistantContent });
+    } else if (turn.assistantMessage.trim().length > 0) {
       messages.push({ role: "assistant", content: turn.assistantMessage });
     }
     if (turn.toolCalls.length > 0 || turn.toolResults.length > 0) {
@@ -171,6 +190,101 @@ function buildMessages(input: StepInput, includeToolCatalogFallback: boolean): P
     messages.push({ role: "user", content: input.bundle.task });
   }
   return messages;
+}
+
+async function mapTurnContentToProvider(
+  content: MessageContentPart[] | undefined,
+  resolveInputAsset: StepInput["resolveInputAsset"],
+): Promise<string | ProviderContentPart[] | undefined> {
+  if (!content || content.length === 0) return undefined;
+  if (content.every((part) => part.type === "text")) {
+    return content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("")
+      .trim();
+  }
+
+  const parts: ProviderContentPart[] = [];
+  for (const part of content) {
+    if (part.type === "text") {
+      parts.push({ type: "text", text: part.text });
+      continue;
+    }
+    if (!resolveInputAsset) {
+      throw new ConfigError(
+        "Multimodal input requires an input asset resolver, but none is configured for this run",
+      );
+    }
+    const asset = await resolveInputAsset(part.assetId);
+    if (!asset) {
+      throw new ConfigError(`Input asset "${part.assetId}" was not found for this session`);
+    }
+    const dataBase64 = await resolveAssetBase64(asset);
+    if (part.type === "image") {
+      parts.push({
+        type: "image",
+        mimeType: part.mimeType,
+        dataBase64,
+        filename: asset.filename,
+        detail: part.detail,
+        altText: part.altText,
+      });
+      continue;
+    }
+    parts.push({
+      type: "file",
+      mimeType: part.mimeType,
+      dataBase64,
+      filename: part.filename,
+      title: part.title,
+    });
+  }
+  return parts;
+}
+
+async function resolveAssetBase64(asset: InputAsset): Promise<string> {
+  const { readFile } = await import("node:fs/promises");
+  const bytes = await readFile(asset.storagePath);
+  return bytes.toString("base64");
+}
+
+function assertInputPartSupport(
+  messages: ProviderMessage[],
+  features: { text: boolean; image?: boolean; file?: boolean } | undefined,
+  providerId: string,
+): void {
+  const inputParts = features ?? { text: true };
+  for (const message of messages) {
+    if (!Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type === "text" && inputParts.text !== false) continue;
+      if (part.type === "image" && inputParts.image === true) continue;
+      if (part.type === "file" && inputParts.file === true) continue;
+      const kind = part.type;
+      throw new ConfigError(
+        `Provider "${providerId}" does not support ${kind} input parts for this model`,
+      );
+    }
+  }
+}
+
+function assertTurnContentSupport(
+  turns: StepInput["workingTurns"],
+  features: { text: boolean; image?: boolean; file?: boolean } | undefined,
+  providerId: string,
+): void {
+  const inputParts = features ?? { text: true };
+  for (const turn of turns) {
+    const parts = [...(turn.userContent ?? []), ...(turn.assistantContent ?? [])];
+    for (const part of parts) {
+      if (part.type === "text" && inputParts.text !== false) continue;
+      if (part.type === "image" && inputParts.image === true) continue;
+      if (part.type === "file" && inputParts.file === true) continue;
+      throw new ConfigError(
+        `Provider "${providerId}" does not support ${part.type} input parts for this model`,
+      );
+    }
+  }
 }
 
 function renderSummaryInstruction(summary: {

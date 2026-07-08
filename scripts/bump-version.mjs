@@ -19,6 +19,7 @@ const packageJsonPaths = [
   "packages/core/package.json",
   "plugins/example-tools/package.json",
   "plugins/basic-tools/package.json",
+  "plugins/observability-otel/package.json",
   "apps/cli/package.json",
 ];
 

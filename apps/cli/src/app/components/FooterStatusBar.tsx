@@ -9,6 +9,7 @@ export function FooterStatusBar(props: {
   cliVersion: string;
   mode: HarnessMode;
   effort: EffortLevel;
+  promptName: string;
   provider: string;
   modelLabel: string;
   routingPreference?: string;
@@ -27,6 +28,7 @@ export function FooterStatusBar(props: {
       `session=${props.sessionId}`,
       `mode=${props.mode}`,
       `effort=${props.effort}`,
+      `persona=${props.promptName}`,
       `provider=${props.provider}`,
       props.modelLabel,
       props.routingPreference ? `route=${props.routingPreference}` : "",

@@ -56,6 +56,8 @@ npx @micro-harnesses/cli@latest
 - In autopilot mode, prompts are augmented with an execution contract that pushes the agent to continue until the requested goal is finished.
 - `/model` lists routes across configured providers; `/route` or
   `--routing-preference` opts into router-based provider/model selection.
+- Modes and personas are aligned by default: `/plan` uses persona `planner`,
+  while `/edits` and `/autopilot` use persona `coder`.
 
 ## Context compression
 
@@ -134,6 +136,8 @@ compressor.
 ## TUI slash commands
 
 - Modes: `/plan`, `/edits`, `/autopilot`, `/mode <...>`
+- Persona: `/persona` (show current), `/persona <name>` (set prompt pack)
+- Attachments: `/attach <path>`, `/attachments`, `/detach <index|name>`
 - Model/provider: `/model [id]`, `/provider <id>`, `/effort <...>`, `/route <auto|cost|speed|intelligence|balanced|off>`
 - Sessions: `/new`, `/sessions`, `/session <id>`, `/resume <id>`
 - Screens: `/chat`, `/context`, `/telemetry`, `/help` (or `/commands`)

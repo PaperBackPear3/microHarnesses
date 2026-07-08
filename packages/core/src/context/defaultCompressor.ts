@@ -23,7 +23,8 @@ export async function defaultCompressor(
   const highlights = top.map((turn) => {
     const user = truncate(turn.userMessage.trim(), 80);
     const assistant = truncate(turn.assistantMessage.trim(), 100);
-    return `iter=${turn.iteration} tools=${turn.toolCalls.length} user="${user}" assistant="${assistant}"`;
+    const attachmentHint = renderAttachmentHint(turn);
+    return `iter=${turn.iteration} tools=${turn.toolCalls.length}${attachmentHint} user="${user}" assistant="${assistant}"`;
   });
 
   const supportHistory = turns.flatMap((turn) =>
@@ -65,4 +66,12 @@ function includesAny(text: string, goal: string): boolean {
   }
   const lowerText = text.toLowerCase();
   return words.some((word) => lowerText.includes(word));
+}
+
+function renderAttachmentHint(turn: Turn): string {
+  const parts = turn.userContent ?? [];
+  const attachments = parts.filter((part) => part.type !== "text");
+  if (attachments.length === 0) return "";
+  const types = [...new Set(attachments.map((part) => part.mimeType))];
+  return ` attachments=${attachments.length} [${types.join(", ")}]`;
 }

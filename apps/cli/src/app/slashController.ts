@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { ModelRoute } from "@micro-harnesses/core";
 import type { CliComposition } from "../runtime/composition.js";
+import { resolveMainPromptName } from "../runtime/subagentPromptName.js";
 import type { SlashCommand, UiScreen } from "../slash/commands.js";
 import type { StatusState } from "../telemetry/status.js";
 import type { ChatStore } from "./store/chatStore.js";
@@ -42,7 +43,38 @@ export async function handleSlashCommand(args: Args): Promise<void> {
   }
   if (command.type === "set-mode") {
     composition.modeController.setMode(command.mode);
-    chatStore.appendSystemMessage(`Mode set to ${command.mode}.`);
+    const defaultPersona = command.mode === "plan" ? "planner" : "coder";
+    try {
+      composition.runtimeState.promptName = await resolveMainPromptName(
+        defaultPersona,
+        composition.promptsDir,
+      );
+      chatStore.appendSystemMessage(
+        `Mode set to ${command.mode}. Persona set to ${composition.runtimeState.promptName}.`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown persona validation error";
+      chatStore.appendSystemMessage(
+        `Mode set to ${command.mode}. Persona unchanged (${composition.runtimeState.promptName}). ${message}`,
+      );
+    }
+    return;
+  }
+  if (command.type === "show-persona") {
+    chatStore.appendSystemMessage(`Current persona: ${composition.runtimeState.promptName}.`);
+    return;
+  }
+  if (command.type === "set-persona") {
+    try {
+      composition.runtimeState.promptName = await resolveMainPromptName(
+        command.promptName,
+        composition.promptsDir,
+      );
+      chatStore.appendSystemMessage(`Persona set to ${composition.runtimeState.promptName}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown persona validation error";
+      chatStore.appendSystemMessage(message);
+    }
     return;
   }
   if (command.type === "set-effort") {

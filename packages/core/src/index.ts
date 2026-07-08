@@ -82,6 +82,7 @@ export * from "./observability/provider";
 
 // Runtime
 export * from "./runtime/types";
+export * from "./runtime/content";
 export * from "./runtime/state";
 export * from "./runtime/agent";
 export * from "./runtime/defineAgent";

@@ -10,6 +10,7 @@ import type {
   CompletionRequest,
   ProviderAdapter,
   ProviderAuth,
+  ProviderContentPart,
   ProviderModelInfo,
   ProviderResponse,
   ProviderStreamEvent,
@@ -56,7 +57,10 @@ export interface OpenAICompatAdapterOptions {
 export class OpenAICompatAdapter implements ProviderAdapter {
   readonly providerId: string;
   readonly defaultModel: string;
-  readonly features = { structuredTools: true } as const;
+  readonly features = {
+    structuredTools: true,
+    inputParts: { text: true, image: true, file: false, inlineBinary: true },
+  } as const;
   private readonly defaultBaseUrl?: string;
   private readonly authStyle: "bearer" | "none";
   private readonly extraHeaders: Record<string, string>;
@@ -84,17 +88,11 @@ export class OpenAICompatAdapter implements ProviderAdapter {
         stream: true,
         stream_options: { include_usage: true },
       } as unknown as ChatCompletionCreateParamsStreaming;
-      const stream = await client.chat.completions.create(
-        body,
-        { signal: request.signal },
-      );
+      const stream = await client.chat.completions.create(body, { signal: request.signal });
 
       const state = createOpenAICompatStreamState();
       for await (const chunk of stream) {
-        const deltas = applyOpenAICompatStreamChunk(
-          state,
-          chunk as unknown as ChatCompletionChunk,
-        );
+        const deltas = applyOpenAICompatStreamChunk(state, chunk as unknown as ChatCompletionChunk);
         if (deltas.reasoningDelta.length > 0) {
           yield { type: "reasoning.delta", delta: deltas.reasoningDelta };
         }
@@ -116,13 +114,8 @@ export class OpenAICompatAdapter implements ProviderAdapter {
         ...(this.toBody(request) as Record<string, unknown>),
         stream: false,
       } as unknown as ChatCompletionCreateParamsNonStreaming;
-      const response = await client.chat.completions.create(
-        body,
-        { signal: request.signal },
-      );
-      const parsed = parseOpenAICompatResponse(
-        response as unknown as OpenAICompatResponse,
-      );
+      const response = await client.chat.completions.create(body, { signal: request.signal });
+      const parsed = parseOpenAICompatResponse(response as unknown as OpenAICompatResponse);
       if (!parsed) {
         throw new ProviderError(`${this.label()} returned no message`);
       }
@@ -177,7 +170,9 @@ export class OpenAICompatAdapter implements ProviderAdapter {
     }
 
     return async (input, init) => {
-      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      const headers = new Headers(
+        init?.headers ?? (input instanceof Request ? input.headers : undefined),
+      );
       headers.delete("authorization");
       headers.delete("Authorization");
       return this.fetchImpl(input, { ...init, headers });
@@ -201,7 +196,7 @@ export class OpenAICompatAdapter implements ProviderAdapter {
       model: request.model,
       messages: request.messages.map((m) => ({
         role: this.mapDeveloperRoleToSystem && m.role === "developer" ? "system" : m.role,
-        content: m.content,
+        content: toOpenAIContent(m.content),
       })),
       ...(request.tools && request.tools.length > 0
         ? {
@@ -219,4 +214,26 @@ export class OpenAICompatAdapter implements ProviderAdapter {
       max_tokens: request.maxTokens ?? 4096,
     };
   }
+}
+
+function toOpenAIContent(content: string | ProviderContentPart[]): unknown {
+  if (typeof content === "string") return content;
+  return content.map((part) => {
+    if (part.type === "text") {
+      return { type: "text", text: part.text };
+    }
+    if (part.type === "image") {
+      return {
+        type: "image_url",
+        image_url: {
+          url: `data:${part.mimeType};base64,${part.dataBase64}`,
+          ...(part.detail ? { detail: part.detail } : {}),
+        },
+      };
+    }
+    return {
+      type: "text",
+      text: `[Attached file: ${part.filename} (${part.mimeType})]`,
+    };
+  });
 }

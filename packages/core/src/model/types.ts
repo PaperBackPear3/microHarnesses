@@ -1,5 +1,6 @@
 import type { CompressionResult } from "../context/types";
 import type { PromptBundle } from "../prompts/types";
+import type { InputAsset } from "../runtime/content";
 import type { Turn } from "../runtime/state";
 import type { SkillCall } from "../skills/types";
 import type { ToolDescriptor } from "../tools/types";
@@ -61,6 +62,7 @@ export interface StepInput {
   selectedMaxTokens?: number;
   availableTools?: ToolDescriptor[];
   availableSkills?: string[];
+  resolveInputAsset?: (assetId: string) => Promise<InputAsset | undefined>;
   /** Aborted when the run is killed; adapters should abandon in-flight requests. */
   signal?: AbortSignal;
   onAssistantDelta?: (delta: string) => void | Promise<void>;

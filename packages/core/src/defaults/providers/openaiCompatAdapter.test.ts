@@ -87,6 +87,55 @@ test("authStyle none omits the authorization header", async () => {
   assert.equal(capturedHeaders?.get("authorization"), null);
 });
 
+test("maps structured image content into OpenAI-compatible message parts", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({
+        id: "chatcmpl-test",
+        object: "chat.completion",
+        created: 1,
+        model: "test-model",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "ok" },
+            finish_reason: "stop",
+          },
+        ],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+  const adapter = makeAdapter(fetchImpl);
+  await adapter.complete(
+    {
+      model: "test-model",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "inspect this" },
+            {
+              type: "image",
+              mimeType: "image/png",
+              dataBase64: "iVBORw0KGgo=",
+              detail: "auto",
+            },
+          ],
+        },
+      ],
+    },
+    { apiKey: "k" },
+  );
+  const messages = capturedBody?.messages as Array<{ content: unknown }>;
+  assert.ok(Array.isArray(messages[0]?.content));
+  const parts = messages[0]?.content as Array<Record<string, unknown>>;
+  assert.equal(parts[0]?.type, "text");
+  assert.equal(parts[1]?.type, "image_url");
+});
+
 test("throws ProviderError when no base URL is available", async () => {
   const adapter = new OpenAICompatAdapter({
     providerId: "compat-test",

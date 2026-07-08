@@ -1,14 +1,14 @@
 {
-  "name": "@micro-harnesses/plugin-basic-tools",
+  "name": "@micro-harnesses/plugin-observability-otel",
   "version": "3.3.0",
-  "description": "Workspace-scoped filesystem mutation and shell tools for @micro-harnesses/core.",
+  "description": "OTLP/Prometheus observability plugin for @micro-harnesses/core.",
   "license": "MIT",
-  "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell"],
+  "keywords": ["micro-harness", "plugin", "observability", "otel", "otlp", "prometheus"],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
     "url": "https://github.com/PaperBackPear3/microHarnesses.git",
-    "directory": "plugins/basic-tools"
+    "directory": "plugins/observability-otel"
   },
   "bugs": {
     "url": "https://github.com/PaperBackPear3/microHarnesses/issues"

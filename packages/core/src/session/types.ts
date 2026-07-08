@@ -1,3 +1,5 @@
+import type { InputAsset } from "../runtime/content";
+
 export interface SessionManifest {
   sessionId: string;
   goal: string;
@@ -24,4 +26,13 @@ export interface InitSessionOptions {
   rootSessionId?: string;
   depth?: number;
   spawnedByTool?: string;
+}
+
+export interface SaveInputAssetOptions {
+  mimeType?: string;
+  sourceKind?: "path" | "url";
+}
+
+export interface SessionInputAssetsFile {
+  assets: InputAsset[];
 }

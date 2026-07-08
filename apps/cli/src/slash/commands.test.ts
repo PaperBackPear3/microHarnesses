@@ -24,6 +24,23 @@ test("parses /effort using shared effort parser", () => {
   assert.equal(parseSlashCommand("/effort nonsense"), undefined);
 });
 
+test("parses /persona variants", () => {
+  assert.deepEqual(parseSlashCommand("/persona"), { type: "show-persona" });
+  assert.deepEqual(parseSlashCommand("/persona planner"), {
+    type: "set-persona",
+    promptName: "planner",
+  });
+});
+
+test("parses attachment commands", () => {
+  assert.deepEqual(parseSlashCommand("/attach ./image.png"), {
+    type: "attach-file",
+    filePath: "./image.png",
+  });
+  assert.deepEqual(parseSlashCommand("/attachments"), { type: "list-attachments" });
+  assert.deepEqual(parseSlashCommand("/detach 1"), { type: "detach-file", target: "1" });
+});
+
 test("parses /model with no args as list-models", () => {
   assert.deepEqual(parseSlashCommand("/model"), { type: "list-models" });
 });

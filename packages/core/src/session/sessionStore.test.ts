@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -188,6 +188,29 @@ test("saveSnapshot skips no-op snapshots when no new turns were added", async ()
 
     const updated = await store.getSession(manifest.sessionId);
     assert.equal(updated.latestRunId, "run-2");
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("saveInputAsset copies file into session input storage and can be resolved", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-assets-"));
+  const store = new SessionStore(stateDir);
+  try {
+    const manifest = await store.initSession({ goal: "asset persistence" });
+    const sourcePath = path.join(stateDir, "source-image.png");
+    await writeFile(sourcePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const saved = await store.saveInputAsset(manifest.sessionId, sourcePath, {
+      mimeType: "image/png",
+    });
+    const loaded = await store.getInputAsset(manifest.sessionId, saved.id);
+    assert.ok(loaded);
+    assert.equal(loaded?.mimeType, "image/png");
+    assert.equal(loaded?.filename, "source-image.png");
+    assert.equal(loaded?.source?.kind, "path");
+    const loadedBytes = await readFile(loaded!.storagePath);
+    assert.equal(loadedBytes.length, 4);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

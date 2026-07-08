@@ -59,6 +59,7 @@ export interface RuntimeState {
   provider: string;
   model?: string;
   effort: EffortLevel;
+  promptName: string;
   /** When set, the agent routes model selection via `ModelRouter` instead of the static profile. */
   routingPreference?: ModelRoutingPreference;
 }
@@ -73,6 +74,7 @@ export interface CliComposition {
   rootSessionId: string;
   cliVersion: string;
   runtimeState: RuntimeState;
+  promptsDir: string;
   refreshContextWindowTokens(): Promise<{
     tokens: number;
     provider: string;
@@ -99,6 +101,7 @@ export async function buildComposition(
     provider: config.provider,
     model: config.model,
     effort: config.effort,
+    promptName: "coder",
     routingPreference: config.routingPreference,
   };
 
@@ -496,6 +499,7 @@ export async function buildComposition(
     rootSessionId,
     cliVersion: CLI_VERSION,
     runtimeState,
+    promptsDir: config.promptsDir,
     refreshContextWindowTokens,
     listModelRoutes: routeCatalog,
     refreshModelRoutes,
@@ -512,6 +516,7 @@ export async function buildComposition(
         sessionId: rootSessionId,
         resume: true,
         capabilityScope: mode === "plan" ? { allowActions: planModeAllowActions() } : undefined,
+        promptName: runtimeState.promptName,
         // Only engage the router when the user opted in via `/route` or
         // `--routing-preference`; otherwise `modelOverride`/`profile` above
         // drive selection exactly as before, unchanged.

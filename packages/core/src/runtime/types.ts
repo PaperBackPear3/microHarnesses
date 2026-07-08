@@ -2,6 +2,7 @@ import type { ModelProfile, ModelRoutingConstraints, ModelRoutingPreference } fr
 import type { TraceContext } from "../observability/types";
 import type { SafetyMode } from "../policy/types";
 import type { ToolCall, ToolDefinition } from "../tools/types";
+import type { MessageContentPart } from "./content";
 import type { RunState } from "./state";
 
 export interface RuntimeLimits {
@@ -62,6 +63,8 @@ export interface RunOptions {
   snapshotEvery: number;
   profile: ModelProfile;
   modelOverride?: string;
+  /** Optional prompt-pack override for this run (defaults to the agent's bound promptName). */
+  promptName?: string;
   sessionId?: string;
   resume?: boolean;
   goal?: string;
@@ -93,6 +96,10 @@ export interface RunOptions {
 
 export interface AgentInvokeRequest {
   prompt: string;
+  input?: {
+    text?: string;
+    content?: MessageContentPart[];
+  };
   execution: RunOptions;
 }
 

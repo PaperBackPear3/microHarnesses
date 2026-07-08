@@ -1,9 +1,15 @@
-import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { appendFile, copyFile, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { InputAsset } from "../runtime/content";
 import type { RunState } from "../runtime/state";
 import { isNodeError } from "../shared/nodeError";
-import type { InitSessionOptions, SessionManifest } from "./types";
+import type {
+  InitSessionOptions,
+  SaveInputAssetOptions,
+  SessionInputAssetsFile,
+  SessionManifest,
+} from "./types";
 
 interface SnapshotFile {
   id: string;
@@ -179,6 +185,69 @@ export class SessionStore {
     return path.join(this.sessionDir(sessionId), "artifacts", "tool-output");
   }
 
+  async saveInputAsset(
+    sessionId: string,
+    sourcePath: string,
+    options: SaveInputAssetOptions = {},
+  ): Promise<InputAsset> {
+    await this.initSession({ sessionId });
+    const resolvedSource = path.resolve(sourcePath);
+    const sourceStat = await stat(resolvedSource);
+    if (!sourceStat.isFile()) {
+      throw new Error(`Input asset source is not a file: ${sourcePath}`);
+    }
+
+    const assetId = `asset-${randomUUID()}`;
+    const filename = path.basename(resolvedSource);
+    const ext = path.extname(filename);
+    const sanitizedBase = sanitizeFilename(path.basename(filename, ext));
+    const safeExt = sanitizeExtension(ext);
+    const storedFilename = `${assetId}-${sanitizedBase}${safeExt}`;
+    const relativeStoragePath = path.join("inputs", storedFilename);
+    const absoluteStoragePath = path.join(this.sessionDir(sessionId), relativeStoragePath);
+    await mkdir(path.dirname(absoluteStoragePath), { recursive: true });
+    await copyFile(resolvedSource, absoluteStoragePath);
+    const bytes = await readFile(absoluteStoragePath);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+
+    const asset: InputAsset = {
+      id: assetId,
+      filename,
+      mimeType:
+        typeof options.mimeType === "string" && options.mimeType.trim().length > 0
+          ? options.mimeType
+          : "application/octet-stream",
+      sizeBytes: sourceStat.size,
+      storagePath: relativeStoragePath,
+      source: { kind: options.sourceKind ?? "path", value: resolvedSource },
+      sha256,
+      createdAt: new Date().toISOString(),
+    };
+    const assets = await this.readInputAssets(sessionId);
+    assets.push(asset);
+    await this.writeInputAssets(sessionId, assets);
+    return asset;
+  }
+
+  async getInputAsset(sessionId: string, assetId: string): Promise<InputAsset | undefined> {
+    const assets = await this.readInputAssets(sessionId);
+    const found = assets.find((asset) => asset.id === assetId);
+    return found ? this.withResolvedStoragePath(sessionId, found) : undefined;
+  }
+
+  async listInputAssets(sessionId: string): Promise<InputAsset[]> {
+    const assets = await this.readInputAssets(sessionId);
+    return assets.map((asset) => this.withResolvedStoragePath(sessionId, asset));
+  }
+
+  async readInputAssetBytes(sessionId: string, assetId: string): Promise<Buffer> {
+    const asset = await this.getInputAsset(sessionId, assetId);
+    if (!asset) {
+      throw new Error(`Unknown input asset "${assetId}" in session "${sessionId}"`);
+    }
+    return readFile(asset.storagePath);
+  }
+
   private sessionDir(sessionId: string): string {
     return path.join(this.rootDir, sessionId);
   }
@@ -232,4 +301,46 @@ export class SessionStore {
     });
     return snapshots;
   }
+
+  private inputAssetsPath(sessionId: string): string {
+    return path.join(this.sessionDir(sessionId), "inputs", "assets.json");
+  }
+
+  private async readInputAssets(sessionId: string): Promise<InputAsset[]> {
+    try {
+      const raw = await readFile(this.inputAssetsPath(sessionId), "utf8");
+      const parsed = JSON.parse(raw) as SessionInputAssetsFile;
+      return parsed.assets ?? [];
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private async writeInputAssets(sessionId: string, assets: InputAsset[]): Promise<void> {
+    const target = this.inputAssetsPath(sessionId);
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, JSON.stringify({ assets }, null, 2), "utf8");
+  }
+
+  private withResolvedStoragePath(sessionId: string, asset: InputAsset): InputAsset {
+    return {
+      ...asset,
+      storagePath: path.join(this.sessionDir(sessionId), asset.storagePath),
+    };
+  }
+}
+
+function sanitizeFilename(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  const safe = trimmed.replace(/[^a-z0-9._-]/g, "-").replace(/-+/g, "-");
+  return safe.length > 0 ? safe : "asset";
+}
+
+function sanitizeExtension(value: string): string {
+  if (!value) return "";
+  const safe = value.toLowerCase().replace(/[^a-z0-9.]/g, "");
+  return safe.startsWith(".") ? safe : `.${safe}`;
 }

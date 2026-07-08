@@ -372,6 +372,11 @@ export class ContextManager {
     let total = 0;
     total += this.tokenCounter.count(turn.userMessage);
     total += this.tokenCounter.count(turn.assistantMessage);
+    const userAttachments = (turn.userContent ?? []).filter((part) => part.type !== "text");
+    const assistantAttachments = (turn.assistantContent ?? []).filter(
+      (part) => part.type !== "text",
+    );
+    total += (userAttachments.length + assistantAttachments.length) * 256;
     if (turn.toolCalls.length > 0 || turn.toolResults.length > 0) {
       total += this.tokenCounter.count(renderToolResultFeedbackForEstimation(turn));
     }

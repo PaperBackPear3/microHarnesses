@@ -19,8 +19,26 @@ export interface CredentialsResolver {
 
 export interface ProviderMessage {
   role: "system" | "developer" | "user" | "assistant";
-  content: string;
+  content: string | ProviderContentPart[];
 }
+
+export type ProviderContentPart =
+  | { type: "text"; text: string }
+  | {
+      type: "image";
+      mimeType: string;
+      dataBase64: string;
+      filename?: string;
+      detail?: "low" | "high" | "auto";
+      altText?: string;
+    }
+  | {
+      type: "file";
+      mimeType: string;
+      dataBase64: string;
+      filename: string;
+      title?: string;
+    };
 
 export interface ProviderToolCall {
   name: string;
@@ -77,6 +95,13 @@ export interface ProviderAdapter {
   defaultModel?: string;
   features?: {
     structuredTools?: boolean;
+    inputParts?: {
+      text: boolean;
+      image?: boolean;
+      file?: boolean;
+      urlSource?: boolean;
+      inlineBinary?: boolean;
+    };
   };
   streamComplete?(
     request: CompletionRequest,

@@ -86,7 +86,8 @@ skill }`, records metrics (token usage, tool/skill durations and outcomes,
 context-window utilization — used/free/max/utilization tokens, error counters),
 and structured logs. Concrete OpenTelemetry/OTLP exporters ship as plugins via
 the `"observability"` plugin capability. Omit `observability` to get a
-zero-overhead no-op provider.
+zero-overhead no-op provider. For a ready-to-use OTLP/Prometheus bridge plugin,
+see `@micro-harnesses/plugin-observability-otel`.
 
 ## `FsPromptSource` prompt-pack format
 

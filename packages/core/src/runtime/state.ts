@@ -1,5 +1,6 @@
 import type { SkillCall, SkillResult } from "../skills/types";
 import type { ToolCall, ToolResult } from "../tools/types";
+import type { MessageContentPart } from "./content";
 
 /**
  * One iteration of the agent loop: the (optional) user/task message, the
@@ -10,7 +11,9 @@ export interface Turn {
   id: string;
   iteration: number;
   userMessage: string;
+  userContent?: MessageContentPart[];
   assistantMessage: string;
+  assistantContent?: MessageContentPart[];
   toolCalls: ToolCall[];
   toolResults: ToolResult[];
   skillCalls?: SkillCall[];

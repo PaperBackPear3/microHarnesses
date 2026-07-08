@@ -16,6 +16,7 @@ import { deriveToolDescriptors } from "../tools/descriptors";
 import { ToolOutputArtifacts } from "../tools/outputArtifacts";
 import type { ToolRegistry } from "../tools/registry";
 import type { ToolResult } from "../tools/types";
+import type { MessageContentPart } from "./content";
 import { RunObserver } from "./runObserver";
 import { shouldSnapshot } from "./snapshotCadence";
 import type { RunState } from "./state";
@@ -221,6 +222,14 @@ export class Agent implements AgentHandle {
   }
 
   async run(userPrompt: string, options: RunOptions): Promise<RunState> {
+    return this.runWithInput(userPrompt, options);
+  }
+
+  private async runWithInput(
+    userPrompt: string,
+    options: RunOptions,
+    input?: { text?: string; content?: MessageContentPart[] },
+  ): Promise<RunState> {
     validateRunOptions(options);
     const runId = randomUUID();
     const runCtx: RunContext = { runId, cancelled: false, controller: new AbortController() };
@@ -272,6 +281,7 @@ export class Agent implements AgentHandle {
         goal,
         sessionId,
         runId,
+        input,
         outputArtifacts:
           this.sessionStore && sessionId
             ? new ToolOutputArtifacts({ rootDir: this.sessionStore.toolOutputDir(sessionId) })
@@ -327,11 +337,12 @@ export class Agent implements AgentHandle {
       goal: string;
       sessionId?: string;
       runId: string;
+      input?: { text?: string; content?: MessageContentPart[] };
       outputArtifacts?: ToolOutputArtifacts;
     },
   ): Promise<RunState> {
-    const { limits, goal, sessionId, runId, outputArtifacts } = resolved;
-    const promptName = this.promptName;
+    const { limits, goal, sessionId, runId, input, outputArtifacts } = resolved;
+    const promptName = options.promptName?.trim() || this.promptName;
 
     let state: RunState = {
       sessionId,
@@ -422,6 +433,7 @@ export class Agent implements AgentHandle {
           state,
           sessionId,
           runId,
+          input,
           outputArtifacts,
         });
         iterationSpan.setStatus({ code: "ok" });
@@ -475,6 +487,7 @@ export class Agent implements AgentHandle {
     sessionId?: string;
     runId: string;
     outputArtifacts?: ToolOutputArtifacts;
+    input?: { text?: string; content?: MessageContentPart[] };
   }): Promise<boolean> {
     const {
       iteration,
@@ -493,6 +506,7 @@ export class Agent implements AgentHandle {
       sessionId,
       runId,
       outputArtifacts,
+      input,
     } = args;
 
     for (const hook of this.beforeHooks) {
@@ -596,6 +610,10 @@ export class Agent implements AgentHandle {
     );
 
     let step: Awaited<ReturnType<ModelAdapter["nextStep"]>>;
+    const inputAssetResolver =
+      this.sessionStore && sessionId
+        ? (assetId: string) => this.sessionStore!.getInputAsset(sessionId, assetId)
+        : undefined;
     try {
       step = await this.model.nextStep({
         promptName,
@@ -609,6 +627,7 @@ export class Agent implements AgentHandle {
         selectedMaxTokens: modelSelection.maxTokens,
         availableTools: deriveToolDescriptors(this.tools.list()),
         availableSkills: this.skills?.list().map((skill) => skill.name) ?? [],
+        resolveInputAsset: inputAssetResolver,
         signal: runCtx.controller.signal,
         onAssistantDelta: async (delta) => {
           if (delta.length === 0) return;
@@ -750,7 +769,18 @@ export class Agent implements AgentHandle {
       // Only the first iteration carries the user prompt; later loop turns are
       // internal continuations and leave it empty (see providerModelAdapter).
       userMessage: iteration === 1 ? userPrompt : "",
+      ...(iteration === 1
+        ? {
+            userContent:
+              input?.content ??
+              (userPrompt.trim().length > 0 ? [{ type: "text" as const, text: userPrompt }] : []),
+          }
+        : {}),
       assistantMessage: step.assistantMessage,
+      assistantContent:
+        step.assistantMessage.trim().length > 0
+          ? [{ type: "text", text: step.assistantMessage }]
+          : undefined,
       toolCalls: combinedToolCalls,
       toolResults: combinedToolResults,
       ...(skillCalls.length > 0 ? { skillCalls, skillResults } : {}),
@@ -777,7 +807,8 @@ export class Agent implements AgentHandle {
   }
 
   async invoke(request: AgentInvokeRequest): Promise<AgentRunResult> {
-    const state = await this.run(request.prompt, request.execution);
+    const prompt = request.input?.text ?? request.prompt;
+    const state = await this.runWithInput(prompt, request.execution, request.input);
     return {
       summary: state.turns[state.turns.length - 1]?.assistantMessage ?? "",
       state,
