@@ -6,22 +6,22 @@ test("layout row budget calculation", () => {
   const viewportHeight = 30;
   const composerRows = 3;
   const composerBoxRows = 2;
-  const footerMarginRows = 1;
-  const footerTextRows = 5;
-  const controlRows = composerRows + composerBoxRows + footerMarginRows + footerTextRows;
+  const composerMarginRows = 1;
+  const footerRows = 6;
+  const controlRows = composerRows + composerBoxRows + composerMarginRows + footerRows;
   const contentRows = Math.max(1, viewportHeight - controlRows);
 
-  assert.equal(controlRows, 11);
-  assert.equal(contentRows, 19);
+  assert.equal(controlRows, 12);
+  assert.equal(contentRows, 18);
 });
 
 test("layout row budget ensures content is visible", () => {
   const viewportHeight = 24;
   const composerRows = 2;
   const composerBoxRows = 2;
-  const footerMarginRows = 1;
-  const footerTextRows = 5;
-  const controlRows = composerRows + composerBoxRows + footerMarginRows + footerTextRows;
+  const composerMarginRows = 1;
+  const footerRows = 6;
+  const controlRows = composerRows + composerBoxRows + composerMarginRows + footerRows;
   const contentRows = Math.max(1, viewportHeight - controlRows);
 
   assert(contentRows > 0);
@@ -32,14 +32,14 @@ test("layout row budget accounts for max composer rows", () => {
   const viewportHeight = 24;
   const maxComposerRows = 6;
   const composerBoxRows = 2;
-  const footerMarginRows = 1;
-  const footerTextRows = 5;
-  const maxControlRows = maxComposerRows + composerBoxRows + footerMarginRows + footerTextRows;
+  const composerMarginRows = 1;
+  const footerRows = 6;
+  const maxControlRows = maxComposerRows + composerBoxRows + composerMarginRows + footerRows;
 
-  assert(maxControlRows <= 14);
-  assert.equal(maxControlRows, 14);
+  assert(maxControlRows <= 15);
+  assert.equal(maxControlRows, 15);
   const contentRows = Math.max(1, viewportHeight - maxControlRows);
-  assert(contentRows >= 10);
+  assert(contentRows >= 9);
 });
 
 test("scrollbar thumb tracks newest content at the bottom", () => {

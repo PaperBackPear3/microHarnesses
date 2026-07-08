@@ -151,7 +151,7 @@ compressor.
 
 - `Enter` send prompt
 - `Shift+Enter` insert newline
-- Mouse wheel scroll transcript
+- Mouse drag uses native terminal text selection for copy/paste
 - Arrow keys move through multi-line composer text; when input is empty, arrows scroll transcript
 - `Shift+Tab` cycle mode (Plan → Accept-edits → Autopilot)
 - `Ctrl+T` toggle reasoning collapse

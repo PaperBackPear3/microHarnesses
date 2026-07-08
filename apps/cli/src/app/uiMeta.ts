@@ -60,7 +60,7 @@ const KEYBOARD_SHORTCUTS: readonly Shortcut[] = [
   { keys: "Shift+Tab", description: "cycle mode (plan → edits → autopilot)" },
   { keys: "Ctrl+T", description: "toggle collapse for all reasoning" },
   { keys: "Ctrl+Y", description: "toggle diagnostics expand/collapse" },
-  { keys: "Mouse wheel", description: "scroll transcript" },
+  { keys: "Mouse drag", description: "use native terminal text selection for copy/paste" },
   { keys: "↑ / ↓", description: "scroll transcript (when input is empty)" },
   { keys: "PgUp / PgDn", description: "page transcript scroll (when input is empty)" },
   { keys: "/copy", description: "copy transcript to clipboard" },
@@ -92,7 +92,7 @@ export function contextBadgeStyle(status: StatusState): LabeledColor {
 }
 
 export function compactShortcutHintLine(): string {
-  return "Shift+Enter newline · wheel/PgUp/PgDn scroll · Ctrl+T thinking · Ctrl+Y diagnostics · /copy clipboard · Esc/Ctrl+C stop";
+  return "Shift+Enter newline · drag to select text · PgUp/PgDn scroll · Ctrl+T thinking · Ctrl+Y diagnostics · /copy clipboard";
 }
 
 export function helpCommandLines(modelChoices: string[]): string[] {

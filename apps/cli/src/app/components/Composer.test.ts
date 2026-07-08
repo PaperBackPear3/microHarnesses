@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  classifyComposerEnterAction,
   clipeRenderedToMaxRows,
   deleteBackward,
   deleteForward,
@@ -104,4 +105,51 @@ test("renderComposerValue wraps long lines and stays within max rows", () => {
 
 test("renderComposerValue leaves short input unchanged (cursor appended)", () => {
   assert.equal(renderComposerValue("hello\nworld", 11, 20), "hello\nworld█");
+});
+
+test("classifyComposerEnterAction distinguishes submit vs shift-enter newline", () => {
+  assert.equal(
+    classifyComposerEnterAction("\r", { return: true, shift: true, ctrl: false }),
+    "newline",
+  );
+  assert.equal(
+    classifyComposerEnterAction("\u001b[13;2u", {
+      return: false,
+      shift: false,
+      ctrl: false,
+    }),
+    "newline",
+  );
+  assert.equal(
+    classifyComposerEnterAction("\u001b[27;2;13~", {
+      return: false,
+      shift: false,
+      ctrl: false,
+    }),
+    "newline",
+  );
+  assert.equal(
+    classifyComposerEnterAction("\r", { return: true, shift: false, ctrl: false }),
+    "submit",
+  );
+  assert.equal(
+    classifyComposerEnterAction("\u001b[13;1u", {
+      return: false,
+      shift: false,
+      ctrl: false,
+    }),
+    "submit",
+  );
+  assert.equal(
+    classifyComposerEnterAction("\u001b[27;1;13~", {
+      return: false,
+      shift: false,
+      ctrl: false,
+    }),
+    "submit",
+  );
+  assert.equal(
+    classifyComposerEnterAction("x", { return: false, shift: false, ctrl: false }),
+    undefined,
+  );
 });

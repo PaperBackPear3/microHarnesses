@@ -91,8 +91,8 @@ test("help lines include commands and shortcuts discoverability", () => {
     "expected multiline composer shortcut",
   );
   assert(
-    shortcuts.some((line) => line.startsWith("Mouse wheel")),
-    "expected mouse wheel shortcut",
+    shortcuts.some((line) => line.startsWith("Mouse drag")),
+    "expected mouse selection shortcut",
   );
   assert(
     shortcuts.some((line) => line.startsWith("/copy")),
@@ -115,7 +115,8 @@ test("help lines include commands and shortcuts discoverability", () => {
     "expected interrupt shortcut",
   );
   assert.match(compactShortcutHintLine(), /Shift\+Enter newline/);
-  assert.match(compactShortcutHintLine(), /wheel\/PgUp\/PgDn scroll/);
+  assert.match(compactShortcutHintLine(), /drag to select text/);
+  assert.match(compactShortcutHintLine(), /PgUp\/PgDn scroll/);
   assert.match(compactShortcutHintLine(), /\/copy clipboard/);
   assert.match(compactShortcutHintLine(), /Ctrl\+Y diagnostics/);
 });

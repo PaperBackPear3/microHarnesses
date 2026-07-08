@@ -14,6 +14,8 @@ interface Props {
 
 const CURSOR_GLYPH = "█";
 const MAX_COMPOSER_ROWS = 6;
+const ENTER_SUBMIT_SEQUENCES = new Set(["\u001b[13;1u", "\u001b[27;1;13~"]);
+const ENTER_NEWLINE_SEQUENCES = new Set(["\u001b[13;2u", "\u001b[27;2;13~"]);
 
 export function clipeRenderedToMaxRows(rendered: string, columns: number, maxRows: number): string {
   const safeColumns = Math.max(1, columns);
@@ -64,11 +66,12 @@ export function Composer({ value, disabled, columns, onChange, onSubmit }: Props
       if (disabled) return;
       if (containsTerminalMouseSequence(input)) return;
 
-      if (key.return) {
-        if (key.shift) {
-          insertChunk("\n");
-          return;
-        }
+      const enterAction = classifyComposerEnterAction(input, key);
+      if (enterAction === "newline") {
+        insertChunk("\n");
+        return;
+      }
+      if (enterAction === "submit") {
         onSubmit(value);
         return;
       }
@@ -134,6 +137,17 @@ export function Composer({ value, disabled, columns, onChange, onSubmit }: Props
   usePaste(insertChunk, { isActive: !disabled });
 
   return <Text>{displayedValue}</Text>;
+}
+
+export function classifyComposerEnterAction(
+  input: string,
+  key: Pick<Key, "return" | "shift" | "ctrl">,
+): "submit" | "newline" | undefined {
+  if (key.return && key.shift) return "newline";
+  if (key.return) return "submit";
+  if (ENTER_NEWLINE_SEQUENCES.has(input)) return "newline";
+  if (ENTER_SUBMIT_SEQUENCES.has(input)) return "submit";
+  return undefined;
 }
 
 export function estimateComposerRows(value: string, columns: number): number {

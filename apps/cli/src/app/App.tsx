@@ -21,6 +21,7 @@ import { copyToClipboard } from "./clipboard.js";
 import { Composer, estimateComposerRows } from "./components/Composer.js";
 import { FooterStatusBar } from "./components/FooterStatusBar.js";
 import { HelpScreen, Screen } from "./components/Screens.js";
+import { disableKeyboardEnhancements, enableKeyboardEnhancements } from "./keyboardEnhancements.js";
 import { containsTerminalMouseSequence, parseMouseWheelDelta } from "./mouseSequences.js";
 import { handleSlashCommand } from "./slashController.js";
 import { ChatStore } from "./store/chatStore.js";
@@ -70,9 +71,9 @@ export function App({
   useEffect(() => () => chatStore.dispose(), [chatStore]);
 
   useEffect(() => {
-    process.stdout.write("\u001b[?1000h\u001b[?1006h");
+    enableKeyboardEnhancements();
     return () => {
-      process.stdout.write("\u001b[?1000l\u001b[?1006l");
+      disableKeyboardEnhancements();
     };
   }, []);
 
@@ -82,18 +83,19 @@ export function App({
   const modelLabel = modelBadgeLabel(composition.runtimeState.model ?? status.model);
   const shortcutHint = compactShortcutHintLine();
   const terminalColumns = Math.max(process.stdout.columns ?? 120, 40);
-  const transcriptWidth = Math.max(28, terminalColumns - 8);
+  const transcriptWidth = Math.max(28, terminalColumns - 10);
+  const composerColumns = Math.max(20, terminalColumns - (running ? 28 : 18));
   const modelChoices = useMemo(
     () => availableModelChoices(composition.runtimeState.provider),
     [composition.runtimeState.provider],
   );
 
   const viewportHeight = Math.max((process.stdout.rows ?? 24) - 1, 16);
-  const composerRows = estimateComposerRows(input, Math.max(20, terminalColumns - 10));
+  const composerRows = estimateComposerRows(input, composerColumns);
   const composerBoxRows = 2;
-  const footerMarginRows = 1;
-  const footerTextRows = 5;
-  const controlRows = composerRows + composerBoxRows + footerMarginRows + footerTextRows;
+  const composerMarginRows = 1;
+  const footerRows = 6;
+  const controlRows = composerRows + composerBoxRows + composerMarginRows + footerRows;
   const contentRows = Math.max(1, viewportHeight - controlRows);
   const transcriptRows = Math.max(1, contentRows - 2);
 
@@ -432,13 +434,14 @@ export function App({
         height={contentRows}
         borderStyle="round"
         borderColor="gray"
+        backgroundColor="black"
         paddingX={1}
       >
         {screen === "chat" ? (
           <Box flexDirection="row" height={transcriptRows}>
             <Box flexDirection="column" flexGrow={1}>
               {transcriptViewport.visible.map((line) => (
-                <Text key={line.id} backgroundColor="blackBright">
+                <Text key={line.id}>
                   <Text color={line.indicatorColor}>{line.indicator}</Text>
                   <Text color={line.textColor ?? "whiteBright"}>{line.text}</Text>
                 </Text>
@@ -478,24 +481,21 @@ export function App({
             ))}
           </Box>
         ) : null}
-        <Box
-          borderStyle="round"
-          borderColor={modeStyle.color}
-          backgroundColor="blackBright"
-          paddingX={1}
-        >
-          <Text color={modeStyle.color}>▍ </Text>
-          {pendingApproval ? (
-            <Text color="yellow">awaiting approval (y/n/a)</Text>
-          ) : (
-            <Composer
-              value={input}
-              onChange={setInput}
-              onSubmit={submit}
-              disabled={switchingSession}
-              columns={Math.max(20, terminalColumns - 16)}
-            />
-          )}
+        <Box borderStyle="round" borderColor={modeStyle.color} backgroundColor="black" paddingX={1}>
+          <Text color={modeStyle.color}>▍</Text>
+          <Box marginLeft={1} flexGrow={1}>
+            {pendingApproval ? (
+              <Text color="yellow">awaiting approval (y/n/a)</Text>
+            ) : (
+              <Composer
+                value={input}
+                onChange={setInput}
+                onSubmit={submit}
+                disabled={switchingSession}
+                columns={composerColumns}
+              />
+            )}
+          </Box>
           {running && (
             <Box marginLeft={1}>
               <Text color="yellow">

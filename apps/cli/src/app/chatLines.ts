@@ -75,7 +75,7 @@ export function buildChatLines(
   const systemStyle: LineStyle = {
     indicator: "∙ ",
     indicatorColor: "gray",
-    textColor: "gray",
+    textColor: "white",
   };
 
   for (const entry of entries) {
@@ -170,7 +170,7 @@ export function buildChatLines(
       {
         indicator: "∙ ",
         indicatorColor: "yellow",
-        textColor: "gray",
+        textColor: "white",
       },
       `approval required: ${pendingApproval.request.tool.name} (y=approve, n=reject, a=always)`,
       columns,
@@ -181,7 +181,7 @@ export function buildChatLines(
       {
         indicator: "∙ ",
         indicatorColor: "gray",
-        textColor: "gray",
+        textColor: "white",
       },
       pendingApproval.preview.slice(0, 600),
       columns,
@@ -212,7 +212,7 @@ export function buildChatLines(
       pushWrapped(
         lines,
         "diag-hint",
-        { indicator: "∙ ", indicatorColor: "gray", textColor: "gray" },
+        { indicator: "∙ ", indicatorColor: "gray", textColor: "white" },
         "press Ctrl+Y to expand diagnostics",
         columns,
       );
