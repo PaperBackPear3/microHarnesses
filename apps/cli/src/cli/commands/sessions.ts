@@ -1,8 +1,10 @@
 import { SessionStore } from "@micro-harnesses/core";
 import type { SessionsArgs } from "../args.js";
+import { loadCliConfig } from "../../config/config.js";
 
 export async function sessionsCommand(args: SessionsArgs): Promise<void> {
-  const stateDir = args.stateDir ?? `${process.cwd()}/.micro-harness`;
+  const config = await loadCliConfig({ stateDir: args.stateDir });
+  const stateDir = config.stateDir;
   const store = new SessionStore(stateDir);
   if (args.sub === "list") {
     const sessions = await store.listSessions();
