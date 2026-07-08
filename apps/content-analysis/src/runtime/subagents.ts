@@ -2,6 +2,7 @@ import type { AnalysisAssetView } from "../inputs/assets.js";
 import { buildAnalysisDraftPrompt, buildUserContentParts } from "../inputs/assets.js";
 import { parseAnalysisResult, mergeAnalysisResults, type AnalysisResult } from "../analysis/schema.js";
 import type { AnalysisAgents } from "./agent.js";
+import { log } from "./logger.js";
 
 export interface AnalyzeSessionInput {
   sessionId: string;
@@ -19,8 +20,11 @@ export async function analyzeSession(
   agents: AnalysisAgents,
   input: AnalyzeSessionInput,
 ): Promise<AnalyzeSessionOutput> {
+  log("info", "analyze", `Start session=${input.sessionId} run=${input.runId} views=${input.views.length}`);
+
   const imageViews = input.views.filter((view) => view.kind === "image");
   const documentViews = input.views.filter((view) => view.kind !== "image");
+  log("info", "analyze", `imageViews=${imageViews.length} documentViews=${documentViews.length}`);
   const drafts: AnalysisResult[] = [];
 
   if (imageViews.length > 0) {
@@ -51,6 +55,7 @@ export async function analyzeSession(
   ].join("\n\n");
 
   const content = await buildUserContentParts(input.views);
+  log("info", "synthesis", "Invoking synthesis agent");
   const response = await agents.synthesisAgent.invoke({
     prompt: synthesisPrompt,
     input: {
@@ -66,10 +71,14 @@ export async function analyzeSession(
     },
   });
 
+  log("debug", "synthesis", `Raw response (${response.summary.length} chars)`, response.summary.slice(0, 800));
+
   try {
     const parsed = parseAnalysisResult(response.summary);
+    log("info", "synthesis", "JSON parse succeeded");
     return { ...parsed, rawAssistantMessage: response.summary };
-  } catch {
+  } catch (parseErr) {
+    log("warn", "synthesis", `JSON parse failed: ${String(parseErr)} — falling back to draft`);
     return {
       ...combinedDraft,
       rawAssistantMessage: response.summary,
@@ -85,19 +94,78 @@ async function runAnalysisAgent(
   agents: AnalysisAgents,
 ): Promise<AnalysisResult> {
   const prompt = await buildAnalysisDraftPrompt(title, views, input.instructions ?? "");
+  log("info", "agent", `Invoking ${title} (${views.length} views)`);
+
+  const execution = {
+    sessionId: input.sessionId,
+    goal: `Analyze ${title}`,
+    maxIterations: 4,
+    snapshotEvery: 1,
+    profile: { defaultModel: agents.config.model },
+  };
+
   const response = await agent.invoke({
     prompt,
     input: {
       text: input.text ?? "",
       content: await buildUserContentParts(views),
     },
-    execution: {
-      sessionId: input.sessionId,
-      goal: `Analyze ${title}`,
-      maxIterations: 4,
-      snapshotEvery: 1,
-      profile: { defaultModel: agents.config.model },
-    },
+    execution,
   });
-  return parseAnalysisResult(response.summary);
+
+  log("debug", "agent", `${title} raw response (${response.summary.length} chars)`, response.summary.slice(0, 800));
+
+  try {
+    const result = parseAnalysisResult(response.summary);
+    log("info", "agent", `${title} JSON parse succeeded`);
+    return result;
+  } catch (firstErr) {
+    log("warn", "agent", `${title} JSON parse failed: ${String(firstErr)} — retrying with JSON-only prompt`);
+
+    // One retry: ask the model to reformat its own output as JSON only.
+    const retryPrompt = [
+      "Your previous response could not be parsed as JSON.",
+      "You MUST respond with a single JSON object and nothing else — no explanation, no prose, no markdown.",
+      "Use this exact schema:",
+      JSON.stringify({
+        summary: "string",
+        categories: [{ name: "string", confidence: "low|medium|high", reason: "string" }],
+        clarifications: [{ issue: "string", bestEffortInterpretation: "string", whatWouldHelp: "string" }],
+        items: [{ source: "string", mimeType: "string", summary: "string", categories: ["string"] }],
+      }, null, 2),
+      `Previous response to reformat:\n${response.summary}`,
+    ].join("\n\n");
+
+    const retryResponse = await agent.invoke({
+      prompt: retryPrompt,
+      input: { text: "" },
+      execution,
+    });
+
+    log("debug", "agent", `${title} retry response (${retryResponse.summary.length} chars)`, retryResponse.summary.slice(0, 800));
+
+    try {
+      const result = parseAnalysisResult(retryResponse.summary);
+      log("info", "agent", `${title} retry JSON parse succeeded`);
+      return result;
+    } catch (retryErr) {
+      log("error", "agent", `${title} retry also failed: ${String(retryErr)}`);
+      // Final fallback: return a minimal result with the raw output as summary
+      return {
+        summary: response.summary.slice(0, 500),
+        categories: [],
+        clarifications: [{
+          issue: "Model did not return structured JSON",
+          bestEffortInterpretation: response.summary.slice(0, 300),
+          whatWouldHelp: "Try a different model or add more specific content",
+        }],
+        items: views.map((v) => ({
+          source: v.sourceLabel,
+          mimeType: v.asset.mimeType,
+          summary: "Could not be analyzed (model output was not valid JSON)",
+          categories: [],
+        })),
+      };
+    }
+  }
 }

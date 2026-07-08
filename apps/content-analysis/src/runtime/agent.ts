@@ -1,6 +1,8 @@
 import {
   CredentialsRegistry,
   FsPromptSource,
+  OllamaAdapter,
+  OllamaEnvCredentials,
   ProviderRegistry,
   SessionStore,
   createCoreDefaultTools,
@@ -11,6 +13,7 @@ import type { ContentAnalysisConfig } from "../config.js";
 import type { MessageContentPart } from "../inputs/assets.js";
 import type { SessionStoreLike } from "../inputs/assets.js";
 import { createContentAnalysisTools } from "../tools/index.js";
+import { log } from "./logger.js";
 
 export interface AnalysisRunExecution {
   sessionId: string;
@@ -61,6 +64,7 @@ export function createAnalysisAgents(config: ContentAnalysisConfig): AnalysisAge
     tools: sharedTools,
     prompts,
     sessionStore: sessionStoreRaw,
+    // Built-in providers registered first; we then override ollama below.
     includeBuiltInProviders: true,
     providerRegistry,
     credentialsRegistry,
@@ -72,6 +76,19 @@ export function createAnalysisAgents(config: ContentAnalysisConfig): AnalysisAge
     name: "content-analysis",
     ...commonOptions,
   }) as unknown as AnalysisAgentHandle;
+
+  // Override the built-in Ollama adapter with forceJsonMode so models like
+  // Gemma reliably emit JSON instead of conversational prose.
+  if (config.provider === "ollama") {
+    const jsonOllama = new OllamaAdapter({
+      defaultModel: config.model,
+      forceJsonMode: true,
+    });
+    providerRegistry.register(jsonOllama);
+    credentialsRegistry.register("ollama", new OllamaEnvCredentials());
+    log("info", "provider", `Registered Ollama adapter with forceJsonMode=true (model=${config.model})`);
+  }
+
   const visualAgent = defineAgent({
     name: "visual-analysis",
     ...commonOptions,

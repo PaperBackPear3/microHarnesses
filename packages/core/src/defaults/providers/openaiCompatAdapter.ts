@@ -46,6 +46,11 @@ export interface OpenAICompatAdapterOptions {
    * the OpenAI preset disables it.
    */
   mapDeveloperRoleToSystem?: boolean;
+  /**
+   * When `true`, adds `format: "json"` to every request body.
+   * Ollama-compatible servers use this to enforce JSON output mode.
+   */
+  forceJsonMode?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -65,6 +70,7 @@ export class OpenAICompatAdapter implements ProviderAdapter {
   private readonly authStyle: "bearer" | "none";
   private readonly extraHeaders: Record<string, string>;
   private readonly mapDeveloperRoleToSystem: boolean;
+  private readonly forceJsonMode: boolean;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OpenAICompatAdapterOptions) {
@@ -74,6 +80,7 @@ export class OpenAICompatAdapter implements ProviderAdapter {
     this.authStyle = options.authStyle ?? "bearer";
     this.extraHeaders = options.extraHeaders ?? {};
     this.mapDeveloperRoleToSystem = options.mapDeveloperRoleToSystem ?? true;
+    this.forceJsonMode = options.forceJsonMode ?? false;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
@@ -212,6 +219,7 @@ export class OpenAICompatAdapter implements ProviderAdapter {
         : {}),
       temperature: request.temperature ?? 0.2,
       max_tokens: request.maxTokens ?? 4096,
+      ...(this.forceJsonMode ? { format: "json" } : {}),
     };
   }
 }

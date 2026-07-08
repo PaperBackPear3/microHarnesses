@@ -13,6 +13,7 @@ import { detectMimeType, isImageMimeType } from "./inputs/mime.js";
 import { fetchUrlAsset } from "./inputs/fetchUrl.js";
 import { parseJsonAnalysisRequest } from "./http/jsonEndpoint.js";
 import { parseMultipartAnalysisRequest } from "./http/multipartEndpoint.js";
+import { log } from "./runtime/logger.js";
 
 export interface AnalysisServer {
   server: ReturnType<typeof createServer>;
@@ -80,6 +81,8 @@ async function handleRequest(
     const contentType = req.headers["content-type"] ?? "";
     const requestId = randomUUID();
     const sessionId = `s-${requestId}`;
+    const t0 = Date.now();
+    log("info", "request", `POST /analyze requestId=${requestId} contentType=${contentType.split(";")[0]}`);
     await mkdir(path.join(config.stateDir, "staging"), { recursive: true });
     await agents.sessionStore.initSession({ sessionId, goal: "Analyze supplied content" });
 
@@ -167,6 +170,8 @@ async function handleRequest(
       assetIds,
     });
 
+    log("info", "request", `requestId=${requestId} assets=${assetIds.length} views=${views.length} (images=${views.filter(v=>v.kind==="image").length} docs=${views.filter(v=>v.kind!=="image").length})`);
+
     const result = await analyzeSession(agents, {
       sessionId,
       runId: requestId,
@@ -174,6 +179,9 @@ async function handleRequest(
       text: textParts.join("\n"),
       instructions: normalized.instructions,
     });
+
+    const elapsed = Date.now() - t0;
+    log("info", "request", `requestId=${requestId} completed in ${elapsed}ms categories=${result.categories.length} clarifications=${result.clarifications.length}`);
 
     sendJson(res, 200, {
       sessionId,
