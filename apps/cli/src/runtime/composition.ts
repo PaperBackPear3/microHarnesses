@@ -48,6 +48,7 @@ import {
 } from "@micro-harnesses/core";
 import { BasicToolsPlugin } from "@micro-harnesses/plugin-basic-tools";
 import { exampleToolsPlugin } from "@micro-harnesses/plugin-example-tools";
+import { SqliteTodosPlugin } from "@micro-harnesses/plugin-sqlite-todos";
 import type { CliConfig } from "../config/config.js";
 import { SessionService } from "../session/sessionService.js";
 import { UiStream } from "../streaming/uiStream.js";
@@ -137,6 +138,14 @@ export async function buildComposition(
         "fs_remove",
         "shell_exec",
         "spawn_subagent",
+        "todo_create",
+        "todo_update",
+        "todo_set_status",
+        "todo_delete",
+        "todo_add_dependency",
+        "todo_remove_dependency",
+        "todo_lock",
+        "todo_unlock",
       ],
     }),
   );
@@ -426,6 +435,7 @@ export async function buildComposition(
   await pluginHost.register([
     ...builtInProviderPlugins(),
     new BasicToolsPlugin(),
+    new SqliteTodosPlugin({ dbPath: path.join(config.stateDir, "todos.sqlite") }),
     exampleToolsPlugin,
   ]);
 

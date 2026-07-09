@@ -27,11 +27,11 @@ jobs:
       # Trusted publishing (OIDC) requires npm >= 11.5.1.
       - run: npm install -g npm@latest
       - run: npm ci
-      - run: node scripts/release-preflight.mjs packages/core plugins/example-tools plugins/basic-tools apps/cli
+      - run: node scripts/release-preflight.mjs packages/core plugins/example-tools plugins/basic-tools plugins/sqlite-todos apps/cli
       - run: npm run build
       - run: npm test
       - run: |
-          for pkg in packages/core plugins/example-tools plugins/basic-tools apps/cli; do
+          for pkg in packages/core plugins/example-tools plugins/basic-tools plugins/sqlite-todos apps/cli; do
             echo "Publishing $pkg"
             # Provenance is generated automatically under trusted publishing.
             (cd "$pkg" && npm publish --access public)

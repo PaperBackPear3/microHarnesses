@@ -1,14 +1,14 @@
 {
-  "name": "@micro-harnesses/plugin-example-tools",
+  "name": "@micro-harnesses/plugin-sqlite-todos",
   "version": "3.4.0",
-  "description": "Reference tool plugin (echo, time) for @micro-harnesses/core. Doubles as a plugin-authoring example.",
+  "description": "SQLite-backed todo and long-horizon workflow tools for @micro-harnesses/core.",
   "license": "MIT",
-  "keywords": ["micro-harness", "plugin", "example", "tools"],
+  "keywords": ["micro-harness", "plugin", "todo", "sqlite", "workflow"],
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
   "repository": {
     "type": "git",
     "url": "https://github.com/PaperBackPear3/microHarnesses.git",
-    "directory": "plugins/example-tools"
+    "directory": "plugins/sqlite-todos"
   },
   "bugs": {
     "url": "https://github.com/PaperBackPear3/microHarnesses/issues"
@@ -27,7 +27,7 @@
     "access": "public"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",

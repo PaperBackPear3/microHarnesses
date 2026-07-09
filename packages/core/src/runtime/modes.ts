@@ -56,6 +56,14 @@ export const DEFAULT_MUTATING_TOOLS = [
   "fs_remove",
   "shell_exec",
   "channel_send",
+  "todo_create",
+  "todo_update",
+  "todo_set_status",
+  "todo_delete",
+  "todo_add_dependency",
+  "todo_remove_dependency",
+  "todo_lock",
+  "todo_unlock",
 ];
 
 /** Read-only / planning tools allowed while in plan mode. */
@@ -65,6 +73,9 @@ export const DEFAULT_PLAN_ALLOWED_TOOLS = [
   "fs_read",
   "grep_search",
   "channel_list",
+  "todo_get",
+  "todo_list",
+  "todo_next_ready",
   "plan_agent",
   "explore_agent",
   "plan_mode_info",

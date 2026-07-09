@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/plugin-basic-tools",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "description": "Workspace-scoped filesystem mutation and shell tools for @micro-harnesses/core.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "tools", "filesystem", "shell"],
@@ -34,6 +34,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harnesses/core": "^3.3.1"
+    "@micro-harnesses/core": "^3.4.0"
   }
 }

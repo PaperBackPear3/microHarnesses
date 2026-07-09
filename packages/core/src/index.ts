@@ -13,6 +13,9 @@ export * from "./tools/descriptors";
 export * from "./tools/outputArtifacts";
 export * from "./tools/resultFeedback";
 
+// Todos
+export * from "./todos/types";
+
 // Actions (governed execution of tools + skills)
 export * from "./actions/executionEngine";
 

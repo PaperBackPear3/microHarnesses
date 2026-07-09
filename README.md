@@ -36,6 +36,7 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 | [`@micro-harnesses/core`](packages/core) | Runtime loop, tools/channels/skills registries, MCP tools, policy engine, harness modes, session/context system, compression (default + agentic), plugin host, provider adapters (OpenAI/Anthropic/Ollama + generic OpenAI-compatible), model routing, declarative agents, and subagent runner/supervisor primitives. |
 | [`@micro-harnesses/plugin-basic-tools`](plugins/basic-tools) | Workspace-scoped file mutation tools and shell execution tool. |
 | [`@micro-harnesses/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |
+| [`@micro-harnesses/plugin-sqlite-todos`](plugins/sqlite-todos) | SQLite-backed persistent todos with hard-lock semantics and dependency-aware ready queue tools for long-horizon workflows. |
 | [`@micro-harnesses/cli`](apps/cli) | Agentic coding CLI (React/Ink TUI) built as a thin composition layer over core and plugins. |
 
 ## Design principles
@@ -69,7 +70,7 @@ release workflow.
 ## Install packages
 
 ```bash
-npm install @micro-harnesses/core @micro-harnesses/plugin-basic-tools @micro-harnesses/plugin-example-tools @micro-harnesses/cli
+npm install @micro-harnesses/core @micro-harnesses/plugin-basic-tools @micro-harnesses/plugin-example-tools @micro-harnesses/plugin-sqlite-todos @micro-harnesses/cli
 ```
 
 ## Plugin capabilities
