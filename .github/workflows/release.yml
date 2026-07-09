@@ -24,8 +24,10 @@ jobs:
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-      # Trusted publishing (OIDC) requires npm >= 11.5.1.
-      - run: npm install -g npm@latest
+      # Trusted publishing (OIDC) requires npm >= 11.5.1. npm 12 on the
+      # hosted toolcache can miss the sigstore module used for provenance, so
+      # install it globally alongside npm to keep publish resolution stable.
+      - run: npm install -g npm@latest sigstore@latest
       - run: npm ci
       - run: node scripts/release-preflight.mjs packages/core plugins/example-tools plugins/basic-tools plugins/sqlite-todos apps/cli
       - run: npm run build
