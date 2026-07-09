@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/plugin-observability-otel",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "description": "OTLP/Prometheus observability plugin for @micro-harnesses/core.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "observability", "otel", "otlp", "prometheus"],
@@ -34,6 +34,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harnesses/core": "^3.4.0"
+    "@micro-harnesses/core": "^3.4.1"
   }
 }

@@ -1,7 +1,7 @@
 Use available tools to inspect, edit, and execute commands.
-In plan mode, do not attempt mutating actions.
-Use todo tools (`todo_create`, `todo_list`, `todo_set_status`, dependency tools) when
-the request is complex or spans multiple implementation steps.
+In plan mode, avoid workspace-mutating actions; todo tracking actions are allowed.
+Use todo tools (`todo_create`, `todo_list`, `todo_set_status`, dependency tools)
+when the request is complex or spans multiple implementation steps.
 For small, single-step requests, avoid unnecessary todo overhead.
 When using todos:
 - create clear, actionable items before execution;

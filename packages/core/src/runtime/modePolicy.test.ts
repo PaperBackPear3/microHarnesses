@@ -30,6 +30,15 @@ const shellTool: ToolDefinition = {
   },
 };
 
+const todoCreateTool: ToolDefinition = {
+  name: "todo_create",
+  description: "todo create",
+  risk: "high",
+  async execute() {
+    return {};
+  },
+};
+
 test("plan mode denies mutating tools", async () => {
   const mode = new ModeController("plan");
   const rule = createModeAwareApprovalPolicy(mode);
@@ -84,6 +93,21 @@ test("accept-edits mode allows read tools", async () => {
     {
       iteration: 1,
       promptName: "coder",
+      runId: "r-1",
+    },
+  );
+  assert.equal(decision?.decision, "allow");
+});
+
+test("plan mode allows todo mutation tools", async () => {
+  const mode = new ModeController("plan");
+  const rule = createModeAwareApprovalPolicy(mode);
+  const decision = await rule(
+    todoCreateTool,
+    { name: "todo_create", input: { text: "x" } },
+    {
+      iteration: 1,
+      promptName: "planner",
       runId: "r-1",
     },
   );
