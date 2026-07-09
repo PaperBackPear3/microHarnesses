@@ -619,6 +619,7 @@ export class Agent implements AgentHandle {
         promptName,
         userPrompt,
         bundle,
+        runtimeInstructions: options.runtimeInstructions,
         workingTurns: working.recentTurns,
         summary: working.summary,
         iteration,

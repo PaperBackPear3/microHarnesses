@@ -11,6 +11,7 @@ export interface TodoRecord {
   text: string;
   status: TodoStatus;
   priority: number;
+  scopeId?: string;
   createdAt: string;
   updatedAt: string;
   blockedReason?: string;
@@ -27,6 +28,7 @@ export interface TodoCreateInput {
   id?: string;
   text: string;
   priority?: number;
+  scopeId?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -42,11 +44,13 @@ export interface TodoListQuery {
   status?: TodoStatus | TodoStatus[];
   includeLocked?: boolean;
   lockOwner?: string;
+  scopeId?: string;
   limit?: number;
 }
 
 export interface TodoNextQuery {
   owner?: string;
+  scopeId?: string;
   limit?: number;
 }
 
@@ -66,4 +70,5 @@ export interface TodoStore {
   lock(id: string, owner: string, reason?: string): Promise<TodoRecord>;
   unlock(id: string, owner: string, force?: boolean): Promise<TodoRecord>;
   nextReady(query?: TodoNextQuery): Promise<TodoRecord[]>;
+  cleanupDone?(scopeId: string, actor: string): Promise<number>;
 }

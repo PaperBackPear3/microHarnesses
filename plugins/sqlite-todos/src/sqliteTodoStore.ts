@@ -18,6 +18,7 @@ type TodoRow = {
   text: string;
   status: TodoStatus;
   priority: number;
+  scope_id: string | null;
   created_at: string;
   updated_at: string;
   blocked_reason: string | null;
@@ -31,6 +32,7 @@ interface TodoFilters {
   status?: TodoStatus[];
   includeLocked: boolean;
   lockOwner?: string;
+  scopeId?: string;
   limit: number;
 }
 
@@ -53,15 +55,16 @@ export class SqliteTodoStore implements TodoStore {
     const now = new Date().toISOString();
     const id = input.id?.trim() || `todo-${randomUUID()}`;
     const priority = normalizePriority(input.priority);
+    const scopeId = input.scopeId?.trim() || null;
     const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
     this.db
       .prepare(
         `INSERT INTO todos (
-          id, text, status, priority, created_at, updated_at, metadata_json
-        ) VALUES (?, ?, 'open', ?, ?, ?, ?)`,
+          id, text, status, priority, scope_id, created_at, updated_at, metadata_json
+        ) VALUES (?, ?, 'open', ?, ?, ?, ?, ?)`,
       )
-      .run(id, text, priority, now, now, metadataJson);
-    this.insertEvent(id, "created", "system", { text, priority });
+      .run(id, text, priority, scopeId, now, now, metadataJson);
+    this.insertEvent(id, "created", "system", { text, priority, scopeId });
     return this.requireTodo(id);
   }
 
@@ -84,6 +87,10 @@ export class SqliteTodoStore implements TodoStore {
     } else if (filters.lockOwner) {
       clauses.push("(locked_by IS NULL OR locked_by = ?)");
       args.push(filters.lockOwner);
+    }
+    if (filters.scopeId) {
+      clauses.push("scope_id = ?");
+      args.push(filters.scopeId);
     }
 
     const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
@@ -157,13 +164,17 @@ export class SqliteTodoStore implements TodoStore {
   }
 
   async removeDependency(todoId: string, dependsOn: string): Promise<void> {
-    this.db.prepare("DELETE FROM todo_deps WHERE todo_id = ? AND depends_on = ?").run(todoId, dependsOn);
+    this.db
+      .prepare("DELETE FROM todo_deps WHERE todo_id = ? AND depends_on = ?")
+      .run(todoId, dependsOn);
     this.insertEvent(todoId, "dependency_removed", "system", { dependsOn });
   }
 
   async listDependencies(todoId: string): Promise<TodoDependency[]> {
     const rows = this.db
-      .prepare("SELECT todo_id, depends_on FROM todo_deps WHERE todo_id = ? ORDER BY depends_on ASC")
+      .prepare(
+        "SELECT todo_id, depends_on FROM todo_deps WHERE todo_id = ? ORDER BY depends_on ASC",
+      )
       .all(todoId) as Array<{ todo_id: string; depends_on: string }>;
     return rows.map((row) => ({ todoId: row.todo_id, dependsOn: row.depends_on }));
   }
@@ -177,7 +188,9 @@ export class SqliteTodoStore implements TodoStore {
     }
     const now = new Date().toISOString();
     this.db
-      .prepare("UPDATE todos SET locked_by = ?, locked_at = ?, lock_reason = ?, updated_at = ? WHERE id = ?")
+      .prepare(
+        "UPDATE todos SET locked_by = ?, locked_at = ?, lock_reason = ?, updated_at = ? WHERE id = ?",
+      )
       .run(cleanOwner, now, reason?.trim() || null, now, id);
     this.insertEvent(id, "locked", cleanOwner, { reason: reason ?? null });
     return this.requireTodo(id);
@@ -192,7 +205,9 @@ export class SqliteTodoStore implements TodoStore {
     }
     const now = new Date().toISOString();
     this.db
-      .prepare("UPDATE todos SET locked_by = NULL, locked_at = NULL, lock_reason = NULL, updated_at = ? WHERE id = ?")
+      .prepare(
+        "UPDATE todos SET locked_by = NULL, locked_at = NULL, lock_reason = NULL, updated_at = ? WHERE id = ?",
+      )
       .run(now, id);
     this.insertEvent(id, "unlocked", cleanOwner, { force });
     return this.requireTodo(id);
@@ -201,18 +216,21 @@ export class SqliteTodoStore implements TodoStore {
   async nextReady(query: TodoNextQuery = {}): Promise<TodoRecord[]> {
     const limit = clampLimit(query.limit);
     const owner = query.owner?.trim();
+    const scopeId = query.scopeId?.trim();
     const args: SqlArg[] = [];
     let lockFilter = "t.locked_by IS NULL";
     if (owner) {
       lockFilter = "(t.locked_by IS NULL OR t.locked_by = ?)";
       args.push(owner);
     }
+    if (scopeId) args.push(scopeId);
     args.push(limit);
     const sql = `
       SELECT t.*
       FROM todos t
       WHERE t.status IN ('open', 'in_progress')
         AND ${lockFilter}
+        ${scopeId ? "AND t.scope_id = ?" : ""}
         AND NOT EXISTS (
           SELECT 1
           FROM todo_deps td
@@ -227,6 +245,25 @@ export class SqliteTodoStore implements TodoStore {
     return rows.map(mapTodoRow);
   }
 
+  async cleanupDone(scopeId: string, actor: string): Promise<number> {
+    const cleanScope = scopeId.trim();
+    const cleanActor = actor.trim() || "system";
+    if (!cleanScope) throw new Error("cleanupDone requires scopeId");
+    return this.inTransaction(() => {
+      const rows = this.db
+        .prepare("SELECT id FROM todos WHERE scope_id = ? AND status = 'done'")
+        .all(cleanScope) as Array<{ id: string }>;
+      for (const row of rows) {
+        this.db
+          .prepare("DELETE FROM todo_deps WHERE todo_id = ? OR depends_on = ?")
+          .run(row.id, row.id);
+        this.db.prepare("DELETE FROM todos WHERE id = ?").run(row.id);
+        this.insertEvent(row.id, "deleted", cleanActor, { cleanup: true, scopeId: cleanScope });
+      }
+      return rows.length;
+    });
+  }
+
   private bootstrap(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS todos (
@@ -234,6 +271,7 @@ export class SqliteTodoStore implements TodoStore {
         text TEXT NOT NULL,
         status TEXT NOT NULL CHECK (status IN ('open', 'in_progress', 'blocked', 'done', 'cancelled')),
         priority INTEGER NOT NULL DEFAULT 0,
+        scope_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         blocked_reason TEXT,
@@ -266,9 +304,26 @@ export class SqliteTodoStore implements TodoStore {
       CREATE INDEX IF NOT EXISTS idx_todo_deps_todo_id ON todo_deps (todo_id);
       CREATE INDEX IF NOT EXISTS idx_todo_deps_depends_on ON todo_deps (depends_on);
     `);
+    this.migrateScopeColumn();
   }
 
-  private insertEvent(todoId: string, type: string, actor: string, payload: Record<string, unknown>): void {
+  private migrateScopeColumn(): void {
+    const columns = this.db.prepare("PRAGMA table_info(todos)").all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === "scope_id")) {
+      this.db.exec("ALTER TABLE todos ADD COLUMN scope_id TEXT;");
+    }
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_todos_scope_status_priority_updated
+        ON todos (scope_id, status, priority DESC, updated_at ASC);
+    `);
+  }
+
+  private insertEvent(
+    todoId: string,
+    type: string,
+    actor: string,
+    payload: Record<string, unknown>,
+  ): void {
     this.db
       .prepare(
         "INSERT INTO todo_events (todo_id, type, actor, payload_json, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -306,6 +361,7 @@ function normalizeListQuery(query: TodoListQuery): TodoFilters {
     status,
     includeLocked: query.includeLocked ?? true,
     lockOwner: query.lockOwner?.trim(),
+    scopeId: query.scopeId?.trim(),
     limit: clampLimit(query.limit),
   };
 }
@@ -316,10 +372,13 @@ function mapTodoRow(row: TodoRow): TodoRecord {
     text: row.text,
     status: row.status,
     priority: row.priority,
+    ...(row.scope_id ? { scopeId: row.scope_id } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     ...(row.blocked_reason ? { blockedReason: row.blocked_reason } : {}),
-    ...(row.metadata_json ? { metadata: JSON.parse(row.metadata_json) as Record<string, unknown> } : {}),
+    ...(row.metadata_json
+      ? { metadata: JSON.parse(row.metadata_json) as Record<string, unknown> }
+      : {}),
     ...(row.locked_by && row.locked_at
       ? {
           lock: {

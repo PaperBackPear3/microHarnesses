@@ -160,9 +160,15 @@ const AUTOPILOT_INSTRUCTIONS = [
   "- Only stop early when blocked by a real error, and clearly state the blocker.",
 ].join("\n");
 
+/** Returns mode-specific runtime instructions without mutating user prompt text. */
+export function modeExecutionContract(mode: HarnessMode): string | undefined {
+  if (mode !== "autopilot") return undefined;
+  return AUTOPILOT_INSTRUCTIONS;
+}
+
 /** Appends the autopilot execution contract to prompts sent in autopilot mode. */
 export function withModeExecutionContract(prompt: string, mode: HarnessMode): string {
   const trimmed = prompt.trim();
   if (mode !== "autopilot" || trimmed.length === 0) return prompt;
-  return `${trimmed}\n\n${AUTOPILOT_INSTRUCTIONS}`;
+  return `${trimmed}\n\n${modeExecutionContract(mode)}`;
 }

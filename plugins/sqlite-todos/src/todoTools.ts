@@ -1,4 +1,10 @@
-import type { ToolDefinition, ToolExecutionContext, TodoStatus, TodoStore, TodoUpdateInput } from "@micro-harnesses/core";
+import type {
+  TodoStatus,
+  TodoStore,
+  TodoUpdateInput,
+  ToolDefinition,
+  ToolExecutionContext,
+} from "@micro-harnesses/core";
 
 export function createTodoTools(store: TodoStore): ToolDefinition[] {
   return [
@@ -32,11 +38,13 @@ function createTodoCreateTool(store: TodoStore): ToolDefinition {
       required: ["text"],
       additionalProperties: false,
     },
-    async execute(input) {
+    async execute(input, context) {
+      const scopeId = resolveScope(context);
       const todo = await store.create({
         ...(typeof input.id === "string" ? { id: input.id } : {}),
         text: requiredString(input, "text"),
         priority: optionalNumber(input, "priority"),
+        ...(scopeId ? { scopeId } : {}),
         ...(isRecord(input.metadata) ? { metadata: input.metadata } : {}),
       });
       return { todo };
@@ -55,8 +63,8 @@ function createTodoGetTool(store: TodoStore): ToolDefinition {
       required: ["id"],
       additionalProperties: false,
     },
-    async execute(input) {
-      const todo = await store.get(requiredString(input, "id"));
+    async execute(input, context) {
+      const todo = await getScopedTodo(store, requiredString(input, "id"), resolveScope(context));
       return { found: Boolean(todo), ...(todo ? { todo } : {}) };
     },
   };
@@ -79,15 +87,18 @@ function createTodoListTool(store: TodoStore): ToolDefinition {
       },
       additionalProperties: false,
     },
-    async execute(input) {
+    async execute(input, context) {
       const status = normalizeStatusFilter(input.status);
+      const scopeId = resolveScope(context);
+      const cleaned = await cleanupDoneForScope(store, scopeId);
       const todos = await store.list({
         ...(status ? { status } : {}),
         includeLocked: optionalBoolean(input, "include_locked"),
         ...(typeof input.lock_owner === "string" ? { lockOwner: input.lock_owner } : {}),
+        ...(scopeId ? { scopeId } : {}),
         limit: optionalNumber(input, "limit"),
       });
-      return { count: todos.length, todos };
+      return { count: todos.length, cleaned, todos };
     },
   };
 }
@@ -113,6 +124,7 @@ function createTodoUpdateTool(store: TodoStore): ToolDefinition {
     async execute(input, context) {
       const id = requiredString(input, "id");
       const actor = resolveActor(input, context);
+      await assertTodoInScope(store, id, resolveScope(context));
       const patch: TodoUpdateInput = {};
       if (typeof input.text === "string") patch.text = input.text;
       if (typeof input.priority === "number") patch.priority = input.priority;
@@ -144,11 +156,14 @@ function createTodoSetStatusTool(store: TodoStore): ToolDefinition {
       const id = requiredString(input, "id");
       const status = parseTodoStatus(requiredString(input, "status"));
       const actor = resolveActor(input, context);
+      await assertTodoInScope(store, id, resolveScope(context));
       const todo = await store.update(
         id,
         {
           status,
-          ...(typeof input.blocked_reason === "string" ? { blockedReason: input.blocked_reason } : {}),
+          ...(typeof input.blocked_reason === "string"
+            ? { blockedReason: input.blocked_reason }
+            : {}),
         },
         actor,
       );
@@ -174,6 +189,7 @@ function createTodoDeleteTool(store: TodoStore): ToolDefinition {
     async execute(input, context) {
       const id = requiredString(input, "id");
       const actor = resolveActor(input, context);
+      await assertTodoInScope(store, id, resolveScope(context));
       await store.delete(id, actor);
       return { ok: true, id };
     },
@@ -194,9 +210,12 @@ function createTodoAddDependencyTool(store: TodoStore): ToolDefinition {
       required: ["todo_id", "depends_on"],
       additionalProperties: false,
     },
-    async execute(input) {
+    async execute(input, context) {
       const todoId = requiredString(input, "todo_id");
       const dependsOn = requiredString(input, "depends_on");
+      const scopeId = resolveScope(context);
+      await assertTodoInScope(store, todoId, scopeId);
+      await assertTodoInScope(store, dependsOn, scopeId);
       await store.addDependency(todoId, dependsOn);
       return { ok: true, todoId, dependsOn };
     },
@@ -217,9 +236,12 @@ function createTodoRemoveDependencyTool(store: TodoStore): ToolDefinition {
       required: ["todo_id", "depends_on"],
       additionalProperties: false,
     },
-    async execute(input) {
+    async execute(input, context) {
       const todoId = requiredString(input, "todo_id");
       const dependsOn = requiredString(input, "depends_on");
+      const scopeId = resolveScope(context);
+      await assertTodoInScope(store, todoId, scopeId);
+      await assertTodoInScope(store, dependsOn, scopeId);
       await store.removeDependency(todoId, dependsOn);
       return { ok: true, todoId, dependsOn };
     },
@@ -244,7 +266,12 @@ function createTodoLockTool(store: TodoStore): ToolDefinition {
     async execute(input, context) {
       const id = requiredString(input, "id");
       const owner = resolveActor(input, context);
-      const todo = await store.lock(id, owner, typeof input.reason === "string" ? input.reason : undefined);
+      await assertTodoInScope(store, id, resolveScope(context));
+      const todo = await store.lock(
+        id,
+        owner,
+        typeof input.reason === "string" ? input.reason : undefined,
+      );
       return { todo };
     },
   };
@@ -269,6 +296,7 @@ function createTodoUnlockTool(store: TodoStore): ToolDefinition {
       const id = requiredString(input, "id");
       const owner = resolveActor(input, context);
       const force = optionalBoolean(input, "force") ?? false;
+      await assertTodoInScope(store, id, resolveScope(context));
       const todo = await store.unlock(id, owner, force);
       return { todo };
     },
@@ -289,12 +317,16 @@ function createTodoNextReadyTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
-      const owner = typeof input.owner === "string" ? input.owner : context?.runId ?? context?.sessionId;
+      const scopeId = resolveScope(context);
+      const owner =
+        typeof input.owner === "string" ? input.owner : (context?.sessionId ?? context?.runId);
+      const cleaned = await cleanupDoneForScope(store, scopeId);
       const todos = await store.nextReady({
         ...(owner ? { owner } : {}),
+        ...(scopeId ? { scopeId } : {}),
         limit: optionalNumber(input, "limit"),
       });
-      return { count: todos.length, todos };
+      return { count: todos.length, cleaned, todos };
     },
   };
 }
@@ -303,12 +335,44 @@ function resolveActor(input: Record<string, unknown>, context?: ToolExecutionCon
   const actor =
     (typeof input.actor === "string" ? input.actor : undefined) ??
     (typeof input.owner === "string" ? input.owner : undefined) ??
-    context?.runId ??
-    context?.sessionId;
+    context?.sessionId ??
+    context?.runId;
   if (!actor || actor.trim().length === 0) {
     throw new Error("Mutation requires actor/owner or runtime run/session id");
   }
   return actor.trim();
+}
+
+function resolveScope(context?: ToolExecutionContext): string | undefined {
+  return context?.sessionId?.trim() || undefined;
+}
+
+async function cleanupDoneForScope(store: TodoStore, scopeId: string | undefined): Promise<number> {
+  if (!scopeId || !store.cleanupDone) return 0;
+  return await store.cleanupDone(scopeId, "system");
+}
+
+async function getScopedTodo(
+  store: TodoStore,
+  id: string,
+  scopeId: string | undefined,
+): Promise<Awaited<ReturnType<TodoStore["get"]>>> {
+  const todo = await store.get(id);
+  if (!todo || !scopeId) return todo;
+  return todo.scopeId === scopeId ? todo : undefined;
+}
+
+async function assertTodoInScope(
+  store: TodoStore,
+  id: string,
+  scopeId: string | undefined,
+): Promise<void> {
+  if (!scopeId) return;
+  const todo = await store.get(id);
+  if (!todo) throw new Error(`Unknown todo "${id}"`);
+  if (todo.scopeId !== scopeId) {
+    throw new Error(`Todo "${id}" is out of scope for this session`);
+  }
 }
 
 function normalizeStatusFilter(raw: unknown): TodoStatus | TodoStatus[] | undefined {

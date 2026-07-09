@@ -65,6 +65,12 @@ export interface RunOptions {
   modelOverride?: string;
   /** Optional prompt-pack override for this run (defaults to the agent's bound promptName). */
   promptName?: string;
+  /**
+   * Runtime-level developer instructions injected for this run.
+   * Use this for execution contracts/policies that must guide behavior
+   * without mutating user-authored task text.
+   */
+  runtimeInstructions?: string[];
   sessionId?: string;
   resume?: boolean;
   goal?: string;

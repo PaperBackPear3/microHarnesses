@@ -1,7 +1,7 @@
 import {
   type MessageContentPart,
   availableModelChoices,
-  withModeExecutionContract,
+  modeExecutionContract,
 } from "@micro-harnesses/core";
 import { Box, Text, useInput } from "ink";
 import Spinner from "ink-spinner";
@@ -353,15 +353,12 @@ export function App({
       const runSessionId = activeSessionId;
       chatStore.setActiveRunSession(runSessionId);
       try {
-        const effectivePrompt = withModeExecutionContract(
-          trimmed,
-          composition.modeController.getMode(),
-        );
+        const modeContract = modeExecutionContract(composition.modeController.getMode());
         const pendingAttachments = stagedAttachments;
         ensureAttachmentSupport(composition.runtimeState.provider, pendingAttachments);
         const inputContent: MessageContentPart[] = [];
-        if (effectivePrompt.trim().length > 0) {
-          inputContent.push({ type: "text", text: effectivePrompt });
+        if (trimmed.length > 0) {
+          inputContent.push({ type: "text", text: trimmed });
         }
         for (const attachment of pendingAttachments) {
           const saved = await composition.sessionStore.saveInputAsset(
@@ -389,12 +386,13 @@ export function App({
         }
         await composition.refreshContextWindowTokens();
         const result = await composition.agent.invoke({
-          prompt: effectivePrompt,
-          input: { text: effectivePrompt, content: inputContent },
+          prompt: trimmed,
+          input: { text: trimmed, content: inputContent },
           execution: {
             ...composition.runOptions(),
             sessionId: runSessionId,
             resume: true,
+            runtimeInstructions: modeContract ? [modeContract] : undefined,
           },
         });
         if (result.sessionId) {

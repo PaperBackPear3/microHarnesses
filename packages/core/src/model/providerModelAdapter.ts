@@ -144,6 +144,14 @@ async function buildMessages(
       messages.push({ role: "developer", content: instruction.content });
     }
   }
+  if (input.runtimeInstructions && input.runtimeInstructions.length > 0) {
+    for (const instruction of input.runtimeInstructions) {
+      const trimmed = instruction.trim();
+      if (trimmed.length > 0) {
+        messages.push({ role: "developer", content: trimmed });
+      }
+    }
+  }
   if (input.summary && input.summary.summary.trim().length > 0) {
     messages.push({
       role: "developer",

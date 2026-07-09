@@ -198,6 +198,29 @@ test("spawn_subagent compatibility does not fire when model is already set expli
   assert.equal(captured?.promptName, "ollama/lfm2.5:8b");
 });
 
+test("spawn_subagent forwards assigned todos", async () => {
+  let captured: Record<string, unknown> | undefined;
+  const tool = createSpawnSubagentTool(
+    makeSubagentStub((o) => {
+      captured = o;
+    }),
+  );
+
+  await tool.execute({
+    prompt: "implement assigned work",
+    assignedTodos: [
+      { id: "a", text: "Build A", priority: 10 },
+      "Build B",
+      { id: "bad", text: "   " },
+    ],
+  });
+
+  assert.deepEqual(captured?.assignedTodos, [
+    { id: "a", text: "Build A", priority: 10 },
+    { text: "Build B" },
+  ]);
+});
+
 // ── wait_subagents tool tests ─────────────────────────────────────────────────
 
 test("wait_subagents is cancellation-only and returns wait results", async () => {
@@ -211,7 +234,14 @@ test("wait_subagents is cancellation-only and returns wait results", async () =>
     async wait() {
       return {
         completed: [
-          { id: "sub-1", launchIndex: 1, prompt: "p", status: "completed", startedAt: "t" },
+          {
+            id: "sub-1",
+            launchIndex: 1,
+            prompt: "p",
+            status: "completed",
+            startedAt: "t",
+            state: { runId: "r", startedAt: "s", turns: [] },
+          },
         ],
         running: [],
       };
@@ -227,4 +257,9 @@ test("wait_subagents is cancellation-only and returns wait results", async () =>
   const completed = result.completed;
   assert.equal(Array.isArray(completed), true);
   assert.equal((completed as unknown[]).length, 1);
+  assert.deepEqual((completed as Array<{ state?: unknown }>)[0]?.state, {
+    runId: "r",
+    startedAt: "s",
+    turns: [],
+  });
 });

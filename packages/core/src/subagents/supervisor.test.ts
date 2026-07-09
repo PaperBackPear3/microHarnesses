@@ -168,14 +168,47 @@ test("completed subagents fallback to last non-empty assistant message when summ
   assert.equal(waited.completed[0]?.summary, "intermediate answer");
 });
 
-function factoryFor(deferreds: Deferred<AgentRunResult>[]): SubagentRuntimeFactory {
+test("assigned todos are included in child prompt and completed snapshots include full state", async () => {
+  const completion = new Deferred<AgentRunResult>();
+  const factory = factoryFor([completion]);
+  const supervisor = new InProcessSubagentSupervisor(factory, parent, {
+    idFactory: sequentialIds(),
+    now: sequentialTimes(),
+  });
+
+  await supervisor.spawn({
+    prompt: "work on this",
+    assignedTodos: [{ id: "todo-a", text: "Build A", priority: 5 }],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  const child = await factory.lastChild;
+  assert.ok(child);
+  assert.match(child.seenRequest?.prompt ?? "", /Assigned todos from parent/);
+  assert.match(child.seenRequest?.prompt ?? "", /todo-a/);
+  assert.match(child.seenRequest?.prompt ?? "", /Build A/);
+
+  completion.resolve(result("child-1", "done"));
+  const waited = await supervisor.wait({ mode: "next" });
+  assert.equal(waited.completed[0]?.state?.runId, "run-child-1");
+  assert.equal(waited.completed[0]?.state?.turns[0]?.assistantMessage, "done");
+});
+
+function factoryFor(
+  deferreds: Deferred<AgentRunResult>[],
+): SubagentRuntimeFactory & { lastChild?: Promise<FakeChildAgent> } {
   let index = 0;
-  return {
+  const out: SubagentRuntimeFactory & { lastChild?: Promise<FakeChildAgent> } = {
+    lastChild: undefined,
     build(request) {
       const childIndex = index++;
       const sessionId = `child-${childIndex + 1}`;
+      const child = new FakeChildAgent(
+        sessionId,
+        deferreds[childIndex] as Deferred<AgentRunResult>,
+      );
+      out.lastChild = Promise.resolve(child);
       return {
-        agent: new FakeChildAgent(sessionId, deferreds[childIndex] as Deferred<AgentRunResult>),
+        agent: child,
         prompt: request.prompt,
         runOptions: {
           maxIterations: 1,
@@ -186,6 +219,7 @@ function factoryFor(deferreds: Deferred<AgentRunResult>[]): SubagentRuntimeFacto
       };
     },
   };
+  return out;
 }
 
 function result(sessionId: string, summary: string): AgentRunResult {

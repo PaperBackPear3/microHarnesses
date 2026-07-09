@@ -3,6 +3,12 @@ import type { TraceContext } from "../observability/types";
 import type { RunState } from "../runtime/state";
 import type { AgentHandle, AgentInvokeRequest, RunOptions } from "../runtime/types";
 
+export interface SubagentAssignedTodo {
+  id?: string;
+  text: string;
+  priority?: number;
+}
+
 export interface SubagentRunOptions {
   /** Human-friendly display name for UI/status surfaces. */
   name?: string;
@@ -16,6 +22,8 @@ export interface SubagentRunOptions {
   signal?: AbortSignal;
   /** Optional goal string for the child session. */
   goal?: string;
+  /** Explicit todo handoff from parent to child. Child-created todos remain in the child's own session scope. */
+  assignedTodos?: SubagentAssignedTodo[];
   /** Parent span context, so the child run joins the parent's trace. */
   parentTrace?: TraceContext;
   /**
@@ -50,6 +58,7 @@ export interface SubagentSnapshot {
   startedAt: string;
   completedAt?: string;
   summary?: string;
+  state?: RunState;
   error?: string;
 }
 

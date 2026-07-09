@@ -1,5 +1,9 @@
 import type { ModelRoutingPreference } from "../../model/types";
-import type { SubagentService, SubagentWaitOptions } from "../../subagents/types";
+import type {
+  SubagentAssignedTodo,
+  SubagentService,
+  SubagentWaitOptions,
+} from "../../subagents/types";
 import type { ToolDefinition } from "../../tools/types";
 
 export interface SpawnSubagentToolOptions {
@@ -80,6 +84,39 @@ export function createSpawnSubagentTool(
         allowedTools: { type: "array", items: { type: "string" } },
         maxIterations: { type: "number" },
         goal: { type: "string" },
+        assignedTodos: {
+          type: "array",
+          items: {
+            oneOf: [
+              { type: "string" },
+              {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  text: { type: "string" },
+                  priority: { type: "number" },
+                },
+                required: ["text"],
+                additionalProperties: false,
+              },
+            ],
+          },
+          description: "Optional todos assigned by the parent for the child to complete.",
+        },
+        assigned_todos: {
+          type: "array",
+          items: {
+            oneOf: [{ type: "string" }, { type: "object" }],
+          },
+          description: "Alias for assignedTodos.",
+        },
+        todos: {
+          type: "array",
+          items: {
+            oneOf: [{ type: "string" }, { type: "object" }],
+          },
+          description: "Alias for assignedTodos.",
+        },
       },
       required: ["prompt"],
       additionalProperties: false,
@@ -135,6 +172,9 @@ export function createSpawnSubagentTool(
           ? Math.max(1, Math.min(maxIterations, Math.floor(input.maxIterations)))
           : maxIterations;
       const goal = typeof input.goal === "string" ? input.goal : undefined;
+      const assignedTodos = normalizeAssignedTodos(
+        input.assignedTodos ?? input.assigned_todos ?? input.todos,
+      );
 
       const rawPreference =
         typeof input.routingPreference === "string" ? input.routingPreference : undefined;
@@ -160,6 +200,7 @@ export function createSpawnSubagentTool(
         allowedTools: requestedTools,
         maxIterations: requestedMaxIterations,
         goal,
+        ...(assignedTodos.length > 0 ? { assignedTodos } : {}),
         signal: context?.signal,
         ...(context?.traceContext ? { parentTrace: context.traceContext } : {}),
       });
@@ -172,6 +213,30 @@ export function createSpawnSubagentTool(
       };
     },
   };
+}
+
+function normalizeAssignedTodos(raw: unknown): SubagentAssignedTodo[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): SubagentAssignedTodo[] => {
+    if (typeof item === "string") {
+      const text = item.trim();
+      return text ? [{ text }] : [];
+    }
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.text !== "string" || record.text.trim().length === 0) return [];
+    return [
+      {
+        ...(typeof record.id === "string" && record.id.trim().length > 0
+          ? { id: record.id.trim() }
+          : {}),
+        text: record.text.trim(),
+        ...(typeof record.priority === "number" && Number.isFinite(record.priority)
+          ? { priority: record.priority }
+          : {}),
+      },
+    ];
+  });
 }
 
 export interface WaitSubagentsToolOptions {

@@ -80,6 +80,10 @@ export interface ToolExecutionContext {
   signal: AbortSignal;
   runId?: string;
   sessionId?: string;
+  parentSessionId?: string;
+  parentRunId?: string;
+  rootSessionId?: string;
+  depth?: number;
   /**
    * Trace context of the action span, so tools that spawn nested work (e.g.
    * subagents) can link their traces to the parent.

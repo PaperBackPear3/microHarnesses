@@ -38,6 +38,7 @@ The core package gives you runtime primitives (loop, context, policy, tools, plu
 | [`@micro-harnesses/plugin-example-tools`](plugins/example-tools) | Minimal reference plugin (`echo`, `time`) for plugin authoring. |
 | [`@micro-harnesses/plugin-sqlite-todos`](plugins/sqlite-todos) | SQLite-backed persistent todos with hard-lock semantics and dependency-aware ready queue tools for long-horizon workflows. |
 | [`@micro-harnesses/cli`](apps/cli) | Agentic coding CLI (React/Ink TUI) built as a thin composition layer over core and plugins. |
+| [`@micro-harnesses/revenue-ops`](apps/revenue-ops) | Revenue-ops API app for proactive post-sales retention and intelligent collections workflows. |
 
 ## Design principles
 

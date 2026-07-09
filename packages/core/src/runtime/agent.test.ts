@@ -282,6 +282,35 @@ test("runtime normalizes simple function-style tool names", async () => {
   assert.deepEqual(state.turns[0]?.toolResults[0]?.output, { now: "2026-01-01T00:00:00.000Z" });
 });
 
+test("runtime forwards runtimeInstructions without mutating persisted userMessage", async () => {
+  const obs = makeObs();
+  const model = new CapturingModel({
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const runtime = new Agent({
+    promptName: "default",
+    model,
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("create it", {
+    ...options,
+    runtimeInstructions: ["Autopilot contract:\n- Continue autonomously."],
+  });
+
+  assert.deepEqual(model.seen?.runtimeInstructions, [
+    "Autopilot contract:\n- Continue autonomously.",
+  ]);
+  assert.equal(state.turns[0]?.userMessage, "create it");
+});
+
 test("runtime auto-joins subagents when enabled", async () => {
   const obs = makeObs();
   const tools = new ToolRegistry();
@@ -651,9 +680,7 @@ test("routing is not used when options.routing is omitted, even if a router is c
   const obs = makeObs();
   const selector = new CapturingModelSelector();
   const model = new CapturingModel({ assistantMessage: "ok", toolCalls: [], stop: true });
-  const routes: ModelRoute[] = [
-    { id: "openai:gpt-4.1", providerId: "openai", model: "gpt-4.1" },
-  ];
+  const routes: ModelRoute[] = [{ id: "openai:gpt-4.1", providerId: "openai", model: "gpt-4.1" }];
   const runtime = new Agent({
     promptName: "default",
     model,

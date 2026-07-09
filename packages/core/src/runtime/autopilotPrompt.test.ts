@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { withModeExecutionContract } from "./modes";
+import { modeExecutionContract, withModeExecutionContract } from "./modes";
 
 test("non-autopilot mode keeps prompt unchanged", () => {
   const prompt = "list apps/cli/src/app";
@@ -16,6 +16,14 @@ test("autopilot mode appends execution contract", () => {
   assert.match(result, /Continue autonomously/);
   assert.match(result, /path exploration requests/);
   assert.match(result, /only say the listing is truncated when `truncated: true`/);
+});
+
+test("modeExecutionContract returns autopilot contract only in autopilot mode", () => {
+  const contract = modeExecutionContract("autopilot");
+  assert.equal(modeExecutionContract("plan"), undefined);
+  assert.equal(modeExecutionContract("accept-edits"), undefined);
+  assert.ok(contract);
+  assert.match(contract, /Autopilot contract:/);
 });
 
 test("empty prompt remains unchanged in autopilot mode", () => {

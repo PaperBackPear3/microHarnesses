@@ -585,6 +585,49 @@ test("adds session continuity instruction when working turns exist", async () =>
   assert.ok(continuityInstruction);
 });
 
+test("injects runtimeInstructions as developer messages without mutating task text", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(
+    makeInput({
+      bundle: {
+        system: "sys",
+        instructions: [],
+        task: "create it",
+        metadata: { name: "default" },
+      },
+      runtimeInstructions: ["Autopilot contract:\n- Continue autonomously.", "   "],
+    }),
+  );
+
+  const contractInstruction = adapter.seenRequest?.messages.find(
+    (message) =>
+      message.role === "developer" && contentText(message.content).includes("Autopilot contract:"),
+  );
+  assert.ok(contractInstruction);
+
+  const userMessages = (adapter.seenRequest?.messages ?? []).filter(
+    (message) => message.role === "user",
+  );
+  const taskMentions = userMessages.filter(
+    (message) => contentText(message.content) === "create it",
+  );
+  assert.equal(taskMentions.length, 1);
+});
+
 test("reinjects the compression summary of older turns as prior context", async () => {
   const adapter = new FakeAdapter("m", {
     assistantMessage: "ok",
@@ -733,7 +776,10 @@ test("prepends userMessage text to image-only userContent so instructions reach 
     { assistantMessage: "ok", toolCalls: [], stop: true },
     { structuredTools: true },
   );
-  adapter.features = { structuredTools: true, inputParts: { text: true, image: true, file: false } };
+  adapter.features = {
+    structuredTools: true,
+    inputParts: { text: true, image: true, file: false },
+  };
   const providers = new ProviderRegistry();
   providers.register(adapter);
   const creds = new CredentialsRegistry();

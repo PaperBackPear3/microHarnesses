@@ -47,6 +47,8 @@ export interface StepInput {
   promptName: string;
   userPrompt: string;
   bundle: PromptBundle;
+  /** Runtime-level developer instructions injected for this step/run. */
+  runtimeInstructions?: string[];
   workingTurns: Turn[];
   /** Compressed summary of older, overflowed turns to reinject as prior context. */
   summary?: CompressionResult;

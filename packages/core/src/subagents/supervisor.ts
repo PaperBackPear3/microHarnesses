@@ -20,6 +20,7 @@ interface TrackedSubagent {
   completedAt?: string;
   sessionId?: string;
   summary?: string;
+  state?: SubagentResult["state"];
   error?: string;
   delivered: boolean;
   promise: Promise<SubagentResult>;
@@ -122,6 +123,7 @@ export class InProcessSubagentSupervisor implements SubagentSupervisor {
       tracked.status = "completed";
       tracked.completedAt = this.now();
       tracked.summary = resolveSummary(result);
+      tracked.state = result.state;
       tracked.sessionId = result.state.sessionId ?? tracked.sessionId;
       return result;
     } catch (error) {
@@ -192,7 +194,7 @@ async function runBuiltSubagent(
 
   try {
     const result = await built.agent.invoke({
-      prompt: built.prompt,
+      prompt: renderAssignedTodos(built.prompt, options),
       execution: built.runOptions,
     });
     return { summary: result.summary, state: result.state };
@@ -216,8 +218,25 @@ function toSnapshot(entry: TrackedSubagent): SubagentSnapshot {
     startedAt: entry.startedAt,
     ...(entry.completedAt ? { completedAt: entry.completedAt } : {}),
     ...(entry.summary !== undefined ? { summary: entry.summary } : {}),
+    ...(entry.state ? { state: entry.state } : {}),
     ...(entry.error ? { error: entry.error } : {}),
   };
+}
+
+function renderAssignedTodos(prompt: string, options: SubagentRunOptions): string {
+  if (!options.assignedTodos || options.assignedTodos.length === 0) return prompt;
+  const lines = options.assignedTodos.map((todo, index) => {
+    const id = todo.id ? ` id=${todo.id}` : "";
+    const priority = typeof todo.priority === "number" ? ` priority=${todo.priority}` : "";
+    return `${index + 1}.${id}${priority} ${todo.text}`.trim();
+  });
+  return [
+    prompt.trim(),
+    "",
+    "## Assigned todos from parent",
+    "These todos are assigned to this subagent for this run. Create additional child-scoped todos only when needed.",
+    ...lines,
+  ].join("\n");
 }
 
 function compareLaunch(a: TrackedSubagent, b: TrackedSubagent): number {

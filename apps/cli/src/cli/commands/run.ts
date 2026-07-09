@@ -1,5 +1,5 @@
 import type { StreamEvent } from "@micro-harnesses/core";
-import { withModeExecutionContract } from "@micro-harnesses/core";
+import { modeExecutionContract } from "@micro-harnesses/core";
 import type { CliComposition } from "../../runtime/composition.js";
 
 export async function runHeadlessPrompt(
@@ -12,12 +12,13 @@ export async function runHeadlessPrompt(
     printProgress(streamEvent);
   });
   try {
-    const effectivePrompt = withModeExecutionContract(prompt, composition.modeController.getMode());
+    const modeContract = modeExecutionContract(composition.modeController.getMode());
     await composition.refreshContextWindowTokens();
-    const state = await composition.agent.run(effectivePrompt, {
+    const state = await composition.agent.run(prompt, {
       ...composition.runOptions(),
       sessionId,
       resume: true,
+      runtimeInstructions: modeContract ? [modeContract] : undefined,
     });
     const final = state.turns[state.turns.length - 1]?.assistantMessage ?? "";
     if (json) {
