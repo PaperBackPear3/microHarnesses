@@ -1,5 +1,10 @@
 type OpenAICompatContentPart = { type?: string; text?: string };
 
+const TOOL_CALL_WRAPPED_FUNCTION_RE =
+  /<tool_call>\s*<function=([A-Za-z0-9_.:-]+)>\s*([\s\S]*?)<\/function>\s*<\/tool_call>/gi;
+const TOOL_CALL_FUNCTION_RE = /<function=([A-Za-z0-9_.:-]+)>\s*([\s\S]*?)<\/function>/gi;
+const TOOL_CALL_PARAMETER_RE = /<parameter=([A-Za-z0-9_.:-]+)>\s*([\s\S]*?)<\/parameter>/gi;
+
 /**
  * Maps an OpenAI-compatible `finish_reason` to loop-stop semantics:
  * - `stop` / `content_filter` terminate generation → stop.
@@ -164,7 +169,7 @@ export function applyOpenAICompatStreamChunk(
 }
 
 export function finalizeOpenAICompatStream(state: OpenAICompatStreamState) {
-  const toolCalls = Array.from(state.toolCalls.entries())
+  let toolCalls = Array.from(state.toolCalls.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([, call]) => {
       const parsed = parseToolCallArgs(call.args || "{}");
@@ -175,8 +180,17 @@ export function finalizeOpenAICompatStream(state: OpenAICompatStreamState) {
       };
     });
 
+  let assistantMessage = state.assistantMessage;
+  if (toolCalls.length === 0) {
+    const extracted = extractTaggedToolCalls(assistantMessage);
+    if (extracted.toolCalls.length > 0) {
+      toolCalls = extracted.toolCalls;
+      assistantMessage = extracted.assistantMessage;
+    }
+  }
+
   return {
-    assistantMessage: state.assistantMessage,
+    assistantMessage,
     ...(state.reasoningMessage.length > 0 ? { reasoningMessage: state.reasoningMessage } : {}),
     toolCalls,
     stop: state.stop,
@@ -193,10 +207,7 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
     reasoningFieldToText(first.message.reasoning) +
     reasoningFieldToText(first.message.reasoning_content) +
     (first.message.thinking ?? "");
-  return {
-    assistantMessage: split.assistant,
-    ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
-    toolCalls: ((first.message.tool_calls ?? []) as Array<{
+  const structuredToolCalls = ((first.message.tool_calls ?? []) as Array<{
       function?: { name?: string; arguments?: string };
     }>).map((call) => {
       const parsed = parseToolCallArgs(call.function?.arguments ?? "{}");
@@ -205,7 +216,13 @@ export function parseOpenAICompatResponse(payload: OpenAICompatResponse) {
         input: parsed.input,
         ...(parsed.malformed ? { malformedInput: true } : {}),
       };
-    }),
+    });
+  const extracted = structuredToolCalls.length === 0 ? extractTaggedToolCalls(split.assistant) : null;
+
+  return {
+    assistantMessage: extracted?.assistantMessage ?? split.assistant,
+    ...(reasoningMessage.length > 0 ? { reasoningMessage } : {}),
+    toolCalls: extracted?.toolCalls ?? structuredToolCalls,
     stop: finishReasonIndicatesStop(first.finish_reason),
     usage: {
       inputTokens:
@@ -247,4 +264,56 @@ function reasoningFieldToText(content: string | OpenAICompatContentPart[] | null
     text += part.text ?? "";
   }
   return text;
+}
+
+function extractTaggedToolCalls(content: string): {
+  assistantMessage: string;
+  toolCalls: Array<{
+    name: string;
+    input: Record<string, unknown>;
+  }>;
+} {
+  const wrappedMatches = Array.from(content.matchAll(TOOL_CALL_WRAPPED_FUNCTION_RE));
+  const functionMatches =
+    wrappedMatches.length > 0 ? wrappedMatches : Array.from(content.matchAll(TOOL_CALL_FUNCTION_RE));
+  if (functionMatches.length === 0) {
+    return { assistantMessage: content, toolCalls: [] };
+  }
+
+  const toolCalls = functionMatches.map((match) => {
+    const name = (match[1] ?? "unknown").trim() || "unknown";
+    const body = match[2] ?? "";
+    const input: Record<string, unknown> = {};
+    for (const param of body.matchAll(TOOL_CALL_PARAMETER_RE)) {
+      const key = (param[1] ?? "").trim();
+      if (!key) continue;
+      input[key] = coerceParameterValue(param[2] ?? "");
+    }
+    return { name, input };
+  });
+
+  const assistantMessage =
+    wrappedMatches.length > 0
+      ? content.replaceAll(TOOL_CALL_WRAPPED_FUNCTION_RE, "").trim()
+      : content.replaceAll(TOOL_CALL_FUNCTION_RE, "").trim();
+
+  return { assistantMessage, toolCalls };
+}
+
+function coerceParameterValue(value: string): unknown {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return "";
+  if (!looksLikeJsonLiteral(trimmed)) return trimmed;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return trimmed;
+  }
+}
+
+function looksLikeJsonLiteral(value: string): boolean {
+  const first = value[0];
+  if (first === "{" || first === "[" || first === '"') return true;
+  if (value === "true" || value === "false" || value === "null") return true;
+  return /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(value);
 }
