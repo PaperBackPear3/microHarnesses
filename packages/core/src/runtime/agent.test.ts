@@ -225,6 +225,134 @@ const options: RunOptions = {
   profile: { defaultModel: "test-model" } as ModelProfile,
 };
 
+test("state machine can orchestrate llm -> action -> llm flow", async () => {
+  const obs = makeObs();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "echo",
+    description: "echo",
+    risk: "low",
+    inputSchema: { type: "object", additionalProperties: true },
+    async execute(input) {
+      return { echoed: input.value };
+    },
+  });
+  const runtime = new Agent({
+    promptName: "default",
+    model: new SequenceModel([
+      {
+        assistantMessage: "I will run echo",
+        toolCalls: [{ name: "echo", input: { value: "ok" } }],
+        stop: false,
+      },
+      {
+        assistantMessage: "done",
+        toolCalls: [],
+        stop: true,
+      },
+    ]),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("hello", {
+    maxIterations: 6,
+    snapshotEvery: 1,
+    profile: { defaultModel: "test-model" },
+    stateMachine: { profile: "focused-delivery", enforcement: "advisory" },
+  });
+
+  assert.equal(state.turns.length, 2);
+  assert.equal(state.turns[0]?.assistantMessage, "I will run echo");
+  assert.equal(state.turns[0]?.toolResults[0]?.ok, true);
+  assert.equal(state.stateMachine?.currentState, "done");
+  assert.ok((state.stateMachine?.history.length ?? 0) >= 3);
+});
+
+test("strict state machine rejects action state without a pending step", async () => {
+  const obs = makeObs();
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({ assistantMessage: "unused", toolCalls: [], stop: true }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  await assert.rejects(
+    runtime.run("hello", {
+      maxIterations: 2,
+      snapshotEvery: 1,
+      profile: { defaultModel: "test-model" },
+      stateMachine: {
+        enforcement: "strict",
+        machine: {
+          initialState: "act",
+          states: {
+            act: {
+              kind: "action",
+              transitions: { action_failed: "focus" },
+            },
+            focus: {
+              kind: "llm",
+              transitions: { llm_stop: "done", llm_no_actions: "done" },
+            },
+            done: { kind: "terminal" },
+          },
+        },
+      },
+    }),
+    /has no pending step/,
+  );
+});
+
+test("advisory state machine can recover from missing pending action step", async () => {
+  const obs = makeObs();
+  const runtime = new Agent({
+    promptName: "default",
+    model: new FakeModel({ assistantMessage: "done", toolCalls: [], stop: true }),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("hello", {
+    maxIterations: 4,
+    snapshotEvery: 1,
+    profile: { defaultModel: "test-model" },
+    stateMachine: {
+      enforcement: "advisory",
+      machine: {
+        initialState: "act",
+        states: {
+          act: {
+            kind: "action",
+            transitions: { action_failed: "focus" },
+          },
+          focus: {
+            kind: "llm",
+            transitions: { llm_stop: "done", llm_no_actions: "done" },
+          },
+          done: { kind: "terminal" },
+        },
+      },
+    },
+  });
+
+  assert.equal(state.turns.length, 1);
+  assert.equal(state.stateMachine?.currentState, "done");
+});
+
 test("runtime does not crash on unknown tool", async () => {
   const obs = makeObs();
   const runtime = new Agent({

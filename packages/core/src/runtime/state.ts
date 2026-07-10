@@ -1,6 +1,7 @@
 import type { SkillCall, SkillResult } from "../skills/types";
 import type { ToolCall, ToolResult } from "../tools/types";
 import type { MessageContentPart } from "./content";
+import type { RuntimeStateMachinePendingStep } from "./types";
 
 /**
  * One iteration of the agent loop: the (optional) user/task message, the
@@ -26,4 +27,16 @@ export interface RunState {
   runId: string;
   startedAt: string;
   turns: Turn[];
+  stateMachine?: {
+    currentState: string;
+    profile?: string;
+    enforcement: "off" | "advisory" | "strict";
+    pendingStep?: RuntimeStateMachinePendingStep;
+    history: Array<{
+      atIteration: number;
+      from: string;
+      event: string;
+      to: string;
+    }>;
+  };
 }

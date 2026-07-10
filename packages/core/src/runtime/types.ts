@@ -4,6 +4,7 @@ import type { SafetyMode } from "../policy/types";
 import type { ToolCall, ToolDefinition } from "../tools/types";
 import type { MessageContentPart } from "./content";
 import type { RunState } from "./state";
+import type { SkillCall } from "../skills/types";
 
 export interface RuntimeLimits {
   toolTimeoutMs: number;
@@ -29,6 +30,59 @@ export interface RunRoutingOptions {
   overrideProviderId?: string;
   overrideModel?: string;
   visibility?: "user-visible" | "internal";
+}
+
+export type RuntimeStateMachineStateKind = "llm" | "action" | "terminal";
+export type RuntimeStateMachineEnforcement = "off" | "advisory" | "strict";
+export type RuntimeStateMachineProfileName = "focused-delivery";
+
+export type RuntimeStateMachineEvent =
+  | "always"
+  | "llm_stop"
+  | "llm_has_actions"
+  | "llm_no_actions"
+  | "action_completed"
+  | "action_completed_stop"
+  | "action_failed"
+  | "action_limit_reached";
+
+export interface RuntimeStateMachineNode {
+  kind: RuntimeStateMachineStateKind;
+  instruction?: string;
+  allowActions?: string[];
+  denyActions?: string[];
+  transitions?: Partial<Record<RuntimeStateMachineEvent, string>>;
+}
+
+export interface RuntimeStateMachineDefinition {
+  initialState: string;
+  states: Record<string, RuntimeStateMachineNode>;
+}
+
+export interface RuntimeStateMachineConfig {
+  enabled?: boolean;
+  profile?: RuntimeStateMachineProfileName;
+  machine?: RuntimeStateMachineDefinition;
+  enforcement?: RuntimeStateMachineEnforcement;
+}
+
+export interface RuntimeStateMachineProfile {
+  name: RuntimeStateMachineProfileName;
+  machine: RuntimeStateMachineDefinition;
+  defaultEnforcement?: RuntimeStateMachineEnforcement;
+}
+
+export interface ResolvedRuntimeStateMachine {
+  machine: RuntimeStateMachineDefinition;
+  enforcement: RuntimeStateMachineEnforcement;
+  profile?: RuntimeStateMachineProfileName;
+}
+
+export interface RuntimeStateMachinePendingStep {
+  assistantMessage: string;
+  toolCalls: ToolCall[];
+  skillCalls?: SkillCall[];
+  stop?: boolean;
 }
 
 export type BeforeLoopHook = (state: RunState, iteration: number) => Promise<void> | void;
@@ -98,6 +152,12 @@ export interface RunOptions {
    * and route catalog configured. Omit to keep using `modelSelector`/`profile`.
    */
   routing?: RunRoutingOptions;
+  /**
+   * Optional flow-governing state machine. When enabled, the runtime enforces
+   * state progression (`llm`/`action`/`terminal`) and applies per-state action
+   * constraints while preserving snapshots/resume.
+   */
+  stateMachine?: RuntimeStateMachineConfig;
 }
 
 export interface AgentInvokeRequest {

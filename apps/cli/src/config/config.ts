@@ -6,9 +6,13 @@ import {
   type EffortLevel,
   type HarnessMode,
   type ModelRoutingPreference,
+  type RuntimeStateMachineEnforcement,
+  type RuntimeStateMachineProfileName,
   parseEffort,
   parseMode,
   parseModelRoutingPreference,
+  parseStateMachineEnforcement,
+  parseStateMachineProfile,
 } from "@micro-harnesses/core";
 import {
   IGNORE_INVALID_PARSE,
@@ -42,6 +46,8 @@ export interface CliConfig {
   compactionTargetUtilization: number;
   turnCompactionTargetRatio: number;
   nonTurnTokenReserve: number;
+  stateMachineEnforcement?: RuntimeStateMachineEnforcement;
+  stateMachineProfile?: RuntimeStateMachineProfileName;
 }
 
 export interface ConfigOverrides {
@@ -63,6 +69,8 @@ export interface ConfigOverrides {
   compactionTargetUtilization?: number;
   turnCompactionTargetRatio?: number;
   nonTurnTokenReserve?: number;
+  stateMachineEnforcement?: RuntimeStateMachineEnforcement;
+  stateMachineProfile?: RuntimeStateMachineProfileName;
 }
 
 interface FileConfig {
@@ -83,6 +91,8 @@ interface FileConfig {
   compactionTargetUtilization?: number;
   turnCompactionTargetRatio?: number;
   nonTurnTokenReserve?: number;
+  stateMachineEnforcement?: string;
+  stateMachineProfile?: string;
 }
 
 export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConfig> {
@@ -128,6 +138,12 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
   const envNonTurnTokenReserve = parsePositiveInteger(
     process.env.MH_NON_TURN_TOKEN_RESERVE,
     IGNORE_INVALID_PARSE,
+  );
+  const envStateMachineEnforcement = parseStateMachineEnforcement(
+    process.env.MH_STATE_MACHINE || process.env.MICRO_HARNESS_STATE_MACHINE,
+  );
+  const envStateMachineProfile = parseStateMachineProfile(
+    process.env.MH_STATE_MACHINE_PROFILE || process.env.MICRO_HARNESS_STATE_MACHINE_PROFILE,
   );
 
   const overrideIterations = overrides.maxIterations;
@@ -180,6 +196,14 @@ export async function loadCliConfig(overrides: ConfigOverrides): Promise<CliConf
       envNonTurnTokenReserve ??
       fromFile.nonTurnTokenReserve ??
       defaults.nonTurnTokenReserve,
+    stateMachineEnforcement:
+      overrides.stateMachineEnforcement ??
+      envStateMachineEnforcement ??
+      parseStateMachineEnforcement(fromFile.stateMachineEnforcement),
+    stateMachineProfile:
+      overrides.stateMachineProfile ??
+      envStateMachineProfile ??
+      parseStateMachineProfile(fromFile.stateMachineProfile),
   };
 }
 

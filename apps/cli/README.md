@@ -55,6 +55,8 @@ npx @micro-harnesses/cli@latest
 - Runtime status (mode/model/context/usage/subagents/compression) is rendered in a footer below input to keep the typing area clean.
 - Running and recently completed subagents are shown in the transcript so delegated work is not hidden.
 - In autopilot mode, prompts are augmented with an execution contract that pushes the agent to continue until the requested goal is finished.
+- Optional state-machine orchestration can enforce focused flow across the full
+  session (LLM phases + action phases) with advisory or strict enforcement.
 - `/model` lists routes across configured providers; `/route` or
   `--routing-preference` opts into router-based provider/model selection.
 - Modes and personas are aligned by default: `/plan` uses persona `planner`,
@@ -133,6 +135,8 @@ compressor.
 - `--compaction-target <0..1>`
 - `--turn-compaction-target <0..1>`
 - `--non-turn-token-reserve <n>`
+- `--state-machine <off|advisory|strict>`
+- `--state-machine-profile <focused-delivery>`
 - `--no-safety`
 
 ## TUI slash commands

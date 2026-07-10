@@ -1,8 +1,12 @@
 import {
   type HarnessMode,
   type ModelRoutingPreference,
+  type RuntimeStateMachineEnforcement,
+  type RuntimeStateMachineProfileName,
   parseMode,
   parseModelRoutingPreference,
+  parseStateMachineEnforcement,
+  parseStateMachineProfile,
 } from "@micro-harnesses/core";
 import { type EffortLevel, parseEffort } from "../config/config.js";
 import {
@@ -32,6 +36,8 @@ export interface GlobalCliArgs {
   compactionTargetUtilization?: number;
   turnCompactionTargetRatio?: number;
   nonTurnTokenReserve?: number;
+  stateMachineEnforcement?: RuntimeStateMachineEnforcement;
+  stateMachineProfile?: RuntimeStateMachineProfileName;
 }
 
 export interface SessionsArgs {
@@ -60,6 +66,8 @@ const VALUE_FLAGS = new Set([
   "--compaction-target",
   "--turn-compaction-target",
   "--non-turn-token-reserve",
+  "--state-machine",
+  "--state-machine-profile",
 ]);
 
 export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
@@ -105,6 +113,8 @@ export function parseGlobalCliArgs(args: string[]): GlobalCliArgs {
       getValue(args, "--non-turn-token-reserve"),
       throwOnInvalid("--non-turn-token-reserve"),
     ),
+    stateMachineEnforcement: parseStateMachineEnforcement(getValue(args, "--state-machine")),
+    stateMachineProfile: parseStateMachineProfile(getValue(args, "--state-machine-profile")),
   };
 }
 

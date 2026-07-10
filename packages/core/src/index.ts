@@ -90,6 +90,7 @@ export * from "./runtime/state";
 export * from "./runtime/agent";
 export * from "./runtime/defineAgent";
 export * from "./runtime/modes";
+export * from "./runtime/stateMachine";
 export * from "./runtime/runObserver";
 export * from "./runtime/snapshotCadence";
 

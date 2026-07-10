@@ -70,3 +70,32 @@ test("loadCliConfig keeps override snapshotEvery above env and file", async () =
     }
   });
 });
+
+test("loadCliConfig resolves state-machine settings from env and overrides", async () => {
+  await withTempHome(async () => {
+    const previousMode = process.env.MH_STATE_MACHINE;
+    const previousProfile = process.env.MH_STATE_MACHINE_PROFILE;
+    process.env.MH_STATE_MACHINE = "advisory";
+    process.env.MH_STATE_MACHINE_PROFILE = "focused-delivery";
+    try {
+      const fromEnv = await loadCliConfig({});
+      assert.equal(fromEnv.stateMachineEnforcement, "advisory");
+      assert.equal(fromEnv.stateMachineProfile, "focused-delivery");
+
+      const fromOverride = await loadCliConfig({ stateMachineEnforcement: "strict" });
+      assert.equal(fromOverride.stateMachineEnforcement, "strict");
+      assert.equal(fromOverride.stateMachineProfile, "focused-delivery");
+    } finally {
+      if (previousMode === undefined) {
+        delete process.env.MH_STATE_MACHINE;
+      } else {
+        process.env.MH_STATE_MACHINE = previousMode;
+      }
+      if (previousProfile === undefined) {
+        delete process.env.MH_STATE_MACHINE_PROFILE;
+      } else {
+        process.env.MH_STATE_MACHINE_PROFILE = previousProfile;
+      }
+    }
+  });
+});

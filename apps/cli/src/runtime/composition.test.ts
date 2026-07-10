@@ -25,6 +25,8 @@ function makeConfig(stateDir: string): CliConfig {
     compactionTargetUtilization: 0.7,
     turnCompactionTargetRatio: 0.75,
     nonTurnTokenReserve: 1500,
+    stateMachineEnforcement: undefined,
+    stateMachineProfile: undefined,
   };
 }
 
@@ -92,6 +94,27 @@ test("autopilot uses the configured iteration budget", async () => {
     const composition = await buildComposition(config, "s-test-autopilot-iterations");
     assert.equal(composition.runOptions().maxIterations, 8);
     assert.equal(composition.runOptions().unlimitedIterations, false);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("composition forwards configured state-machine settings to run options", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-composition-"));
+  try {
+    const composition = await buildComposition(
+      {
+        ...makeConfig(stateDir),
+        stateMachineEnforcement: "strict",
+        stateMachineProfile: "focused-delivery",
+      },
+      "s-test-state-machine",
+    );
+    assert.deepEqual(composition.runOptions().stateMachine, {
+      enabled: true,
+      enforcement: "strict",
+      profile: "focused-delivery",
+    });
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

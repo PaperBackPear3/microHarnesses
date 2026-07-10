@@ -22,6 +22,7 @@ Package-first reusable runtime library building block for `microHarnesses`.
 - **Provider & credentials registries** — `ProviderRegistry`, `CredentialsRegistry`, `ProviderModelAdapter`
 - **Built-in providers** — OpenAI, Anthropic, Ollama, and generic OpenAI-compatible endpoints
 - **Model routing** — `DefaultModelRouter`, route catalogs, live discovery, pricing/context metadata, `list_model_routes`
+- **State-machine orchestration** — optional run-level flow machine (`llm`/`action`/`terminal`) that can constrain actions and drive focused session progression
 - **Prompt source** — `FsPromptSource` (Markdown-based prompt packs)
 - **Declarative agents** — `defineAgent()`, `defineAgentAsync()`, `promptFromFile()`
 - **MCP** — stdio/HTTP `McpClient` and `createMcpToolset()`
@@ -58,6 +59,24 @@ new Agent({
 Every field is an interface — swap any implementation. Most users compose
 `CompositePolicyEngine` + `PolicyRule`s rather than replacing the policy
 engine wholesale.
+
+### Optional state-machine run control
+
+Use `RunOptions.stateMachine` to have the runtime govern the full loop with
+explicit states. The built-in profile `"focused-delivery"` defaults to advisory
+enforcement and can be set to strict.
+
+```ts
+await agent.run("implement feature X", {
+  maxIterations: 16,
+  snapshotEvery: 2,
+  profile: { defaultModel: "gpt-5.4" },
+  stateMachine: {
+    profile: "focused-delivery",
+    enforcement: "advisory", // or "strict"
+  },
+});
+```
 
 ## Observability
 

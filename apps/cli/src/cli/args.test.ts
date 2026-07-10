@@ -42,6 +42,17 @@ test("parseGlobalCliArgs parses routing preference", () => {
   assert.equal(parsed.routingPreference, "cost");
 });
 
+test("parseGlobalCliArgs parses state-machine flags", () => {
+  const parsed = parseGlobalCliArgs([
+    "--state-machine",
+    "strict",
+    "--state-machine-profile",
+    "focused-delivery",
+  ]);
+  assert.equal(parsed.stateMachineEnforcement, "strict");
+  assert.equal(parsed.stateMachineProfile, "focused-delivery");
+});
+
 test("parseGlobalCliArgs ignores an unknown routing preference", () => {
   const parsed = parseGlobalCliArgs(["--routing-preference", "nonsense"]);
   assert.equal(parsed.routingPreference, undefined);

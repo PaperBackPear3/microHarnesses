@@ -538,6 +538,16 @@ export async function buildComposition(
               overrideModel: runtimeState.model,
             }
           : undefined,
+        stateMachine:
+          config.stateMachineEnforcement || config.stateMachineProfile
+            ? {
+                enabled: config.stateMachineEnforcement !== "off",
+                ...(config.stateMachineEnforcement
+                  ? { enforcement: config.stateMachineEnforcement }
+                  : {}),
+                ...(config.stateMachineProfile ? { profile: config.stateMachineProfile } : {}),
+              }
+            : undefined,
       };
     },
   };

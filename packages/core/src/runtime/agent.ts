@@ -18,6 +18,7 @@ import type { ToolRegistry } from "../tools/registry";
 import type { ToolResult } from "../tools/types";
 import type { MessageContentPart } from "./content";
 import { RunObserver } from "./runObserver";
+import { resolveRuntimeStateMachine, transitionState } from "./stateMachine";
 import { shouldSnapshot } from "./snapshotCadence";
 import type { RunState } from "./state";
 import type {
@@ -27,6 +28,8 @@ import type {
   AgentRunResult,
   ApprovalHandler,
   BeforeLoopHook,
+  CapabilityScope,
+  ResolvedRuntimeStateMachine,
   RunOptions,
   RuntimeLimits,
 } from "./types";
@@ -343,6 +346,7 @@ export class Agent implements AgentHandle {
   ): Promise<RunState> {
     const { limits, goal, sessionId, runId, input, outputArtifacts } = resolved;
     const promptName = options.promptName?.trim() || this.promptName;
+    const stateMachine = resolveRuntimeStateMachine(options.stateMachine);
 
     let state: RunState = {
       sessionId,
@@ -356,6 +360,19 @@ export class Agent implements AgentHandle {
       if (restored) {
         state = { ...restored, sessionId, runId, startedAt: new Date().toISOString() };
       }
+    }
+    if (stateMachine) {
+      state.stateMachine = {
+        currentState:
+          state.stateMachine?.currentState ??
+          stateMachine.machine.initialState,
+        profile: stateMachine.profile,
+        enforcement: stateMachine.enforcement,
+        pendingStep: state.stateMachine?.pendingStep,
+        history: state.stateMachine?.history ?? [],
+      };
+    } else {
+      delete state.stateMachine;
     }
 
     const priorTurns = state.turns.length;
@@ -397,6 +414,15 @@ export class Agent implements AgentHandle {
       rootSessionId: options.rootSessionId,
       ...(unlimitedIterations ? { unlimitedIterations: true } : { maxIterations }),
       maxActionCallsPerRun: adaptiveLimits.maxActionCallsPerRun,
+      ...(stateMachine
+        ? {
+            stateMachine: {
+              profile: stateMachine.profile ?? "custom",
+              enforcement: stateMachine.enforcement,
+              currentState: state.stateMachine?.currentState,
+            },
+          }
+        : {}),
     });
 
     const bundle = await this.prompts.load(promptName, userPrompt);
@@ -435,6 +461,7 @@ export class Agent implements AgentHandle {
           runId,
           input,
           outputArtifacts,
+          stateMachine,
         });
         iterationSpan.setStatus({ code: "ok" });
         if (stop) break;
@@ -488,6 +515,7 @@ export class Agent implements AgentHandle {
     runId: string;
     outputArtifacts?: ToolOutputArtifacts;
     input?: { text?: string; content?: MessageContentPart[] };
+    stateMachine?: ResolvedRuntimeStateMachine;
   }): Promise<boolean> {
     const {
       iteration,
@@ -507,6 +535,7 @@ export class Agent implements AgentHandle {
       runId,
       outputArtifacts,
       input,
+      stateMachine,
     } = args;
 
     for (const hook of this.beforeHooks) {
@@ -546,160 +575,230 @@ export class Agent implements AgentHandle {
 
     contextSpan.end();
 
-    const modelSelection: {
-      model: string;
-      reason: string;
-      providerId?: string;
-      maxTokens?: number;
-      routeId?: string;
-      preference?: string;
-    } =
-      options.routing && this.modelRouter && this.routeCatalog
-        ? (() => {
-            const decision = this.modelRouter!.selectRoute(
-              { ...options.routing, taskType, agentName: promptName, agentKind: this.kind },
-              this.routeCatalog!(),
-            );
-            return {
-              model: decision.route.model,
-              reason: decision.reason,
-              providerId: decision.route.providerId,
-              maxTokens: decision.route.maxTokens,
-              routeId: decision.route.id,
-              preference: decision.preference,
-            };
-          })()
-        : this.modelSelector.select(
-            {
-              promptName,
-              iteration,
-              taskType,
-              userPrompt,
-              overrideModel: options.modelOverride,
-              promptHintModel: bundle.metadata.modelHint,
-            },
-            options.profile,
-          );
-    iterationSpan.setAttribute("model.selected", modelSelection.model);
-    if (modelSelection.providerId) {
-      iterationSpan.setAttribute("model.provider", modelSelection.providerId);
+    const machineSnapshot =
+      stateMachine && state.stateMachine
+        ? state.stateMachine
+        : stateMachine
+          ? {
+              currentState: stateMachine.machine.initialState,
+              profile: stateMachine.profile,
+              enforcement: stateMachine.enforcement,
+              history: [],
+            }
+          : undefined;
+    if (stateMachine && !state.stateMachine) {
+      state.stateMachine = machineSnapshot;
     }
-    await observer.stream("model.selected", {
-      model: modelSelection.model,
-      reason: modelSelection.reason,
-      iteration,
-      taskType: taskType ?? "default",
-      ...(modelSelection.providerId ? { providerId: modelSelection.providerId } : {}),
-      ...(modelSelection.routeId ? { routeId: modelSelection.routeId } : {}),
-      ...(modelSelection.preference ? { preference: modelSelection.preference } : {}),
-    });
-
-    const modelSpan = observer.startModel(iterationSpan, {
-      "model.name": modelSelection.model,
-      "model.reason": modelSelection.reason,
-      "task.type": taskType ?? "default",
-      iteration,
-    });
-    let streamedChars = 0;
-    let reasoningChars = 0;
-    const modelStartedAt = Date.now();
-    await observer.stream(
-      "model.thinking_started",
-      { model: modelSelection.model, iteration, taskType: taskType ?? "default" },
-      modelSpan,
-    );
+    const currentMachineNode =
+      stateMachine && machineSnapshot
+        ? stateMachine.machine.states[machineSnapshot.currentState]
+        : undefined;
+    if (stateMachine && !currentMachineNode) {
+      throw new ValidationError(
+        `stateMachine current state "${machineSnapshot?.currentState}" does not exist`,
+      );
+    }
+    if (currentMachineNode?.kind === "terminal") {
+      return true;
+    }
 
     let step: Awaited<ReturnType<ModelAdapter["nextStep"]>>;
-    const inputAssetResolver =
-      this.sessionStore && sessionId
-        ? (assetId: string) => this.sessionStore!.getInputAsset(sessionId, assetId)
-        : undefined;
-    try {
-      step = await this.model.nextStep({
-        promptName,
-        userPrompt,
-        bundle,
-        runtimeInstructions: options.runtimeInstructions,
-        workingTurns: working.recentTurns,
-        summary: working.summary,
+    const shouldCallModel = currentMachineNode?.kind !== "action";
+    if (shouldCallModel) {
+      const stateInstruction =
+        stateMachine && currentMachineNode?.instruction
+          ? [`State "${machineSnapshot!.currentState}": ${currentMachineNode.instruction}`]
+          : [];
+      const runtimeInstructions = [
+        ...(options.runtimeInstructions ?? []),
+        ...stateInstruction,
+      ];
+      const modelSelection: {
+        model: string;
+        reason: string;
+        providerId?: string;
+        maxTokens?: number;
+        routeId?: string;
+        preference?: string;
+      } =
+        options.routing && this.modelRouter && this.routeCatalog
+          ? (() => {
+              const decision = this.modelRouter!.selectRoute(
+                { ...options.routing, taskType, agentName: promptName, agentKind: this.kind },
+                this.routeCatalog!(),
+              );
+              return {
+                model: decision.route.model,
+                reason: decision.reason,
+                providerId: decision.route.providerId,
+                maxTokens: decision.route.maxTokens,
+                routeId: decision.route.id,
+                preference: decision.preference,
+              };
+            })()
+          : this.modelSelector.select(
+              {
+                promptName,
+                iteration,
+                taskType,
+                userPrompt,
+                overrideModel: options.modelOverride,
+                promptHintModel: bundle.metadata.modelHint,
+              },
+              options.profile,
+            );
+      iterationSpan.setAttribute("model.selected", modelSelection.model);
+      if (modelSelection.providerId) {
+        iterationSpan.setAttribute("model.provider", modelSelection.providerId);
+      }
+      await observer.stream("model.selected", {
+        model: modelSelection.model,
+        reason: modelSelection.reason,
         iteration,
-        selectedModel: modelSelection.model,
-        selectedProviderId: modelSelection.providerId,
-        selectedMaxTokens: modelSelection.maxTokens,
-        availableTools: deriveToolDescriptors(this.tools.list()),
-        availableSkills: this.skills?.list().map((skill) => skill.name) ?? [],
-        resolveInputAsset: inputAssetResolver,
-        signal: runCtx.controller.signal,
-        onAssistantDelta: async (delta) => {
-          if (delta.length === 0) return;
-          streamedChars += delta.length;
-          modelSpan.addEvent("model.output_delta", observer.content({ delta }));
-          await observer.stream("model.output_delta", { iteration, delta }, modelSpan);
-        },
-        onReasoningDelta: async (delta) => {
-          if (delta.length === 0) return;
-          reasoningChars += delta.length;
-          modelSpan.addEvent("model.reasoning_delta", observer.content({ delta }));
-          await observer.stream("model.reasoning_delta", { iteration, delta }, modelSpan);
-        },
+        taskType: taskType ?? "default",
+        ...(modelSelection.providerId ? { providerId: modelSelection.providerId } : {}),
+        ...(modelSelection.routeId ? { routeId: modelSelection.routeId } : {}),
+        ...(modelSelection.preference ? { preference: modelSelection.preference } : {}),
+        ...(machineSnapshot ? { stateMachineState: machineSnapshot.currentState } : {}),
       });
-    } catch (error) {
-      observer.countModelCall(modelSelection.model, "error");
-      observer.countError("model_error");
-      observer.recordModelDuration(Date.now() - modelStartedAt, modelSelection.model);
-      modelSpan.recordException(error, "model_error");
-      modelSpan.end();
-      throw error;
-    }
 
-    const modelDurationMs = Date.now() - modelStartedAt;
-    observer.countModelCall(modelSelection.model, "ok");
-    observer.recordModelDuration(modelDurationMs, modelSelection.model);
-    observer.countReasoningChars(reasoningChars);
-    observer.countStreamChars(streamedChars);
-    await observer.stream(
-      "model.thinking_completed",
-      { model: modelSelection.model, iteration, taskType: taskType ?? "default" },
-      modelSpan,
-    );
-    if (reasoningChars > 0) {
-      await observer.stream(
-        "model.reasoning_completed",
-        { iteration, chars: reasoningChars },
-        modelSpan,
-      );
-    }
-    if (streamedChars > 0) {
-      await observer.stream(
-        "model.output_completed",
-        { iteration, chars: streamedChars },
-        modelSpan,
-      );
-    }
-    if (step.usage) {
-      this.context.recordObservedUsage(working.recentTurns, step.usage.inputTokens);
-      observer.countModelTokens(
-        modelSelection.model,
-        step.usage.inputTokens,
-        step.usage.outputTokens,
-      );
-      modelSpan.setAttributes({
-        ...(typeof step.usage.inputTokens === "number"
-          ? { "model.tokens.input": step.usage.inputTokens }
-          : {}),
-        ...(typeof step.usage.outputTokens === "number"
-          ? { "model.tokens.output": step.usage.outputTokens }
-          : {}),
+      const modelSpan = observer.startModel(iterationSpan, {
+        "model.name": modelSelection.model,
+        "model.reason": modelSelection.reason,
+        "task.type": taskType ?? "default",
+        iteration,
       });
+      let streamedChars = 0;
+      let reasoningChars = 0;
+      const modelStartedAt = Date.now();
       await observer.stream(
-        "model.usage",
-        { model: modelSelection.model, iteration, usage: step.usage },
+        "model.thinking_started",
+        { model: modelSelection.model, iteration, taskType: taskType ?? "default" },
         modelSpan,
       );
+
+      const inputAssetResolver =
+        this.sessionStore && sessionId
+          ? (assetId: string) => this.sessionStore!.getInputAsset(sessionId, assetId)
+          : undefined;
+      try {
+        step = await this.model.nextStep({
+          promptName,
+          userPrompt,
+          bundle,
+          runtimeInstructions,
+          workingTurns: working.recentTurns,
+          summary: working.summary,
+          iteration,
+          selectedModel: modelSelection.model,
+          selectedProviderId: modelSelection.providerId,
+          selectedMaxTokens: modelSelection.maxTokens,
+          availableTools: deriveToolDescriptors(this.tools.list()),
+          availableSkills: this.skills?.list().map((skill) => skill.name) ?? [],
+          resolveInputAsset: inputAssetResolver,
+          signal: runCtx.controller.signal,
+          onAssistantDelta: async (delta) => {
+            if (delta.length === 0) return;
+            streamedChars += delta.length;
+            modelSpan.addEvent("model.output_delta", observer.content({ delta }));
+            await observer.stream("model.output_delta", { iteration, delta }, modelSpan);
+          },
+          onReasoningDelta: async (delta) => {
+            if (delta.length === 0) return;
+            reasoningChars += delta.length;
+            modelSpan.addEvent("model.reasoning_delta", observer.content({ delta }));
+            await observer.stream("model.reasoning_delta", { iteration, delta }, modelSpan);
+          },
+        });
+      } catch (error) {
+        observer.countModelCall(modelSelection.model, "error");
+        observer.countError("model_error");
+        observer.recordModelDuration(Date.now() - modelStartedAt, modelSelection.model);
+        modelSpan.recordException(error, "model_error");
+        modelSpan.end();
+        throw error;
+      }
+
+      const modelDurationMs = Date.now() - modelStartedAt;
+      observer.countModelCall(modelSelection.model, "ok");
+      observer.recordModelDuration(modelDurationMs, modelSelection.model);
+      observer.countReasoningChars(reasoningChars);
+      observer.countStreamChars(streamedChars);
+      await observer.stream(
+        "model.thinking_completed",
+        { model: modelSelection.model, iteration, taskType: taskType ?? "default" },
+        modelSpan,
+      );
+      if (reasoningChars > 0) {
+        await observer.stream(
+          "model.reasoning_completed",
+          { iteration, chars: reasoningChars },
+          modelSpan,
+        );
+      }
+      if (streamedChars > 0) {
+        await observer.stream(
+          "model.output_completed",
+          { iteration, chars: streamedChars },
+          modelSpan,
+        );
+      }
+      if (step.usage) {
+        this.context.recordObservedUsage(working.recentTurns, step.usage.inputTokens);
+        observer.countModelTokens(
+          modelSelection.model,
+          step.usage.inputTokens,
+          step.usage.outputTokens,
+        );
+        modelSpan.setAttributes({
+          ...(typeof step.usage.inputTokens === "number"
+            ? { "model.tokens.input": step.usage.inputTokens }
+            : {}),
+          ...(typeof step.usage.outputTokens === "number"
+            ? { "model.tokens.output": step.usage.outputTokens }
+            : {}),
+        });
+        await observer.stream(
+          "model.usage",
+          { model: modelSelection.model, iteration, usage: step.usage },
+          modelSpan,
+        );
+      }
+      modelSpan.setAttributes(observer.content({ "model.output": step.assistantMessage }));
+      modelSpan.setStatus({ code: "ok" });
+      modelSpan.end();
+    } else {
+      const pending = machineSnapshot?.pendingStep;
+      if (!pending) {
+        const reason = `stateMachine action state "${machineSnapshot?.currentState}" has no pending step`;
+        if (stateMachine?.enforcement === "strict") {
+          throw new ValidationError(reason);
+        }
+        observer.log("warn", reason, { category: "state_machine_violation", iteration });
+        const recovery = transitionState(
+          stateMachine!.machine,
+          machineSnapshot!.currentState,
+          "action_failed",
+        );
+        if (recovery.changed) {
+          machineSnapshot!.history.push({
+            atIteration: iteration,
+            from: machineSnapshot!.currentState,
+            event: "action_failed",
+            to: recovery.state,
+          });
+          machineSnapshot!.currentState = recovery.state;
+        }
+        return false;
+      }
+      step = {
+        assistantMessage: pending.assistantMessage,
+        toolCalls: pending.toolCalls,
+        skillCalls: pending.skillCalls,
+        stop: pending.stop ?? false,
+      };
+      delete machineSnapshot.pendingStep;
     }
-    modelSpan.setAttributes(observer.content({ "model.output": step.assistantMessage }));
-    modelSpan.setStatus({ code: "ok" });
-    modelSpan.end();
 
     // Honor a kill that arrived while the model was thinking, before side effects.
     if (runCtx.cancelled) {
@@ -708,6 +807,13 @@ export class Agent implements AgentHandle {
       return true;
     }
 
+    const stateScope =
+      currentMachineNode && (currentMachineNode.allowActions || currentMachineNode.denyActions)
+        ? {
+            allowActions: currentMachineNode.allowActions,
+            denyActions: currentMachineNode.denyActions,
+          }
+        : undefined;
     const executionCtx = {
       runId,
       sessionId,
@@ -720,7 +826,7 @@ export class Agent implements AgentHandle {
       signal: runCtx.controller.signal,
       budget,
       outputArtifacts,
-      capabilityScope: options.capabilityScope,
+      capabilityScope: mergeCapabilityScopes(options.capabilityScope, stateScope),
       lineage: {
         parentSessionId: options.parentSessionId,
         parentRunId: options.parentRunId,
@@ -728,6 +834,35 @@ export class Agent implements AgentHandle {
         depth: options.depth,
       },
     };
+
+    const hasRequestedActions = step.toolCalls.length > 0 || (step.skillCalls?.length ?? 0) > 0;
+    if (stateMachine && currentMachineNode?.kind === "llm") {
+      const event = hasRequestedActions
+        ? "llm_has_actions"
+        : step.stop
+          ? "llm_stop"
+          : "llm_no_actions";
+      const next = transitionState(stateMachine.machine, machineSnapshot!.currentState, event);
+      if (next.changed) {
+        machineSnapshot!.history.push({
+          atIteration: iteration,
+          from: machineSnapshot!.currentState,
+          event,
+          to: next.state,
+        });
+        machineSnapshot!.currentState = next.state;
+      }
+      const nextNode = stateMachine.machine.states[machineSnapshot!.currentState];
+      if (hasRequestedActions && nextNode?.kind === "action") {
+        machineSnapshot!.pendingStep = {
+          assistantMessage: step.assistantMessage,
+          toolCalls: step.toolCalls,
+          skillCalls: step.skillCalls,
+          stop: step.stop,
+        };
+        return false;
+      }
+    }
 
     const toolOutcome = await engine.executeCalls(step.toolCalls, executionCtx);
     const combinedToolCalls = [...step.toolCalls];
@@ -787,6 +922,29 @@ export class Agent implements AgentHandle {
       ...(skillCalls.length > 0 ? { skillCalls, skillResults } : {}),
     });
 
+    if (stateMachine && currentMachineNode?.kind === "action") {
+      const failedTools = combinedToolResults.some((result) => !result.ok);
+      const failedSkills = skillResults.some((result) => !result.ok);
+      const actionEvent =
+        toolOutcome.limitReached || skillLimitReached
+          ? "action_limit_reached"
+          : failedTools || failedSkills
+            ? "action_failed"
+            : step.stop
+              ? "action_completed_stop"
+              : "action_completed";
+      const next = transitionState(stateMachine.machine, machineSnapshot!.currentState, actionEvent);
+      if (next.changed) {
+        machineSnapshot!.history.push({
+          atIteration: iteration,
+          from: machineSnapshot!.currentState,
+          event: actionEvent,
+          to: next.state,
+        });
+        machineSnapshot!.currentState = next.state;
+      }
+    }
+
     if (this.sessionStore && sessionId && shouldSnapshot(iteration, options.snapshotEvery)) {
       await this.sessionStore.saveSnapshot(sessionId, runId, state);
     }
@@ -795,7 +953,11 @@ export class Agent implements AgentHandle {
       await hook(state, iteration);
     }
 
-    return Boolean(step.stop || toolOutcome.limitReached || skillLimitReached);
+    const terminalReached =
+      stateMachine && machineSnapshot
+        ? stateMachine.machine.states[machineSnapshot.currentState]?.kind === "terminal"
+        : false;
+    return Boolean(step.stop || toolOutcome.limitReached || skillLimitReached || terminalReached);
   }
 
   /** Session id of the most recently started active run, if any. */
@@ -901,4 +1063,20 @@ function adaptiveActionCallLimit(baseLimit: number, priorTurns: number): number 
   if (priorTurns < 32) return baseLimit;
   const growthSteps = Math.floor(priorTurns / 32);
   return Math.min(240, baseLimit + growthSteps * 8);
+}
+
+function mergeCapabilityScopes(
+  base: CapabilityScope | undefined,
+  overlay: CapabilityScope | undefined,
+): CapabilityScope | undefined {
+  if (!base && !overlay) return undefined;
+  const allowActions =
+    base?.allowActions && overlay?.allowActions
+      ? base.allowActions.filter((name) => overlay.allowActions!.includes(name))
+      : (base?.allowActions ?? overlay?.allowActions);
+  const denyActions = [...(base?.denyActions ?? []), ...(overlay?.denyActions ?? [])];
+  return {
+    ...(allowActions ? { allowActions } : {}),
+    ...(denyActions.length > 0 ? { denyActions } : {}),
+  };
 }

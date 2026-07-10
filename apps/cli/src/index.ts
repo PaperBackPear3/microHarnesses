@@ -69,6 +69,8 @@ function printHelp(): void {
       "  --compaction-target <0..1>",
       "  --turn-compaction-target <0..1>",
       "  --non-turn-token-reserve <n>",
+      "  --state-machine <off|advisory|strict>",
+      "  --state-machine-profile <focused-delivery>",
       "  --no-safety",
     ].join("\n"),
   );
