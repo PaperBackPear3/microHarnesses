@@ -19,7 +19,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RevenueOpsConf
     host: env.REVENUE_OPS_HOST ?? "127.0.0.1",
     port: parseNumber(env.REVENUE_OPS_PORT, 3010),
     provider: env.REVENUE_OPS_PROVIDER ?? "ollama",
-    model: env.REVENUE_OPS_MODEL ?? "gemma4:latest",
+    model: env.REVENUE_OPS_MODEL ?? "qwen3.6:35b",
     maxTokens: parseNumber(env.REVENUE_OPS_MAX_TOKENS, 4096),
     maxRequestBytes: parseNumber(env.REVENUE_OPS_MAX_REQUEST_BYTES, 2 * 1024 * 1024),
   };

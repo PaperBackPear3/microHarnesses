@@ -67,8 +67,8 @@
     <div class="card full-width">
       <div class="card-header"><span class="icon">&#128230;</span><h2>Inbound Event</h2></div>
       <div class="card-body">
-        <label for="event-body">JSON Payload</label>
-        <textarea id="event-body" placeholder='{"type":"payment_received","accountId":"acc_123","amount":500}'>{}</textarea>
+        <label for="event-body">JSON Payload (must include type, occurredAt, source)</label>
+        <textarea id="event-body" placeholder='{"type":"payment_received","accountId":"acc_123","amount":500}'>{"type":"payment_received","source":"billing","occurredAt":"2026-07-10T10:00:00Z","accountId":"acc_demo","payload":{"amount":500,"currency":"USD"}}</textarea>
         <div class="btn-row"><button class="primary" onclick="sendEvent()">Send Event</button></div>
         <pre id="event-output" class="empty">Awaiting event...</pre>
       </div>
