@@ -1,16 +1,27 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { RevenueOpsConfig } from "./config.js";
 import { parseInboundEvent } from "./http/jsonEndpoint.js";
 import { log } from "./logger.js";
 import { RevenueOpsService } from "./orchestration/service.js";
 import { createRevenueOpsAgents } from "./runtime/agent.js";
 import { JsonCaseStore } from "./store/caseStore.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = path.join(__dirname, "..", "public");
+
+const STATIC_MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+};
 
 export interface RevenueOpsServer {
   server: ReturnType<typeof createServer>;
 }
 
-export function createRevenueOpsServer(config: RevenueOpsConfig): RevenueOpsServer {
+export function createRevenueOpsServer(config: any): RevenueOpsServer {
   const store = new JsonCaseStore(config.stateDir);
   const agents = createRevenueOpsAgents(config);
   const service = new RevenueOpsService(store, config, agents);
@@ -25,14 +36,33 @@ export function createRevenueOpsServer(config: RevenueOpsConfig): RevenueOpsServ
   return { server };
 }
 
+async function serveStaticFile(res: ServerResponse, pathname: string): Promise<boolean> {
+  const ext = path.extname(pathname);
+  const contentType = STATIC_MIME[ext];
+  if (!contentType) return false;
+  const resolved = path.resolve(PUBLIC_DIR, pathname === "/" ? "index.html" : pathname.substring(1));
+  if (path.relative(PUBLIC_DIR, resolved).startsWith("..")) return false;
+  try {
+    const content = await readFile(resolved);
+    res.writeHead(200, { "content-type": contentType, "content-length": content.length });
+    res.end(content);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  config: RevenueOpsConfig,
+  config: any,
   service: RevenueOpsService,
 ): Promise<void> {
   const method = req.method ?? "GET";
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+
+  // Serve static files first
+  if (await serveStaticFile(res, url.pathname)) return;
 
   if (method === "GET" && url.pathname === "/health") {
     sendJson(res, 200, {
