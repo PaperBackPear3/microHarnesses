@@ -117,6 +117,51 @@ compressor.
 - `mh sessions list` — list saved sessions (JSON)
 - `mh sessions show <session-id>` — show one session (JSON)
 
+## Configuration file
+
+Store persistent defaults in `~/.microharness/config.json`:
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-4o",
+  "effort": "medium",
+  "mode": "accept-edits",
+  "maxIterations": 320,
+  "snapshotEvery": 4,
+  "noSafety": false,
+  "privacyMode": false,
+  "stateMachineEnforcement": "advisory",
+  "stateMachineProfile": "focused-delivery"
+}
+```
+
+**Precedence:** CLI flags > environment variables > `~/.microharness/config.json` > built-in defaults
+
+### All supported config keys
+
+| Key | Type | Example | Purpose |
+|-----|------|---------|---------|
+| `stateDir` | string | `.micro-harness` | Where sessions/state persist |
+| `promptsDir` | string | `/path/to/prompts` | Directory for prompt files |
+| `skillsDir` | string | `/path/to/skills` | Directory for SKILL.md files |
+| `provider` | string | `openai` \| `anthropic` | LLM provider |
+| `model` | string | `gpt-4o` | Model name override |
+| `effort` | string | `low` \| `medium` \| `high` | Reasoning effort |
+| `routingPreference` | string | `auto` \| `cost` \| `speed` \| `intelligence` \| `balanced` | Model routing strategy |
+| `mode` | string | `plan` \| `accept-edits` \| `autopilot` | CLI mode |
+| `maxIterations` | number \| `"unlimited"` | `256` | Max iteration limit |
+| `snapshotEvery` | number | `4` | Snapshot frequency |
+| `maxTokens` | number | `100000` | Token ceiling |
+| `noSafety` | boolean | `false` | Disable safety policies |
+| `privacyMode` | boolean | `false` | Exclude code from telemetry |
+| `compactionTriggerUtilization` | number | `0.85` | Context compaction threshold |
+| `compactionTargetUtilization` | number | `0.7` | Target utilization after compaction |
+| `turnCompactionTargetRatio` | number | `0.75` | Token target for turn compaction |
+| `nonTurnTokenReserve` | number | `1500` | Reserved tokens for non-turn data |
+| `stateMachineEnforcement` | string | `advisory` \| `strict` \| `off` | State machine enforcement mode |
+| `stateMachineProfile` | string | `focused-delivery` | State machine profile |
+
 ## Runtime flags
 
 - `--provider <openai|anthropic|ollama>`
