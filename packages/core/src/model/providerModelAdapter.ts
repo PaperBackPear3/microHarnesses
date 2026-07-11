@@ -72,6 +72,7 @@ export class ProviderModelAdapter implements ModelAdapter {
       messages: await buildMessages(input, !supportsStructuredTools),
       maxTokens: input.selectedMaxTokens ?? current.maxTokens ?? 4096,
       tools: input.availableTools,
+      availableSkills: input.availableSkills,
       signal: input.signal,
     };
     assertInputPartSupport(request.messages, adapter.features?.inputParts, providerId);
@@ -136,6 +137,9 @@ async function buildMessages(
   }
   if (includeToolCatalogFallback && (input.availableTools?.length ?? 0) > 0) {
     systemParts.push(renderToolCatalogInstruction(input.availableTools ?? []));
+  }
+  if (input.availableSkills && input.availableSkills.length > 0) {
+    systemParts.push(renderAvailableSkillsInstruction(input.availableSkills));
   }
 
   const messages: ProviderMessage[] = [{ role: "system", content: systemParts.join("\n\n") }];
@@ -331,5 +335,15 @@ function renderToolCatalogInstruction(tools: ToolDescriptor[]): string {
     "Do not append parentheses to tool names (use `time`, not `time()`).",
     "Available tools:",
     entries,
+  ].join("\n");
+}
+
+function renderAvailableSkillsInstruction(skills: string[]): string {
+  return [
+    "## Available executable skills",
+    "You have access to the following specialized skills that you can invoke to handle complex tasks.",
+    "Use the `skill` tool with the skill name to access them.",
+    "Available skills:",
+    ...skills.map((skill) => `- ${skill}`),
   ].join("\n");
 }

@@ -78,6 +78,8 @@ export interface CompletionRequest {
   maxTokens?: number;
   temperature?: number;
   tools?: ToolDescriptor[];
+  /** Names of available executable skills (plugins/subagents). */
+  availableSkills?: string[];
   /** Aborted when the run is killed; adapters should pass it to their HTTP call. */
   signal?: AbortSignal;
 }

@@ -138,10 +138,23 @@ export class AnthropicAdapter implements ProviderAdapter {
   }
 
   private toRequestBody(request: CompletionRequest): MessageCreateParamsBase {
+    const systemParts: string[] = [];
     const systemMessage = request.messages
       .filter((m) => m.role === "system" || m.role === "developer")
       .map((m) => m.content)
       .join("\n\n");
+    if (systemMessage) {
+      systemParts.push(systemMessage);
+    }
+    if (request.availableSkills && request.availableSkills.length > 0) {
+      systemParts.push(
+        [
+          "## Available executable skills",
+          "You have access to the following specialized skills that you can invoke to handle complex tasks:",
+          ...request.availableSkills.map((skill) => `- ${skill}`),
+        ].join("\n"),
+      );
+    }
 
     const messages: MessageParam[] = request.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -154,7 +167,7 @@ export class AnthropicAdapter implements ProviderAdapter {
       model: request.model,
       max_tokens: request.maxTokens ?? 4096,
       temperature: request.temperature ?? 0.2,
-      system: systemMessage,
+      system: systemParts.join("\n\n"),
       messages,
       ...(request.tools && request.tools.length > 0
         ? {
