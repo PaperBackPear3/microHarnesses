@@ -6,31 +6,33 @@ import type {
   ToolExecutionContext,
 } from "@micro-harnesses/core";
 
-export function createTodoTools(store: TodoStore): ToolDefinition[] {
+type TodoStoreResolver = (context?: ToolExecutionContext) => Promise<TodoStore> | TodoStore;
+
+export function createTodoTools(storeOrResolver: TodoStore | TodoStoreResolver): ToolDefinition[] {
+  const resolveStore = toStoreResolver(storeOrResolver);
   return [
-    createTodoCreateTool(store),
-    createTodoGetTool(store),
-    createTodoListTool(store),
-    createTodoUpdateTool(store),
-    createTodoSetStatusTool(store),
-    createTodoDeleteTool(store),
-    createTodoAddDependencyTool(store),
-    createTodoRemoveDependencyTool(store),
-    createTodoLockTool(store),
-    createTodoUnlockTool(store),
-    createTodoNextReadyTool(store),
+    createTodoCreateTool(resolveStore),
+    createTodoGetTool(resolveStore),
+    createTodoListTool(resolveStore),
+    createTodoUpdateTool(resolveStore),
+    createTodoSetStatusTool(resolveStore),
+    createTodoDeleteTool(resolveStore),
+    createTodoAddDependencyTool(resolveStore),
+    createTodoRemoveDependencyTool(resolveStore),
+    createTodoLockTool(resolveStore),
+    createTodoUnlockTool(resolveStore),
+    createTodoNextReadyTool(resolveStore),
   ];
 }
 
-function createTodoCreateTool(store: TodoStore): ToolDefinition {
+function createTodoCreateTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_create",
-    description: "Create a new persistent todo item.",
+    description: "Create a new persistent todo item with an auto-generated id.",
     risk: "low",
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "string" },
         text: { type: "string" },
         priority: { type: "number" },
         metadata: { type: "object" },
@@ -39,9 +41,9 @@ function createTodoCreateTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const scopeId = resolveScope(context);
       const todo = await store.create({
-        ...(typeof input.id === "string" ? { id: input.id } : {}),
         text: requiredString(input, "text"),
         priority: optionalNumber(input, "priority"),
         ...(scopeId ? { scopeId } : {}),
@@ -52,7 +54,7 @@ function createTodoCreateTool(store: TodoStore): ToolDefinition {
   };
 }
 
-function createTodoGetTool(store: TodoStore): ToolDefinition {
+function createTodoGetTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_get",
     description: "Fetch one todo by id.",
@@ -64,13 +66,14 @@ function createTodoGetTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const todo = await getScopedTodo(store, requiredString(input, "id"), resolveScope(context));
       return { found: Boolean(todo), ...(todo ? { todo } : {}) };
     },
   };
 }
 
-function createTodoListTool(store: TodoStore): ToolDefinition {
+function createTodoListTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_list",
     description: "List todos with optional status and lock filters.",
@@ -88,6 +91,7 @@ function createTodoListTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const status = normalizeStatusFilter(input.status);
       const scopeId = resolveScope(context);
       const cleaned = await cleanupDoneForScope(store, scopeId);
@@ -103,7 +107,7 @@ function createTodoListTool(store: TodoStore): ToolDefinition {
   };
 }
 
-function createTodoUpdateTool(store: TodoStore): ToolDefinition {
+function createTodoUpdateTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_update",
     description: "Update todo fields (lock-aware).",
@@ -122,6 +126,7 @@ function createTodoUpdateTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const id = requiredString(input, "id");
       const actor = resolveActor(input, context);
       await assertTodoInScope(store, id, resolveScope(context));
@@ -136,7 +141,7 @@ function createTodoUpdateTool(store: TodoStore): ToolDefinition {
   };
 }
 
-function createTodoSetStatusTool(store: TodoStore): ToolDefinition {
+function createTodoSetStatusTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_set_status",
     description: "Set todo status (open/in_progress/blocked/done/cancelled).",
@@ -153,6 +158,7 @@ function createTodoSetStatusTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const id = requiredString(input, "id");
       const status = parseTodoStatus(requiredString(input, "status"));
       const actor = resolveActor(input, context);
@@ -172,7 +178,7 @@ function createTodoSetStatusTool(store: TodoStore): ToolDefinition {
   };
 }
 
-function createTodoDeleteTool(store: TodoStore): ToolDefinition {
+function createTodoDeleteTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_delete",
     description: "Delete a todo (lock-aware).",
@@ -187,6 +193,7 @@ function createTodoDeleteTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const id = requiredString(input, "id");
       const actor = resolveActor(input, context);
       await assertTodoInScope(store, id, resolveScope(context));
@@ -196,7 +203,7 @@ function createTodoDeleteTool(store: TodoStore): ToolDefinition {
   };
 }
 
-function createTodoAddDependencyTool(store: TodoStore): ToolDefinition {
+function createTodoAddDependencyTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_add_dependency",
     description: "Add a dependency edge: todo_id depends_on.",
@@ -205,24 +212,29 @@ function createTodoAddDependencyTool(store: TodoStore): ToolDefinition {
       type: "object",
       properties: {
         todo_id: { type: "string" },
-        depends_on: { type: "string" },
+        depends_on: {
+          oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+        },
       },
       required: ["todo_id", "depends_on"],
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const todoId = requiredString(input, "todo_id");
-      const dependsOn = requiredString(input, "depends_on");
+      const dependsOn = parseDependsOnInput(input.depends_on);
       const scopeId = resolveScope(context);
       await assertTodoInScope(store, todoId, scopeId);
-      await assertTodoInScope(store, dependsOn, scopeId);
-      await store.addDependency(todoId, dependsOn);
-      return { ok: true, todoId, dependsOn };
+      for (const dependencyId of dependsOn) {
+        await assertTodoInScope(store, dependencyId, scopeId);
+        await store.addDependency(todoId, dependencyId);
+      }
+      return { ok: true, todoId, dependsOn, count: dependsOn.length };
     },
   };
 }
 
-function createTodoRemoveDependencyTool(store: TodoStore): ToolDefinition {
+function createTodoRemoveDependencyTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_remove_dependency",
     description: "Remove a dependency edge: todo_id depends_on.",
@@ -231,24 +243,29 @@ function createTodoRemoveDependencyTool(store: TodoStore): ToolDefinition {
       type: "object",
       properties: {
         todo_id: { type: "string" },
-        depends_on: { type: "string" },
+        depends_on: {
+          oneOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+        },
       },
       required: ["todo_id", "depends_on"],
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const todoId = requiredString(input, "todo_id");
-      const dependsOn = requiredString(input, "depends_on");
+      const dependsOn = parseDependsOnInput(input.depends_on);
       const scopeId = resolveScope(context);
       await assertTodoInScope(store, todoId, scopeId);
-      await assertTodoInScope(store, dependsOn, scopeId);
-      await store.removeDependency(todoId, dependsOn);
-      return { ok: true, todoId, dependsOn };
+      for (const dependencyId of dependsOn) {
+        await assertTodoInScope(store, dependencyId, scopeId);
+        await store.removeDependency(todoId, dependencyId);
+      }
+      return { ok: true, todoId, dependsOn, count: dependsOn.length };
     },
   };
 }
 
-function createTodoLockTool(store: TodoStore): ToolDefinition {
+function createTodoLockTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_lock",
     description: "Hard-lock a todo for an owner.",
@@ -264,6 +281,7 @@ function createTodoLockTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const id = requiredString(input, "id");
       const owner = resolveActor(input, context);
       await assertTodoInScope(store, id, resolveScope(context));
@@ -277,7 +295,7 @@ function createTodoLockTool(store: TodoStore): ToolDefinition {
   };
 }
 
-function createTodoUnlockTool(store: TodoStore): ToolDefinition {
+function createTodoUnlockTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_unlock",
     description: "Unlock a todo. Only owner can unlock unless force=true.",
@@ -293,6 +311,7 @@ function createTodoUnlockTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const id = requiredString(input, "id");
       const owner = resolveActor(input, context);
       const force = optionalBoolean(input, "force") ?? false;
@@ -303,7 +322,7 @@ function createTodoUnlockTool(store: TodoStore): ToolDefinition {
   };
 }
 
-function createTodoNextReadyTool(store: TodoStore): ToolDefinition {
+function createTodoNextReadyTool(resolveStore: TodoStoreResolver): ToolDefinition {
   return {
     name: "todo_next_ready",
     description: "Return next ready todos for long-horizon execution.",
@@ -317,6 +336,7 @@ function createTodoNextReadyTool(store: TodoStore): ToolDefinition {
       additionalProperties: false,
     },
     async execute(input, context) {
+      const store = await resolveStore(context);
       const scopeId = resolveScope(context);
       const owner =
         typeof input.owner === "string" ? input.owner : (context?.sessionId ?? context?.runId);
@@ -394,8 +414,25 @@ function parseTodoStatus(value: string): TodoStatus {
   throw new Error(`Invalid todo status "${value}"`);
 }
 
+function parseDependsOnInput(value: unknown): string[] {
+  if (typeof value === "string") return [requiredNonEmptyString(value, "depends_on")];
+  if (!Array.isArray(value)) {
+    throw new Error('"depends_on" must be a non-empty string or an array of non-empty strings');
+  }
+  const dependsOn = Array.from(
+    new Set(value.map((entry) => requiredNonEmptyString(entry, "depends_on"))),
+  );
+  if (dependsOn.length === 0) {
+    throw new Error('"depends_on" must include at least one dependency id');
+  }
+  return dependsOn;
+}
+
 function requiredString(input: Record<string, unknown>, key: string): string {
-  const value = input[key];
+  return requiredNonEmptyString(input[key], key);
+}
+
+function requiredNonEmptyString(value: unknown, key: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`"${key}" must be a non-empty string`);
   }
@@ -416,4 +453,11 @@ function optionalBoolean(input: Record<string, unknown>, key: string): boolean |
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toStoreResolver(storeOrResolver: TodoStore | TodoStoreResolver): TodoStoreResolver {
+  if (typeof storeOrResolver === "function") {
+    return storeOrResolver;
+  }
+  return () => storeOrResolver;
 }

@@ -836,10 +836,23 @@ export class Agent implements AgentHandle {
     };
 
     const hasRequestedActions = step.toolCalls.length > 0 || (step.skillCalls?.length ?? 0) > 0;
+    const suppressStopForPendingAction =
+      step.stop && !hasRequestedActions && impliesFollowUpAction(step.assistantMessage);
+    if (suppressStopForPendingAction) {
+      observer.log(
+        "warn",
+        "Model returned stop=true while messaging implied follow-up actions; continuing",
+        {
+          category: "model_output_inconsistent",
+          iteration,
+        },
+      );
+    }
+    const shouldStop = step.stop && !suppressStopForPendingAction;
     if (stateMachine && currentMachineNode?.kind === "llm") {
       const event = hasRequestedActions
         ? "llm_has_actions"
-        : step.stop
+        : shouldStop
           ? "llm_stop"
           : "llm_no_actions";
       const next = transitionState(stateMachine.machine, machineSnapshot!.currentState, event);
@@ -930,7 +943,7 @@ export class Agent implements AgentHandle {
           ? "action_limit_reached"
           : failedTools || failedSkills
             ? "action_failed"
-            : step.stop
+            : shouldStop
               ? "action_completed_stop"
               : "action_completed";
       const next = transitionState(stateMachine.machine, machineSnapshot!.currentState, actionEvent);
@@ -957,7 +970,7 @@ export class Agent implements AgentHandle {
       stateMachine && machineSnapshot
         ? stateMachine.machine.states[machineSnapshot.currentState]?.kind === "terminal"
         : false;
-    return Boolean(step.stop || toolOutcome.limitReached || skillLimitReached || terminalReached);
+    return Boolean(shouldStop || toolOutcome.limitReached || skillLimitReached || terminalReached);
   }
 
   /** Session id of the most recently started active run, if any. */
@@ -1079,4 +1092,11 @@ function mergeCapabilityScopes(
     ...(allowActions ? { allowActions } : {}),
     ...(denyActions.length > 0 ? { denyActions } : {}),
   };
+}
+
+function impliesFollowUpAction(message: string): boolean {
+  const text = message.trim().toLowerCase();
+  if (text.length === 0) return false;
+  if (/[.:]\s*$/.test(text)) return true;
+  return /(let me|i(?:')ll|i will|next,?\s*i(?:')ll|now i(?:')ll)\b/.test(text);
 }

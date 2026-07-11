@@ -273,6 +273,57 @@ test("state machine can orchestrate llm -> action -> llm flow", async () => {
   assert.ok((state.stateMachine?.history.length ?? 0) >= 3);
 });
 
+test("state machine ignores contradictory stop when assistant message implies pending work", async () => {
+  const obs = makeObs();
+  const tools = new ToolRegistry();
+  tools.register({
+    name: "echo",
+    description: "echo",
+    risk: "low",
+    async execute(input) {
+      return { echoed: input.value };
+    },
+  });
+
+  const runtime = new Agent({
+    promptName: "default",
+    model: new SequenceModel([
+      {
+        assistantMessage: "I need to create the remaining files. Let me proceed:",
+        toolCalls: [],
+        stop: true,
+      },
+      {
+        assistantMessage: "Creating files now",
+        toolCalls: [{ name: "echo", input: { value: "ok" } }],
+        stop: true,
+      },
+    ]),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools,
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: obs.provider,
+  });
+
+  const state = await runtime.run("hello", {
+    maxIterations: 4,
+    snapshotEvery: 1,
+    profile: { defaultModel: "test-model" },
+    stateMachine: { profile: "focused-delivery", enforcement: "advisory" },
+  });
+
+  assert.equal(state.turns.length, 2);
+  assert.equal(state.turns[1]?.toolResults[0]?.ok, true);
+  assert.equal(
+    obs.memory.getLogs().some((entry) =>
+      String(entry.message).includes("Model returned stop=true while messaging implied follow-up"),
+    ),
+    true,
+  );
+});
+
 test("strict state machine rejects action state without a pending step", async () => {
   const obs = makeObs();
   const runtime = new Agent({

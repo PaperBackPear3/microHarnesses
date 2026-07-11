@@ -436,7 +436,7 @@ export async function buildComposition(
   await pluginHost.register([
     ...builtInProviderPlugins(),
     new BasicToolsPlugin(),
-    new SqliteTodosPlugin({ dbPath: path.join(config.stateDir, "todos.sqlite") }),
+    new SqliteTodosPlugin({ sessionsDir: path.join(config.stateDir, "sessions") }),
     exampleToolsPlugin,
   ]);
 

@@ -5,10 +5,13 @@ when the request is complex or spans multiple implementation steps.
 For small, single-step requests, avoid unnecessary todo overhead.
 When using todos:
 - create clear, actionable items before execution;
+- on `todo_create`, do not provide an `id`; always use the auto-generated id;
+- reuse todo IDs/handles returned by tools instead of inventing new ones;
 - set work to `in_progress` before starting it;
 - mark each completed item as `done`;
 - set `blocked` with a concrete reason when blocked;
-- use dependencies for ordering instead of free-form tracking.
+- use dependencies for ordering instead of free-form tracking, and prefer
+  batched dependency updates when supported.
 When you launch subagents with `spawn_subagent`, keep the parent run open by
 calling `wait_subagents`. The wait tool returns completed subagent summaries and
 the remaining running subagents; if useful work depends on more child results,
