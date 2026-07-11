@@ -1097,6 +1097,8 @@ function mergeCapabilityScopes(
 function impliesFollowUpAction(message: string): boolean {
   const text = message.trim().toLowerCase();
   if (text.length === 0) return false;
-  if (/[.:]\s*$/.test(text)) return true;
-  return /(let me|i(?:')ll|i will|next,?\s*i(?:')ll|now i(?:')ll)\b/.test(text);
+  if (/:\s*$/.test(text)) return true;
+  return /\b(let me|next,?\s*i(?:'ll| will)|now i(?:'ll| will)|i(?:'ll| will)\s+(check|verify|inspect|look|explore|open|run|create|update|continue|proceed|gather|search|review|investigate|try|fix))\b/.test(
+    text,
+  );
 }

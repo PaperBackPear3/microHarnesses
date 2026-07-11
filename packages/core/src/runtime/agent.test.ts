@@ -324,6 +324,39 @@ test("state machine ignores contradictory stop when assistant message implies pe
   );
 });
 
+test("runtime honors stop=true for normal final sentences", async () => {
+  const runtime = new Agent({
+    promptName: "default",
+    model: new SequenceModel([
+      {
+        assistantMessage: "Plan complete. No further actions are needed.",
+        toolCalls: [],
+        stop: true,
+      },
+      {
+        assistantMessage: "This turn should never execute",
+        toolCalls: [],
+        stop: true,
+      },
+    ]),
+    modelSelector: new FakeModelSelector(),
+    prompts: new FakePromptSource(),
+    tools: new ToolRegistry(),
+    context: new FakeContextManager() as never,
+    policy: new AllowPolicy(),
+    observability: makeObs().provider,
+  });
+
+  const state = await runtime.run("hello", {
+    maxIterations: 3,
+    snapshotEvery: 1,
+    profile: { defaultModel: "test-model" },
+  });
+
+  assert.equal(state.turns.length, 1);
+  assert.equal(state.turns[0]?.assistantMessage, "Plan complete. No further actions are needed.");
+});
+
 test("strict state machine rejects action state without a pending step", async () => {
   const obs = makeObs();
   const runtime = new Agent({
