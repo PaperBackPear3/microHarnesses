@@ -1,6 +1,6 @@
 {
   "name": "micro-harnesses",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
   "description": "Library-first framework for building micro harnesses.",
   "homepage": "https://paperbackpear3.github.io/microHarnesses/",
