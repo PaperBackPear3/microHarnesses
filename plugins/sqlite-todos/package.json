@@ -1,6 +1,6 @@
 {
   "name": "@micro-harnesses/plugin-sqlite-todos",
-  "version": "3.4.4",
+  "version": "3.4.5",
   "description": "SQLite-backed todo and long-horizon workflow tools for @micro-harnesses/core.",
   "license": "MIT",
   "keywords": ["micro-harness", "plugin", "todo", "sqlite", "workflow"],
@@ -34,6 +34,6 @@
     "test": "node --test \"dist/**/*.test.js\""
   },
   "peerDependencies": {
-    "@micro-harnesses/core": "^3.4.4"
+    "@micro-harnesses/core": "^3.4.5"
   }
 }
