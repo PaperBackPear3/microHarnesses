@@ -3,6 +3,7 @@ import type { ModelRoute } from "../model/types";
 import type { CredentialsRegistry } from "../providers/credentialsRegistry";
 import type { ProviderRegistry } from "../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
+import type { SkillRegistry } from "../skills/registry";
 import type { AfterLoopHook, BeforeLoopHook } from "../runtime/types";
 import { ValidationError } from "../shared/errors";
 import type { SubagentService } from "../subagents/types";
@@ -10,8 +11,11 @@ import type { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
 import { registerBuiltInProviders, registerProviders } from "./providers/plugins";
 import { type ChannelToolsOptions, createChannelTools } from "./tools/channels";
+import { createFindSkillTool } from "./tools/findSkillTool";
 import { createListModelRoutesTool } from "./tools/listModelRoutesTool";
+import { createListSkillsTool } from "./tools/listSkillsTool";
 import { type PlanModeToolsOptions, createPlanModeTools } from "./tools/planMode";
+import { createSkillTool } from "./tools/skillTool";
 import {
   type SpawnSubagentToolOptions,
   createSpawnSubagentTool,
@@ -30,6 +34,9 @@ export * from "./tools/spawnSubagentTool";
 export * from "./tools/toolOutputRead";
 export * from "./tools/channels";
 export * from "./tools/listModelRoutesTool";
+export * from "./tools/listSkillsTool";
+export * from "./tools/findSkillTool";
+export * from "./tools/skillTool";
 
 export interface LoopHookRegistrar {
   onBeforeLoop(hook: BeforeLoopHook): void;
@@ -61,6 +68,7 @@ export interface RegisterCoreDefaultsOptions {
 }
 
 export interface CreateCoreDefaultToolsOptions {
+  skills?: SkillRegistry;
   workspaceTools?: ReadOnlyWorkspaceToolsOptions;
   planModeTools?: PlanModeToolsOptions;
   channelTools?: Omit<ChannelToolsOptions, "registry"> & { registry: ChannelRegistry };
@@ -76,6 +84,11 @@ export interface CreateCoreDefaultToolsOptions {
 
 export function createCoreDefaultTools(options: CreateCoreDefaultToolsOptions): ToolDefinition[] {
   const tools: ToolDefinition[] = [createToolOutputReadTool()];
+  if (options.skills) {
+    tools.push(createListSkillsTool(options.skills));
+    tools.push(createFindSkillTool(options.skills));
+    tools.push(createSkillTool(options.skills));
+  }
   if (options.workspaceTools) {
     tools.push(...createReadOnlyWorkspaceTools(options.workspaceTools));
   }

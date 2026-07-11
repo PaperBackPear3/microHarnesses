@@ -4,6 +4,7 @@ import { CredentialsRegistry } from "../providers/credentialsRegistry";
 import { ProviderRegistry } from "../providers/registry";
 import type { CredentialsResolver, ProviderAdapter } from "../providers/types";
 import { ChannelRegistry } from "../channels/registry";
+import { SkillRegistry } from "../skills/registry";
 import type { SubagentSupervisor } from "../subagents/types";
 import { ToolRegistry } from "../tools/registry";
 import type { ToolDefinition } from "../tools/types";
@@ -103,6 +104,22 @@ test("createCoreDefaultTools composes optional bundles", () => {
     "explore_agent",
     "plan_mode_info",
   ]);
+});
+
+test("createCoreDefaultTools registers skill tools when skill registry is provided", () => {
+  const skills = new SkillRegistry();
+  skills.register({
+    name: "demo_skill",
+    description: "Demo",
+    async execute() {
+      return { ok: true };
+    },
+  });
+  const tools = createCoreDefaultTools({ skills });
+  assert.deepEqual(
+    tools.map((tool) => tool.name),
+    ["tool_output_read", "list_skills", "find_skill", "skill"],
+  );
 });
 
 test("createCoreDefaultTools registers wait tool for subagent supervisors", () => {

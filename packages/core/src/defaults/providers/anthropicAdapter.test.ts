@@ -141,3 +141,22 @@ test("maps structured image/file content into Anthropic blocks", async () => {
   assert.equal(parts[1]?.type, "image");
   assert.equal(parts[2]?.type, "document");
 });
+
+test("does not inject enumerated skill text from availableSkills into system", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return makeResponse("end_turn");
+  };
+  const adapter = new AnthropicAdapter({ fetchImpl });
+  await adapter.complete(
+    {
+      ...makeRequest(),
+      availableSkills: ["create-mcp-app", "aws-iam"],
+    },
+    { apiKey: "k" },
+  );
+  const system = String(capturedBody?.system ?? "");
+  assert.doesNotMatch(system, /Available executable skills/);
+  assert.doesNotMatch(system, /create-mcp-app/);
+});

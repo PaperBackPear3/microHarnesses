@@ -87,6 +87,34 @@ test("authStyle none omits the authorization header", async () => {
   assert.equal(capturedHeaders?.get("authorization"), null);
 });
 
+test("does not prepend a full skill list system message from availableSkills", async () => {
+  let capturedBody: Record<string, unknown> | undefined;
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return new Response(
+      JSON.stringify({
+        id: "chatcmpl-test",
+        object: "chat.completion",
+        created: 1,
+        model: "test-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+  const adapter = makeAdapter(fetchImpl);
+  await adapter.complete(
+    {
+      ...makeRequest(),
+      availableSkills: ["create-mcp-app", "aws-iam"],
+    },
+    { apiKey: "k" },
+  );
+  const serialized = JSON.stringify(capturedBody?.messages ?? []);
+  assert.doesNotMatch(serialized, /Available executable skills/);
+  assert.doesNotMatch(serialized, /create-mcp-app/);
+});
+
 test("maps structured image content into OpenAI-compatible message parts", async () => {
   let capturedBody: Record<string, unknown> | undefined;
   const fetchImpl: typeof fetch = async (_input, init) => {

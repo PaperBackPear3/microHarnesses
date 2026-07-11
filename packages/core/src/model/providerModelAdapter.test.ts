@@ -336,6 +336,38 @@ test("passes availableTools in completion request", async () => {
   ]);
 });
 
+test("injects only skill discovery instructions without enumerating skill names", async () => {
+  const adapter = new FakeAdapter("m", {
+    assistantMessage: "ok",
+    toolCalls: [],
+    stop: true,
+  });
+  const providers = new ProviderRegistry();
+  providers.register(adapter);
+  const creds = new CredentialsRegistry();
+  creds.register("fake", new FakeCreds());
+
+  const model = new ProviderModelAdapter({
+    providerRegistry: providers,
+    credentialsRegistry: creds,
+    providerId: "fake",
+  });
+
+  await model.nextStep(
+    makeInput({
+      availableSkills: ["create-mcp-app", "aws-iam"],
+    }),
+  );
+
+  const system = contentText(adapter.seenRequest?.messages[0]?.content ?? "");
+  assert.match(system, /Skill discovery/);
+  assert.match(system, /list_skills/);
+  assert.match(system, /find_skill/);
+  assert.match(system, /skill/);
+  assert.doesNotMatch(system, /create-mcp-app/);
+  assert.doesNotMatch(system, /aws-iam/);
+});
+
 test("injects fallback tool catalog for providers without structured tools", async () => {
   const adapter = new FakeAdapter("m", {
     assistantMessage: "ok",

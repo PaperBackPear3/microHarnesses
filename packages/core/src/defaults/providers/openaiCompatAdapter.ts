@@ -199,29 +199,10 @@ export class OpenAICompatAdapter implements ProviderAdapter {
   }
 
   private toBody(request: CompletionRequest): Record<string, unknown> {
-    let messages = request.messages.map((m) => ({
+    const messages = request.messages.map((m) => ({
       role: this.mapDeveloperRoleToSystem && m.role === "developer" ? "system" : m.role,
       content: toOpenAIContent(m.content),
     }));
-
-    // If skills are available and we don't already have a system message with skill info,
-    // prepend a system message with the skills list
-    if (request.availableSkills && request.availableSkills.length > 0) {
-      const hasSkillsInSystem = messages.some(
-        (m) =>
-          m.role === "system" &&
-          typeof m.content === "string" &&
-          m.content.includes("Available executable skills"),
-      );
-      if (!hasSkillsInSystem) {
-        const skillsMessage = [
-          "## Available executable skills",
-          "You have access to the following specialized skills that you can invoke to handle complex tasks:",
-          ...request.availableSkills.map((skill) => `- ${skill}`),
-        ].join("\n");
-        messages = [{ role: "system", content: skillsMessage }, ...messages];
-      }
-    }
 
     return {
       model: request.model,

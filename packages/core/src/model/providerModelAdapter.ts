@@ -139,7 +139,7 @@ async function buildMessages(
     systemParts.push(renderToolCatalogInstruction(input.availableTools ?? []));
   }
   if (input.availableSkills && input.availableSkills.length > 0) {
-    systemParts.push(renderAvailableSkillsInstruction(input.availableSkills));
+    systemParts.push(renderSkillDiscoveryInstruction());
   }
 
   const messages: ProviderMessage[] = [{ role: "system", content: systemParts.join("\n\n") }];
@@ -338,12 +338,10 @@ function renderToolCatalogInstruction(tools: ToolDescriptor[]): string {
   ].join("\n");
 }
 
-function renderAvailableSkillsInstruction(skills: string[]): string {
+function renderSkillDiscoveryInstruction(): string {
   return [
-    "## Available executable skills",
-    "You have access to the following specialized skills that you can invoke to handle complex tasks.",
-    "Use the `skill` tool with the skill name to access them.",
-    "Available skills:",
-    ...skills.map((skill) => `- ${skill}`),
+    "## Skill discovery",
+    "If you need a specialized skill, discover options first with `list_skills` or `find_skill`.",
+    "After selecting one, execute it with the `skill` tool.",
   ].join("\n");
 }

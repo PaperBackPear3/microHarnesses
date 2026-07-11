@@ -401,6 +401,7 @@ export async function buildComposition(
     toolRegistry: tools,
     includeBuiltInProviders: false,
     tools: createCoreDefaultTools({
+      skills,
       workspaceTools: { rootDir: workspaceRootDir },
       planModeTools: { rootDir: workspaceRootDir },
       channelTools: { registry: channels },

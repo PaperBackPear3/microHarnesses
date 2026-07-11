@@ -146,15 +146,6 @@ export class AnthropicAdapter implements ProviderAdapter {
     if (systemMessage) {
       systemParts.push(systemMessage);
     }
-    if (request.availableSkills && request.availableSkills.length > 0) {
-      systemParts.push(
-        [
-          "## Available executable skills",
-          "You have access to the following specialized skills that you can invoke to handle complex tasks:",
-          ...request.availableSkills.map((skill) => `- ${skill}`),
-        ].join("\n"),
-      );
-    }
 
     const messages: MessageParam[] = request.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
