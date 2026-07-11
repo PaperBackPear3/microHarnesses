@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 import type { CliComposition } from "../runtime/composition.js";
 import { resolveMainPromptName } from "../runtime/subagentPromptName.js";
+import { savePlanArtifactIfNeeded } from "../session/planArtifact.js";
 import { type UiScreen, parseSlashCommand } from "../slash/commands.js";
 import {
   type StagedAttachment,
@@ -397,6 +398,17 @@ export function App({
         });
         if (result.sessionId) {
           setActiveSessionId(result.sessionId);
+        }
+        const planArtifact = await savePlanArtifactIfNeeded({
+          mode: composition.modeController.getMode(),
+          sessionStore: composition.sessionStore,
+          sessionId: result.sessionId ?? runSessionId,
+          assistantMessage: result.summary,
+        });
+        if (planArtifact) {
+          chatStore.appendSystemMessage(
+            `Created plan.md at ${planArtifact.path}. Planning complete — reply with refinements/changes, or use /autopilot to implement.`,
+          );
         }
         setStagedAttachments([]);
       } catch (error) {

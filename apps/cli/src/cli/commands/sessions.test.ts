@@ -97,3 +97,35 @@ test("sessionsCommand explicit --state-dir override wins", async () => {
     }
   });
 });
+
+test("sessionsCommand show includes telemetry and artifact details", async () => {
+  await withTempHome(async (homeDir) => {
+    const configuredStateDir = await mkdtemp(path.join(os.tmpdir(), "mh-cli-sessions-show-"));
+    try {
+      const configDir = path.join(homeDir, ".microharness");
+      await mkdir(configDir, { recursive: true });
+      await writeFile(
+        path.join(configDir, "config.json"),
+        JSON.stringify({ stateDir: configuredStateDir }),
+        "utf8",
+      );
+
+      const store = new SessionStore(configuredStateDir);
+      await store.initSession({ sessionId: "s-show", goal: "show details" });
+      await store.savePlan("s-show", "# Plan\n\n- one\n");
+
+      const output = await withCapturedStdout(async () => {
+        await sessionsCommand({ sub: "show", sessionId: "s-show" });
+      });
+
+      const parsed = JSON.parse(output) as {
+        manifest?: { sessionId?: string };
+        artifacts?: { plan?: { exists?: boolean } };
+      };
+      assert.equal(parsed.manifest?.sessionId, "s-show");
+      assert.equal(parsed.artifacts?.plan?.exists, true);
+    } finally {
+      await rm(configuredStateDir, { recursive: true, force: true });
+    }
+  });
+});

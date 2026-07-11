@@ -1,6 +1,7 @@
 import type { StreamEvent } from "@micro-harnesses/core";
 import { modeExecutionContract } from "@micro-harnesses/core";
 import type { CliComposition } from "../../runtime/composition.js";
+import { savePlanArtifactIfNeeded } from "../../session/planArtifact.js";
 
 export async function runHeadlessPrompt(
   composition: CliComposition,
@@ -21,6 +22,12 @@ export async function runHeadlessPrompt(
       runtimeInstructions: modeContract ? [modeContract] : undefined,
     });
     const final = state.turns[state.turns.length - 1]?.assistantMessage ?? "";
+    const planArtifact = await savePlanArtifactIfNeeded({
+      mode: composition.modeController.getMode(),
+      sessionStore: composition.sessionStore,
+      sessionId: state.sessionId ?? sessionId,
+      assistantMessage: final,
+    });
     if (json) {
       process.stdout.write(
         `${JSON.stringify(
@@ -29,6 +36,15 @@ export async function runHeadlessPrompt(
             runId: state.runId,
             turns: state.turns.length,
             finalMessage: final,
+            ...(planArtifact
+              ? {
+                  planArtifact: {
+                    path: planArtifact.path,
+                    updatedAt: planArtifact.updatedAt,
+                    sizeBytes: planArtifact.sizeBytes,
+                  },
+                }
+              : {}),
           },
           null,
           2,
@@ -37,6 +53,11 @@ export async function runHeadlessPrompt(
       return;
     }
     process.stdout.write(`${final}\n`);
+    if (planArtifact) {
+      process.stdout.write(
+        `\nCreated plan.md at ${planArtifact.path}. Planning complete — refine/change the plan in your next prompt, or rerun in /autopilot mode to implement.\n`,
+      );
+    }
   } finally {
     unsub();
   }

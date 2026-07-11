@@ -26,6 +26,20 @@ test("session service reads telemetry summary", async () => {
   assert.equal(details.telemetry.inputTokens, 30);
   assert.equal(details.telemetry.outputTokens, 10);
   assert.equal(details.telemetry.errors, 2);
+  assert.equal(details.artifacts.plan.exists, false);
+});
+
+test("session service reports saved plan artifacts", async () => {
+  const stateDir = await mkTmpDir();
+  const store = new SessionStore(stateDir);
+  await store.initSession({ sessionId: "s-plan", goal: "goal" });
+  await store.savePlan("s-plan", "# Plan\n\n- first\n");
+
+  const service = new SessionService(stateDir);
+  const details = await service.getDetails("s-plan");
+  assert.equal(details.artifacts.plan.exists, true);
+  assert.equal(details.artifacts.plan.path.endsWith(path.join("s-plan", "plan.md")), true);
+  assert.equal((details.artifacts.plan.sizeBytes ?? 0) > 0, true);
 });
 
 async function mkTmpDir(): Promise<string> {

@@ -185,6 +185,57 @@ export class SessionStore {
     return path.join(this.sessionDir(sessionId), "artifacts", "tool-output");
   }
 
+  planPath(sessionId: string): string {
+    return path.join(this.sessionDir(sessionId), "plan.md");
+  }
+
+  async savePlan(sessionId: string, markdown: string): Promise<{
+    path: string;
+    updatedAt: string;
+    sizeBytes: number;
+  }> {
+    await this.initSession({ sessionId });
+    const manifest = await this.readManifest(sessionId);
+    const planPath = this.planPath(sessionId);
+    const updatedAt = new Date().toISOString();
+    const sizeBytes = Buffer.byteLength(markdown, "utf8");
+    await writeFile(planPath, markdown, "utf8");
+    await this.writeManifest({
+      ...manifest,
+      latestPlanPath: "plan.md",
+      latestPlanUpdatedAt: updatedAt,
+      latestPlanSizeBytes: sizeBytes,
+      updatedAt,
+    });
+    return { path: planPath, updatedAt, sizeBytes };
+  }
+
+  async readPlan(sessionId: string): Promise<
+    | {
+        path: string;
+        content: string;
+        updatedAt: string;
+        sizeBytes: number;
+      }
+    | undefined
+  > {
+    const target = this.planPath(sessionId);
+    try {
+      const [content, info] = await Promise.all([readFile(target, "utf8"), stat(target)]);
+      return {
+        path: target,
+        content,
+        updatedAt: info.mtime.toISOString(),
+        sizeBytes: info.size,
+      };
+    } catch (error: unknown) {
+      if (isNodeError(error) && error.code === "ENOENT") {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
   async saveInputAsset(
     sessionId: string,
     sourcePath: string,

@@ -216,6 +216,26 @@ test("saveInputAsset copies file into session input storage and can be resolved"
   }
 });
 
+test("savePlan persists plan.md and updates manifest metadata", async () => {
+  const stateDir = await mkdtemp(path.join(os.tmpdir(), "mh-session-store-plan-"));
+  const store = new SessionStore(stateDir);
+  try {
+    const manifest = await store.initSession({ goal: "planning" });
+    const saved = await store.savePlan(manifest.sessionId, "# Plan\n\n- step 1\n");
+    const loaded = await store.readPlan(manifest.sessionId);
+    const updated = await store.getSession(manifest.sessionId);
+
+    assert.equal(saved.path.endsWith(path.join(manifest.sessionId, "plan.md")), true);
+    assert.ok(loaded);
+    assert.equal(loaded?.content.includes("- step 1"), true);
+    assert.equal(updated.latestPlanPath, "plan.md");
+    assert.equal(typeof updated.latestPlanUpdatedAt, "string");
+    assert.equal((updated.latestPlanSizeBytes ?? 0) > 0, true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 function makeTurn(id: string, userMessage: string, assistantMessage: string): Turn {
   return {
     id,

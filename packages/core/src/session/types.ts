@@ -16,6 +16,10 @@ export interface SessionManifest {
   rootSessionId?: string;
   depth?: number;
   spawnedByTool?: string;
+  /** Relative path to the latest generated plan artifact (for example `plan.md`). */
+  latestPlanPath?: string;
+  latestPlanUpdatedAt?: string;
+  latestPlanSizeBytes?: number;
 }
 
 export interface InitSessionOptions {

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { type SessionManifest, SessionStore } from "@micro-harnesses/core";
 
@@ -9,6 +9,16 @@ export interface SessionSummary {
     inputTokens: number;
     outputTokens: number;
     errors: number;
+  };
+  artifacts: {
+    sessionDir: string;
+    entries: string[];
+    plan: {
+      path: string;
+      exists: boolean;
+      updatedAt?: string;
+      sizeBytes?: number;
+    };
   };
 }
 
@@ -27,13 +37,18 @@ export class SessionService {
       sessions.map(async (manifest) => ({
         manifest,
         telemetry: await this.readTelemetrySummary(manifest.sessionId),
+        artifacts: await this.readArtifactSummary(manifest),
       })),
     );
   }
 
   async getDetails(sessionId: string): Promise<SessionSummary> {
     const manifest = await this.sessionStore.getSession(sessionId);
-    return { manifest, telemetry: await this.readTelemetrySummary(sessionId) };
+    return {
+      manifest,
+      telemetry: await this.readTelemetrySummary(sessionId),
+      artifacts: await this.readArtifactSummary(manifest),
+    };
   }
 
   getStore(): SessionStore {
@@ -72,6 +87,48 @@ export class SessionService {
       return { turns, inputTokens, outputTokens, errors };
     } catch {
       return { turns: 0, inputTokens: 0, outputTokens: 0, errors: 0 };
+    }
+  }
+
+  private async readArtifactSummary(
+    manifest: SessionManifest,
+  ): Promise<SessionSummary["artifacts"]> {
+    const sessionDir = path.join(this.stateDir, "sessions", manifest.sessionId);
+    const planPath = path.join(
+      sessionDir,
+      manifest.latestPlanPath && manifest.latestPlanPath.trim().length > 0
+        ? manifest.latestPlanPath
+        : "plan.md",
+    );
+
+    let entries: string[] = [];
+    try {
+      entries = (await readdir(sessionDir)).sort((a, b) => a.localeCompare(b));
+    } catch {
+      entries = [];
+    }
+
+    try {
+      const info = await stat(planPath);
+      return {
+        sessionDir,
+        entries,
+        plan: {
+          path: planPath,
+          exists: true,
+          updatedAt: info.mtime.toISOString(),
+          sizeBytes: info.size,
+        },
+      };
+    } catch {
+      return {
+        sessionDir,
+        entries,
+        plan: {
+          path: planPath,
+          exists: false,
+        },
+      };
     }
   }
 }

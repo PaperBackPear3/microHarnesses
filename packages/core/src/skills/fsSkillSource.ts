@@ -74,7 +74,15 @@ export class FsSkillSource {
     if (instructions === undefined) {
       throw new Error(`Skill "${skillName}" has no ${SKILL_FILE} in ${skillDir}`);
     }
-    const description = meta.description ?? firstParagraph(instructions) ?? `Skill ${meta.name}`;
+    
+    // Try to extract description from YAML frontmatter first, then from meta, then fallback to first paragraph
+    const yamlDescription = extractYamlDescription(instructions);
+    const description = 
+      meta.description ?? 
+      yamlDescription ?? 
+      firstParagraph(instructions) ?? 
+      `Skill ${meta.name}`;
+    
     const maxChars = this.maxInstructionChars;
 
     return {
@@ -132,8 +140,30 @@ async function listResourceFiles(skillDir: string): Promise<string[]> {
   return out.sort();
 }
 
+/**
+ * Extracts the `description` field from YAML frontmatter.
+ * Returns undefined if no frontmatter or no description field.
+ */
+function extractYamlDescription(markdown: string): string | undefined {
+  // Match YAML frontmatter: starts with --- and ends with ---
+  const yamlMatch = markdown.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!yamlMatch) return undefined;
+  
+  const yamlContent = yamlMatch[1];
+  // Extract description field (handle quoted and unquoted values)
+  const descMatch = yamlContent.match(/^\s*description:\s*["']?(.*?)["']?\s*$/m);
+  if (!descMatch) return undefined;
+  
+  const description = descMatch[1].trim();
+  // Remove quote escapes if present
+  return description.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+}
+
 function firstParagraph(markdown: string): string | undefined {
-  for (const block of markdown.split(/\r?\n\r?\n/)) {
+  // Skip YAML frontmatter
+  const withoutFrontmatter = markdown.replace(/^---\s*\n[\s\S]*?\n---\s*\n/, '');
+  
+  for (const block of withoutFrontmatter.split(/\r?\n\r?\n/)) {
     const text = block
       .split(/\r?\n/)
       .filter((line) => !line.trimStart().startsWith("#"))

@@ -228,7 +228,7 @@ export async function handleSlashCommand(args: Args): Promise<void> {
     const sessions = await composition.sessionService.listSummaries();
     const lines = sessions.map(
       (item) =>
-        `${item.manifest.sessionId} | updated=${item.manifest.updatedAt} | turns=${item.telemetry.turns} | tokens=${item.telemetry.inputTokens + item.telemetry.outputTokens} | errors=${item.telemetry.errors}`,
+        `${item.manifest.sessionId} | updated=${item.manifest.updatedAt} | plan=${item.artifacts.plan.exists ? "yes" : "no"} | turns=${item.telemetry.turns} | tokens=${item.telemetry.inputTokens + item.telemetry.outputTokens} | errors=${item.telemetry.errors}`,
     );
     setScreenContent(lines.length > 0 ? lines.join("\n") : "No sessions found.");
     setScreen("sessions");
@@ -243,6 +243,9 @@ export async function handleSlashCommand(args: Args): Promise<void> {
           `goal: ${details.manifest.goal || "-"}`,
           `updatedAt: ${details.manifest.updatedAt}`,
           `latestRunId: ${details.manifest.latestRunId ?? "-"}`,
+          `sessionDir: ${details.artifacts.sessionDir}`,
+          `sessionEntries: ${details.artifacts.entries.length}`,
+          `plan: ${details.artifacts.plan.exists ? details.artifacts.plan.path : "-"}`,
           `tokens in/out: ${details.telemetry.inputTokens}/${details.telemetry.outputTokens}`,
           `turns: ${details.telemetry.turns}`,
           `errors: ${details.telemetry.errors}`,
