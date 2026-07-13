@@ -51,6 +51,20 @@ export interface OpenAICompatAdapterOptions {
    * Ollama-compatible servers use this to enforce JSON output mode.
    */
   forceJsonMode?: boolean;
+  /**
+   * When `true`, sends `max_completion_tokens` instead of `max_tokens`.
+   * Required for OpenAI o-series and newer GPT models (gpt-5.x and later).
+   * Default: `false` for backwards compatibility with third-party endpoints.
+   */
+  useMaxCompletionTokens?: boolean;
+  /**
+   * Regex matched against the model name to identify reasoning models.
+   * When the model matches AND tools are present in the request, the adapter
+   * automatically adds `reasoning_effort: "none"` unless `request.reasoningEffort`
+   * is already set. This is required for OpenAI o-series and gpt-5.5+ models
+   * which otherwise reject tool calls on `/v1/chat/completions`.
+   */
+  reasoningModelPattern?: RegExp;
   fetchImpl?: typeof fetch;
 }
 
@@ -71,6 +85,8 @@ export class OpenAICompatAdapter implements ProviderAdapter {
   private readonly extraHeaders: Record<string, string>;
   private readonly mapDeveloperRoleToSystem: boolean;
   private readonly forceJsonMode: boolean;
+  private readonly useMaxCompletionTokens: boolean;
+  private readonly reasoningModelPattern?: RegExp;
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: OpenAICompatAdapterOptions) {
@@ -81,6 +97,8 @@ export class OpenAICompatAdapter implements ProviderAdapter {
     this.extraHeaders = options.extraHeaders ?? {};
     this.mapDeveloperRoleToSystem = options.mapDeveloperRoleToSystem ?? true;
     this.forceJsonMode = options.forceJsonMode ?? false;
+    this.useMaxCompletionTokens = options.useMaxCompletionTokens ?? false;
+    this.reasoningModelPattern = options.reasoningModelPattern;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
@@ -204,12 +222,22 @@ export class OpenAICompatAdapter implements ProviderAdapter {
       content: toOpenAIContent(m.content),
     }));
 
+    const hasTools = (request.tools?.length ?? 0) > 0;
+    const isReasoningModel =
+      this.reasoningModelPattern != null &&
+      this.reasoningModelPattern.test(request.model);
+    // Reasoning models on /v1/chat/completions reject tool calls unless
+    // reasoning_effort is explicitly set to "none".
+    const reasoningEffort =
+      request.reasoningEffort ??
+      (isReasoningModel && hasTools ? "none" : undefined);
+
     return {
       model: request.model,
       messages,
-      ...(request.tools && request.tools.length > 0
+      ...(hasTools
         ? {
-            tools: request.tools.map((tool) => ({
+            tools: request.tools!.map((tool) => ({
               type: "function",
               function: {
                 name: tool.name,
@@ -220,7 +248,10 @@ export class OpenAICompatAdapter implements ProviderAdapter {
           }
         : {}),
       temperature: request.temperature ?? 0.2,
-      max_tokens: request.maxTokens ?? 4096,
+      ...(this.useMaxCompletionTokens
+        ? { max_completion_tokens: request.maxTokens ?? 4096 }
+        : { max_tokens: request.maxTokens ?? 4096 }),
+      ...(reasoningEffort !== undefined ? { reasoning_effort: reasoningEffort } : {}),
       ...(this.forceJsonMode ? { format: "json" } : {}),
     };
   }

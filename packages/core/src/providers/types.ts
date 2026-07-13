@@ -80,6 +80,12 @@ export interface CompletionRequest {
   tools?: ToolDescriptor[];
   /** Names of available executable skills (plugins/subagents). */
   availableSkills?: string[];
+  /**
+   * Provider-level reasoning effort. Maps to `reasoning_effort` for
+   * OpenAI reasoning models (o-series, gpt-5.5+). Set to `"none"` to
+   * disable reasoning and enable tool calls on models that require it.
+   */
+  reasoningEffort?: "none" | "low" | "medium" | "high";
   /** Aborted when the run is killed; adapters should pass it to their HTTP call. */
   signal?: AbortSignal;
 }

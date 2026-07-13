@@ -17,6 +17,11 @@ export class OpenAIAdapter extends OpenAICompatAdapter {
       authStyle: "bearer",
       // OpenAI natively understands the "developer" role.
       mapDeveloperRoleToSystem: false,
+      // Newer OpenAI models (o-series, gpt-5.x) require max_completion_tokens.
+      useMaxCompletionTokens: true,
+      // o-series and gpt-5.5+ are reasoning models that require reasoning_effort: "none"
+      // when tool calls are used on /v1/chat/completions.
+      reasoningModelPattern: /^(o[1-9]|gpt-5\.[5-9])/i,
       fetchImpl: options.fetchImpl,
     });
   }
